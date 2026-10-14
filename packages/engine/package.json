@@ -1,0 +1,23 @@
+{
+  "name": "@plinth/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@plinth/blockchain": "workspace:*",
+    "@plinth/db": "workspace:*",
+    "@plinth/shared": "workspace:*",
+    "viem": "2.57.4"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1"
+  }
+}

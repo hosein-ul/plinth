@@ -1,0 +1,15 @@
+# Never upload local secrets, local data or heavy non-web trees
+.env
+.env.*
+!.env.example
+.data
+secrets
+*.pem
+*.keystore
+node_modules
+**/node_modules
+**/.next
+.design
+contracts
+docs
+docker-compose.yml

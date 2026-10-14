@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plinth — three directions (minimal · fintech · soft UI)</title>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&f[]=switzer@300,400,500,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Onest:wght@400..700&display=swap" rel="stylesheet">
+<style>
+/* Proposal board. Three interpretations of "minimal, fintech, soft UI" for Plinth.
+   Each band: a hero at near-real scale + the system (palette, type, controls, a section visual). */
+* { box-sizing: border-box; }
+html { background: #0b0c0f; color: #e9ecf1; font: 14px/1.5 "General Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+body { margin: 0; padding: 28px clamp(16px, 2.4vw, 36px) 80px; }
+.top { max-width: 1400px; margin: 0 auto 26px; display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.top h1 { font-size: 15px; font-weight: 600; margin: 0; } .top p { margin: 0; color: #9aa3b2; }
+.band { max-width: 1400px; margin: 0 auto 44px; }
+.band > header { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: baseline; margin-bottom: 14px; }
+.band > header b { font: 600 13px "JetBrains Mono", monospace; color: #0b0c0f; background: #e9ecf1; border-radius: 6px; padding: 2px 8px; grid-row: span 2; align-self: start; margin-top: 3px; }
+.band > header h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.02em; } .band > header p { margin: 0; color: #9aa3b2; max-width: 80ch; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 16px; }
+.hero, .sys { position: relative; border-radius: 22px; overflow: hidden; background: var(--ground); color: var(--text); font-family: var(--font); }
+.hero { height: 600px; isolation: isolate; }
+.sys { padding: 22px; display: grid; gap: 18px; align-content: start; }
+.mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.num { font-variant-numeric: tabular-nums; }
+.cap { font-size: 11.5px; color: var(--text3); margin: 0 0 8px; }
+
+/* shared anatomy, driven by per-direction variables */
+.nav { position: absolute; inset: 0 0 auto 0; display: flex; align-items: center; gap: 26px; padding: 20px 30px; z-index: 5; font-size: 13.5px; font-weight: 500; color: var(--text2); }
+.logo { display: flex; align-items: center; gap: 9px; color: var(--text); font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
+.logo i { width: 20px; height: 20px; border-radius: 6px; background: var(--primary); display: grid; place-items: end center; overflow: hidden; }
+.logo i::after { content: ""; width: 12px; height: 5px; background: var(--on-primary); border-radius: 2px 2px 0 0; }
+.nav .sp { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.tag { font-size: 11.5px; color: var(--text3); display: inline-flex; align-items: center; gap: 6px; } .tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: var(--r-ctl); border: 0; cursor: pointer; font: 500 14.5px/1 var(--font); letter-spacing: -.005em; color: var(--on-primary); background: var(--primary); box-shadow: var(--btn-shadow); transition: transform .12s cubic-bezier(.2,0,0,1), filter .16s, box-shadow .16s; text-decoration: none; }
+.btn:hover { filter: brightness(1.08); } .btn:active { transform: translateY(1px) scale(.985); }
+.btn:focus-visible, .field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.sm { height: 34px; padding: 0 13px; font-size: 13px; }
+.btn.ghost { background: var(--ghost); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.btn .arr { width: 14px; height: 14px; transition: transform .2s cubic-bezier(.16,1,.3,1); } .btn:hover .arr { transform: translateX(3px); }
+h3.h { margin: 0; font-weight: var(--h-w); letter-spacing: var(--h-ls); line-height: 1.02; text-wrap: balance; } h3.h em { font-style: normal; color: var(--text3); }
+.lede { color: var(--text2); font-size: 16px; line-height: 1.5; margin: 18px 0 26px; max-width: 30em; }
+.act { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.surface { background: var(--raised); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: 500; background: var(--ok-quiet); color: var(--ok-ink); }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.wait { background: var(--wait-quiet); color: var(--wait-ink); }
+.chips { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; } .chips div { display: grid; gap: 6px; font-size: 10.5px; color: var(--text3); }
+.chips i { display: block; height: 44px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--line); }
+.spec { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; } .spec .aa { font-size: 64px; line-height: .9; font-weight: var(--h-w); letter-spacing: var(--h-ls); }
+.spec p { margin: 0; color: var(--text2); font-size: 13px; } .spec p b { color: var(--text); font-weight: 500; }
+.ctl { display: grid; gap: 10px; } .ctl .r { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.field { display: grid; gap: 6px; font-size: 12px; color: var(--text2); flex: 1; min-width: 180px; }
+.field div { position: relative; } .field span { position: absolute; right: 12px; top: 50%; translate: 0 -50%; color: var(--text3); font-size: 12.5px; }
+.field input { width: 100%; height: 40px; border-radius: var(--r-ctl); border: 1px solid var(--line-strong); background: var(--input); color: var(--text); padding: 0 56px 0 12px; font: 500 15px var(--font); font-variant-numeric: tabular-nums; box-shadow: var(--input-shadow); transition: border-color .16s, box-shadow .16s; }
+.field input:hover { border-color: var(--text3); } .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-quiet); outline: 0; }
+.inv { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; padding: 12px 14px; font-size: 13.5px; transition: background .16s; }
+.inv:hover { background: var(--hover); } .inv small { display: block; color: var(--text3); font-size: 12px; } .inv strong { font-weight: 500; }
+
+/* ============ A — Daylight ============ */
+.A { --font: "General Sans", sans-serif; --ground: #f3f5f8; --raised: #ffffff; --sunk: #e9edf2; --line: rgb(15 23 42 / .08); --line-strong: rgb(15 23 42 / .16);
+  --text: #0c1220; --text2: #485366; --text3: #8590a2; --accent: #0ea66b; --accent-quiet: rgb(14 166 107 / .16); --primary: #0c1220; --on-primary: #fff; --ghost: #fff;
+  --ok: #0ea66b; --ok-quiet: #dff5ea; --ok-ink: #0a6f48; --wait-quiet: #eef1f5; --wait-ink: #485366; --hover: #f6f8fa; --input: #fff;
+  --r: 16px; --r-ctl: 11px; --h-w: 500; --h-ls: -.04em;
+  --shadow: 0 1px 1px rgb(15 23 42 / .04), 0 2px 4px rgb(15 23 42 / .03), 0 18px 40px -18px rgb(15 23 42 / .22);
+  --btn-shadow: inset 0 1px 0 rgb(255 255 255 / .14), 0 1px 2px rgb(12 18 32 / .3), 0 8px 18px -8px rgb(12 18 32 / .45); --input-shadow: 0 1px 2px rgb(15 23 42 / .05); }
+.A.hero { background: radial-gradient(60% 55% at 78% 30%, #fff 0, transparent 70%), radial-gradient(40% 40% at 88% 78%, rgb(14 166 107 / .10), transparent 70%), var(--ground); }
+.A.hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(circle, rgb(15 23 42 / .13) 1px, transparent 1.4px) 0 0 / 22px 22px; -webkit-mask: radial-gradient(55% 60% at 78% 45%, #000, transparent 75%); mask: radial-gradient(55% 60% at 78% 45%, #000, transparent 75%); }
+.A .copy { position: absolute; left: 30px; top: 132px; width: 400px; z-index: 3; } .A .copy h3 { font-size: 52px; }
+.A .stage { position: absolute; left: 452px; top: 104px; width: 560px; height: 480px; }
+.A .co { position: absolute; left: 0; top: 0; width: 318px; padding: 18px; z-index: 2; }
+.A .co .hd { display: flex; justify-content: space-between; font-size: 12px; color: var(--text3); }
+.A .co .amt { font-size: 38px; font-weight: 500; letter-spacing: -.04em; margin: 10px 0 2px; } .A .co .amt span { color: var(--text3); } .A .co .amt small { font-size: 14px; letter-spacing: 0; color: var(--text2); margin-left: 6px; font-weight: 500; }
+.A .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--sunk); border-radius: 10px; padding: 3px; margin: 14px 0; font-size: 12.5px; font-weight: 500; text-align: center; color: var(--text2); }
+.A .seg span { padding: 7px; border-radius: 8px; } .A .seg .on { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgb(15 23 42 / .12); }
+.A .qr { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; } .A .qr > div:first-child { padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; } .A .qr svg { display: block; width: 100%; height: auto; }
+.A .addr { font-size: 11px; color: var(--text2); word-break: break-all; line-height: 1.6; } .A .addr b { color: var(--text); font-weight: 500; }
+.steps { display: grid; gap: 0; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.steps div { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: center; height: 26px; font-size: 12.5px; color: var(--text3); transition: color .2s; }
+.steps i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; transition: background .2s, border-color .2s; }
+.steps i::after { content: ""; width: 6px; height: 3px; border: solid #fff; border-width: 0 0 1.5px 1.5px; rotate: -45deg; translate: 0 -1px; opacity: 0; }
+.steps .on { color: var(--text); } .steps .on i { background: var(--accent); border-color: var(--accent); } .steps .on i::after { opacity: 1; }
+.steps span { font-size: 11px; opacity: 0; transition: opacity .2s; } .steps .on span { opacity: 1; color: var(--text3); }
+.A .vault { position: absolute; left: 350px; top: 150px; width: 250px; padding: 16px; z-index: 1; border-color: rgb(15 23 42 / .1); }
+.A .vault .bal { font-size: 28px; font-weight: 500; letter-spacing: -.035em; margin: 6px 0 12px; }
+.A .vault .in { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; padding: 9px 10px; border-radius: 10px; background: var(--ok-quiet); color: var(--ok-ink); opacity: 0; translate: 0 6px; transition: opacity .3s, translate .4s cubic-bezier(.16,1,.3,1); }
+.A .vault.got .in { opacity: 1; translate: 0; }
+.A .wire { position: absolute; left: 310px; top: 96px; width: 120px; height: 120px; z-index: 0; overflow: visible; } .A .wire path { fill: none; stroke: var(--line-strong); stroke-width: 1.2; stroke-dasharray: 3 4; }
+.A .wire circle { fill: var(--accent); offset-path: path("M0,10 C60,10 60,110 120,110"); animation: travel 2.2s cubic-bezier(.65,0,.35,1) infinite; }
+.A .tile { position: relative; height: 150px; padding: 16px; overflow: hidden; } .A .tile h4, .B .tile h4, .C .tile h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; } .tile p { margin: 0; font-size: 12.5px; color: var(--text2); max-width: 22em; }
+.A .tile .two { position: absolute; right: 14px; bottom: 14px; display: grid; gap: 8px; width: 170px; } .A .tile .two div { display: flex; justify-content: space-between; padding: 8px 10px; border-radius: 10px; background: var(--ground); font-size: 12px; color: var(--text2); } .A .tile .two b { color: var(--text); font-weight: 500; }
+
+/* ============ B — Graphite ============ */
+.B { --font: "Switzer", sans-serif; --ground: #0b0e13; --raised: #121720; --sunk: #080a0e; --line: rgb(255 255 255 / .08); --line-strong: rgb(255 255 255 / .16);
+  --text: #eef2f7; --text2: #a3aebe; --text3: #6d7889; --accent: #86bbff; --accent-quiet: rgb(134 187 255 / .18); --primary: #eef2f7; --on-primary: #0b0e13; --ghost: rgb(255 255 255 / .04);
+  --ok: #86bbff; --ok-quiet: rgb(134 187 255 / .14); --ok-ink: #a9cfff; --wait-quiet: rgb(255 255 255 / .06); --wait-ink: #a3aebe; --hover: rgb(255 255 255 / .03); --input: #0d1118;
+  --r: 14px; --r-ctl: 10px; --h-w: 400; --h-ls: -.045em;
+  --shadow: inset 0 1px 0 rgb(255 255 255 / .06), 0 1px 2px rgb(0 0 0 / .5), 0 24px 48px -24px rgb(0 0 0 / .7);
+  --btn-shadow: inset 0 -1px 0 rgb(0 0 0 / .12), 0 1px 2px rgb(0 0 0 / .5), 0 0 28px -6px rgb(134 187 255 / .45); --input-shadow: inset 0 1px 2px rgb(0 0 0 / .4); }
+.B.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+.B.hero::after { content: ""; position: absolute; inset: auto 0 0 0; height: 40%; background: linear-gradient(transparent, var(--ground)); z-index: -1; }
+.B .copy { position: absolute; inset: 104px 0 auto 0; text-align: center; z-index: 3; display: grid; justify-items: center; } .B .copy h3 { font-size: 58px; max-width: 13em; } .B .lede { margin: 16px auto 22px; }
+.B .line { position: absolute; left: 60px; right: 60px; top: 452px; height: 1px; background: linear-gradient(90deg, transparent, var(--line-strong) 12%, var(--line-strong) 88%, transparent); z-index: 1; }
+.B .line i { position: absolute; top: -2.5px; width: 34px; height: 6px; border-radius: 6px; background: linear-gradient(90deg, transparent, var(--accent)); filter: drop-shadow(0 0 6px var(--accent)); animation: run 3.6s linear infinite; }
+.B .line i:nth-child(2) { animation-delay: -1.2s; } .B .line i:nth-child(3) { animation-delay: -2.4s; }
+.B .nodes { position: absolute; left: 60px; right: 60px; top: 404px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; z-index: 2; }
+.B .node { padding: 14px 16px; backdrop-filter: none; } .B .node small { color: var(--text3); font-size: 11.5px; } .B .node b { display: block; font-weight: 500; font-size: 15px; margin: 3px 0 2px; letter-spacing: -.01em; } .B .node span { color: var(--text2); font-size: 12.5px; }
+.B .tile { position: relative; height: 150px; padding: 16px; overflow: hidden; } .B .tile .dots { position: absolute; right: 14px; bottom: 14px; display: grid; grid-template-columns: repeat(12, 8px); gap: 5px; }
+.B .tile .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); } .B .tile .dots i.on { background: var(--accent); box-shadow: 0 0 8px rgb(134 187 255 / .7); }
+
+/* ============ C — Soft Objects ============ */
+.C { --font: "Onest", sans-serif; --ground: #eceff4; --raised: #f6f8fb; --sunk: #e2e6ed; --line: rgb(40 52 80 / .07); --line-strong: rgb(40 52 80 / .16);
+  --text: #141a28; --text2: #515c72; --text3: #8a94a8; --accent: #2f6bff; --accent-quiet: rgb(47 107 255 / .16); --primary: #2f6bff; --on-primary: #fff; --ghost: #f6f8fb;
+  --ok: #12a372; --ok-quiet: #d9f3e8; --ok-ink: #0b6d4b; --wait-quiet: #fff3c9; --wait-ink: #7a5c00; --hover: #f1f4f8; --input: #f6f8fb;
+  --r: 22px; --r-ctl: 14px; --h-w: 600; --h-ls: -.04em;
+  --shadow: 10px 12px 28px rgb(148 160 184 / .38), -8px -8px 22px rgb(255 255 255 / .9), inset 0 1px 0 rgb(255 255 255 / .7);
+  --btn-shadow: inset 0 1px 0 rgb(255 255 255 / .35), inset 0 -2px 0 rgb(0 0 0 / .12), 0 10px 20px -8px rgb(47 107 255 / .6); --input-shadow: inset 2px 2px 5px rgb(148 160 184 / .35), inset -2px -2px 5px rgb(255 255 255 / .9); }
+.C .surface { border-color: rgb(255 255 255 / .7); }
+.C .copy { position: absolute; left: 34px; top: 138px; width: 410px; z-index: 3; } .C .copy h3 { font-size: 50px; }
+.C .scene { position: absolute; left: 470px; top: 84px; width: 500px; height: 500px; }
+.C .vaultobj { position: absolute; left: 150px; top: 150px; width: 250px; height: 250px; border-radius: 56px; background: linear-gradient(145deg, #fbfcfe, #dfe4ec); box-shadow: 22px 26px 50px rgb(148 160 184 / .55), -14px -14px 34px #fff, inset 0 2px 0 #fff; display: grid; place-items: center; }
+.C .dial { width: 150px; height: 150px; border-radius: 50%; background: linear-gradient(145deg, #dfe4ec, #fbfcfe); box-shadow: inset 8px 8px 18px rgb(148 160 184 / .5), inset -8px -8px 18px #fff; display: grid; place-items: center; }
+.C .knob { width: 84px; height: 84px; border-radius: 50%; background: linear-gradient(145deg, #4a82ff, #2459e6); box-shadow: 8px 10px 20px rgb(47 107 255 / .45), inset 0 2px 0 rgb(255 255 255 / .4); position: relative; animation: turn 6s cubic-bezier(.65,0,.35,1) infinite; }
+.C .knob::after { content: ""; position: absolute; left: 50%; top: 12px; width: 6px; height: 22px; border-radius: 4px; background: #fff; translate: -50% 0; opacity: .9; }
+.C .slot { position: absolute; left: 215px; top: 138px; width: 120px; height: 12px; border-radius: 8px; background: #cfd6e1; box-shadow: inset 2px 3px 6px rgb(120 134 160 / .6); }
+.C .coin { position: absolute; left: 248px; top: 0; width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(145deg, #5a8dff, #2a5fe9); box-shadow: 6px 8px 16px rgb(47 107 255 / .4), inset 0 2px 0 rgb(255 255 255 / .45), inset 0 0 0 5px rgb(255 255 255 / .16); display: grid; place-items: center; color: #fff; font: 600 11px "JetBrains Mono", monospace; animation: drop 3s cubic-bezier(.5,0,.75,0) infinite; }
+.C .coin:nth-of-type(2) { animation-delay: -1s; } .C .coin:nth-of-type(3) { animation-delay: -2s; }
+.C .chipf { position: absolute; padding: 10px 14px; font-size: 12.5px; font-weight: 500; display: flex; gap: 10px; align-items: center; } .C .chipf b { font-weight: 600; font-size: 15px; letter-spacing: -.02em; }
+.C .chipf.r { left: 0; top: 196px; } .C .chipf.s { left: 196px; top: 418px; } .C .chipf i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); } .C .chipf.s i { background: var(--ok); }
+.C .tile { position: relative; height: 150px; padding: 16px; overflow: hidden; } .C .tile .tog { position: absolute; right: 16px; bottom: 16px; display: flex; gap: 10px; }
+.C .tile .tog span { padding: 9px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; color: var(--text2); background: var(--raised); box-shadow: 5px 6px 12px rgb(148 160 184 / .4), -4px -4px 10px #fff; }
+.C .tile .tog .on { color: var(--accent); box-shadow: inset 3px 3px 7px rgb(148 160 184 / .45), inset -3px -3px 7px #fff; }
+
+@keyframes travel { from { offset-distance: 0%; opacity: 0; } 10%, 90% { opacity: 1; } to { offset-distance: 100%; opacity: 0; } }
+@keyframes run { from { left: 0; opacity: 0; } 8%, 92% { opacity: 1; } to { left: calc(100% - 34px); opacity: 0; } }
+@keyframes turn { 0%, 20% { rotate: 0deg; } 45%, 65% { rotate: 135deg; } 90%, 100% { rotate: 360deg; } }
+@keyframes drop { 0% { translate: 0 0; opacity: 0; scale: 1; } 12% { opacity: 1; } 70% { translate: 0 118px; opacity: 1; scale: 1; } 78%, 100% { translate: 0 132px; opacity: 0; scale: .8 .3; } }
+@media (max-width: 1180px) { .row { grid-template-columns: 1fr; } .hero { height: 600px; overflow-x: auto; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; } }
+</style>
+</head>
+<body>
+<div class="top"><h1>Plinth — three directions</h1><p>All three are minimal, fintech and soft UI. They differ in ground, typeface, image system and motion. Sample data throughout. Pick one, or name a mix.</p></div>
+
+<!-- ================= A ================= -->
+<section class="band">
+  <header><b>A</b><h2>Daylight</h2><p>The product settles in front of you. Cool off-white, white surfaces with long soft shadows, ink buttons, one mint-green signal that only ever means "confirmed". The image system is the real product UI, staged.</p></header>
+  <div class="row">
+    <div class="hero A">
+      <div class="nav"><span class="logo"><i></i>Plinth</span><span>Product</span><span>Developers</span><span>Security</span><span>Pricing</span><span class="sp"><span class="tag">Testnet, not audited yet</span><a class="btn sm" href="#">Open dashboard</a></span></div>
+      <div class="copy"><h3 class="h">Get paid in USDC. <em>Straight to your own vault.</em></h3><p class="lede">Every invoice gets an address that can only pay you. Nobody holds the money in between, and your customer needs no gas.</p>
+        <div class="act"><a class="btn" href="#">Create a test invoice<svg class="arr" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="3" y1="8" x2="13" y2="8"/><polyline points="9,4 13,8 9,12" stroke-linejoin="round"/></svg></a><a class="btn ghost" href="#">Read the docs</a></div></div>
+      <div class="stage" aria-hidden="true">
+        <svg class="wire" viewBox="0 0 120 120"><path d="M0,10 C60,10 60,110 120,110"/><circle r="3.5"/></svg>
+        <div class="surface co">
+          <div class="hd"><span>Invoice INV-2048</span><span>Arc Testnet</span></div>
+          <div class="amt num">1,250<span>.00</span><small>USDC</small></div>
+          <div class="seg"><span>Pay with wallet</span><span class="on">Send to address</span></div>
+          <div class="qr"><div id="qrA"></div><div><div class="cap" style="margin:0 0 4px">One-time address</div><div class="mono addr"><b>0x7A3f</b>9C02e41bD85f0A6c3E1d7B94a2F0c8<b>D51e</b></div></div></div>
+          <div class="steps" id="stepsA"><div><i></i>Detected<span class="mono">block 4,118,220</span></div><div><i></i>Verified<span class="mono">log matched</span></div><div><i></i>Final<span class="mono">received</span></div><div><i></i>Swept<span class="mono">0x9c1e…41e7</span></div><div><i></i>In your vault<span class="mono">settled</span></div></div>
+        </div>
+        <div class="surface vault" id="vaultA"><div class="cap" style="margin:0">Your vault · only you can withdraw</div><div class="bal num">17,150.00 <small style="font-size:13px;color:var(--text2);letter-spacing:0">USDC</small></div><div class="in"><span>INV-2048 settled</span><b class="num">+1,250.00</b></div></div>
+      </div>
+    </div>
+    <div class="sys A">
+      <div><p class="cap">Colour by role</p><div class="chips"><div><i style="background:#f3f5f8"></i>ground</div><div><i style="background:#fff"></i>raised</div><div><i style="background:#e9edf2"></i>sunk</div><div><i style="background:#0c1220"></i>ink</div><div><i style="background:#485366"></i>text 2</div><div><i style="background:#0ea66b"></i>signal</div></div></div>
+      <div class="spec"><span class="aa">Aa</span><p><b>General Sans</b>, medium, tight. Headlines 500 at −0.04em; UI text 13.5 px; figures tabular with dimmed decimals; JetBrains Mono for addresses only.</p></div>
+      <div class="ctl"><p class="cap" style="margin:0">Controls</p><div class="r"><a class="btn" href="#">Create invoice</a><a class="btn ghost" href="#">Withdraw</a><span class="pill">Settled</span><span class="pill wait">Awaiting payment</span></div>
+        <div class="r"><label class="field">Amount<div><input value="1,250.00" aria-label="Amount"><span>USDC</span></div></label></div>
+        <div class="surface" style="overflow:hidden"><div class="inv"><div><strong>INV-2047</strong><small>Otto &amp; Reyes · Base Sepolia</small></div><span class="pill">Settled</span><strong class="num">4,900.00</strong></div></div></div>
+      <div class="surface tile"><h4>Received is not settled</h4><p>Two figures, always both, only from chain facts.</p><div class="two"><div>Received <b class="num">18,400.00</b></div><div>Settled <b class="num">17,150.00</b></div></div></div>
+      <p class="cap" style="margin:0">Motion: precise and quick. One settling sequence in the hero; 120–200 ms feedback on every control.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= B ================= -->
+<section class="band">
+  <header><b>B</b><h2>Graphite</h2><p>Value as light crossing a calm field. Soft blue-graphite dark, raised surfaces with edge highlights, large light headlines, one ice-blue signal. The image system is a live light-and-dot field plus a single line from customer to vault.</p></header>
+  <div class="row">
+    <div class="hero B">
+      <canvas id="fxB" aria-hidden="true"></canvas>
+      <div class="nav"><span class="logo"><i></i>Plinth</span><span>Product</span><span>Developers</span><span>Security</span><span>Pricing</span><span class="sp"><span class="tag">Testnet, not audited yet</span><a class="btn sm" href="#">Open dashboard</a></span></div>
+      <div class="copy"><h3 class="h">Get paid in USDC. <em>Straight to your own vault.</em></h3><p class="lede">Every invoice gets an address that can only pay you. Nobody holds the money in between, and your customer needs no gas.</p>
+        <div class="act"><a class="btn" href="#">Create a test invoice</a><a class="btn ghost" href="#">Read the docs</a></div></div>
+      <div class="line" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="nodes" aria-hidden="true">
+        <div class="surface node"><small>01 · Customer pays</small><b class="num">1,250.00 USDC</b><span>to a one-time address</span></div>
+        <div class="surface node"><small>02 · Relayer sweeps</small><b>One transaction</b><span>gas is on us, not on them</span></div>
+        <div class="surface node"><small>03 · Your vault</small><b class="num">+1,250.00 settled</b><span>only you can withdraw</span></div>
+      </div>
+    </div>
+    <div class="sys B">
+      <div><p class="cap">Colour by role</p><div class="chips"><div><i style="background:#0b0e13"></i>ground</div><div><i style="background:#121720"></i>raised</div><div><i style="background:#080a0e"></i>sunk</div><div><i style="background:#eef2f7"></i>text</div><div><i style="background:#a3aebe"></i>text 2</div><div><i style="background:#86bbff"></i>signal</div></div></div>
+      <div class="spec"><span class="aa">Aa</span><p><b>Switzer</b>, regular. Headlines 400 at −0.045em, large and light; UI text 13.5 px; depth from surface steps and top-edge highlights, not drop shadows.</p></div>
+      <div class="ctl"><p class="cap" style="margin:0">Controls</p><div class="r"><a class="btn" href="#">Create invoice</a><a class="btn ghost" href="#">Withdraw</a><span class="pill">Settled</span><span class="pill wait">Awaiting payment</span></div>
+        <div class="r"><label class="field">Amount<div><input value="1,250.00" aria-label="Amount"><span>USDC</span></div></label></div>
+        <div class="surface" style="overflow:hidden"><div class="inv"><div><strong>INV-2047</strong><small>Otto &amp; Reyes · Base Sepolia</small></div><span class="pill">Settled</span><strong class="num">4,900.00</strong></div></div></div>
+      <div class="surface tile"><h4>Final means final</h4><p>Each confirmation lights one more dot. Nothing is shown as paid before the chain says so.</p><div class="dots" id="dotsB"></div></div>
+      <p class="cap" style="margin:0">Motion: slow ambient field, pulses travelling the line, soft glows on confirmation.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= C ================= -->
+<section class="band">
+  <header><b>C</b><h2>Soft Objects</h2><p>Money as tactile things. Pale cool grey, pillowy surfaces lit from the top-left, a confident blue for actions and colour used by meaning (blue received, green settled, yellow pending). The image system is soft dimensional objects: vault, coins, switches.</p></header>
+  <div class="row">
+    <div class="hero C">
+      <div class="nav"><span class="logo"><i></i>Plinth</span><span>Product</span><span>Developers</span><span>Security</span><span>Pricing</span><span class="sp"><span class="tag">Testnet, not audited yet</span><a class="btn sm" href="#">Open dashboard</a></span></div>
+      <div class="copy"><h3 class="h">Get paid in USDC. <em>Straight to your own vault.</em></h3><p class="lede">Every invoice gets an address that can only pay you. Nobody holds the money in between, and your customer needs no gas.</p>
+        <div class="act"><a class="btn" href="#">Create a test invoice</a><a class="btn ghost surface" href="#" style="box-shadow:var(--shadow)">Read the docs</a></div></div>
+      <div class="scene" aria-hidden="true">
+        <span class="coin">USDC</span><span class="coin">USDC</span><span class="coin">USDC</span>
+        <div class="vaultobj"><div class="dial"><div class="knob"></div></div></div><div class="slot"></div>
+        <div class="surface chipf r"><i></i>Received <b class="num">18,400.00</b></div>
+        <div class="surface chipf s"><i></i>Settled <b class="num">17,150.00</b></div>
+      </div>
+    </div>
+    <div class="sys C">
+      <div><p class="cap">Colour by role</p><div class="chips"><div><i style="background:#eceff4"></i>ground</div><div><i style="background:#f6f8fb"></i>raised</div><div><i style="background:#141a28"></i>text</div><div><i style="background:#2f6bff"></i>action</div><div><i style="background:#12a372"></i>settled</div><div><i style="background:#ffd84d"></i>pending</div></div></div>
+      <div class="spec"><span class="aa">Aa</span><p><b>Onest</b>, semibold. Rounder and friendlier; headlines 600 at −0.04em; larger controls (44 px, 14 px radius); paired inner and outer shadows from one light.</p></div>
+      <div class="ctl"><p class="cap" style="margin:0">Controls</p><div class="r"><a class="btn" href="#">Create invoice</a><a class="btn ghost surface" href="#" style="box-shadow:var(--shadow)">Withdraw</a><span class="pill">Settled</span><span class="pill wait">Awaiting payment</span></div>
+        <div class="r"><label class="field">Amount<div><input value="1,250.00" aria-label="Amount"><span>USDC</span></div></label></div>
+        <div class="surface" style="overflow:hidden"><div class="inv"><div><strong>INV-2047</strong><small>Otto &amp; Reyes · Base Sepolia</small></div><span class="pill">Settled</span><strong class="num">4,900.00</strong></div></div></div>
+      <div class="surface tile"><h4>Choose how you settle</h4><p>Keep it in the vault, forward instantly, or on a schedule.</p><div class="tog"><span class="on">In vault</span><span>Instant</span><span>Scheduled</span></div></div>
+      <p class="cap" style="margin:0">Motion: weighty and springy. Coins drop and settle, the dial turns, switches press in.</p>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// A: real QR + the settling sequence
+try { const q = qrcode(0, 'M'); q.addData('0x7A3f9C02e41bD85f0A6c3E1d7B94a2F0c8D51e'); q.make(); document.getElementById('qrA').innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); } catch { document.getElementById('qrA').textContent = 'QR'; }
+const stepsA = [...document.querySelectorAll('#stepsA div')], vaultA = document.getElementById('vaultA');
+const showA = (n) => { stepsA.forEach((s, i) => s.classList.toggle('on', i < n)); vaultA.classList.toggle('got', n >= 5); };
+if (reduce) showA(5); else { let n = 0; (function tick() { showA(n); const wait = n === 5 ? 3000 : 950; n = n === 5 ? 0 : n + 1; setTimeout(tick, wait); })(); }
+
+// B: light field + dot matter on canvas; confirmation dots in the tile
+const dotsB = document.getElementById('dotsB'); for (let i = 0; i < 48; i++) dotsB.appendChild(document.createElement('i'));
+if (reduce) [...dotsB.children].forEach((d) => d.classList.add('on')); else { let k = 0; setInterval(() => { k = (k + 1) % 60; [...dotsB.children].forEach((d, i) => d.classList.toggle('on', i < Math.min(48, k))); }, 110); }
+const cv = document.getElementById('fxB'), ctx = cv.getContext('2d'); let W = 0, H = 0;
+const size = () => { const d = Math.min(devicePixelRatio || 1, 1.5), r = cv.getBoundingClientRect(); W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0); };
+new ResizeObserver(size).observe(cv); size();
+function drawB(t) {
+  ctx.fillStyle = '#0b0e13'; ctx.fillRect(0, 0, W, H);
+  const lights = [[.5 + Math.sin(t * .11) * .18, .34, 420, '70,120,255', .34], [.22 + Math.cos(t * .09) * .08, .62, 320, '120,190,255', .16], [.8, .58 + Math.sin(t * .13) * .08, 300, '60,90,220', .22]];
+  ctx.globalCompositeOperation = 'lighter';
+  for (const [x, y, r, c, a] of lights) { const g = ctx.createRadialGradient(x * W, y * H, 0, x * W, y * H, r); g.addColorStop(0, `rgba(${c},${a})`); g.addColorStop(1, `rgba(${c},0)`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  ctx.globalCompositeOperation = 'source-over';
+  const gap = 20;
+  for (let y = gap / 2; y < H; y += gap) for (let x = gap / 2; x < W; x += gap) {
+    const wave = .5 + .5 * Math.sin(x * .012 + y * .02 - t * .6), fall = Math.max(0, 1 - Math.hypot(x / W - .5, y / H - .42) * 1.5);
+    const a = (.05 + .32 * wave * wave) * fall; if (a < .02) continue;
+    ctx.fillStyle = `rgba(170,205,255,${a.toFixed(3)})`; ctx.beginPath(); ctx.arc(x, y, .8 + wave * .8, 0, 6.2832); ctx.fill();
+  }
+}
+let vis = true, raf = 0; const loop = (ms) => { drawB(ms / 1000); if (vis) raf = requestAnimationFrame(loop); };
+if (reduce) drawB(4); else new IntersectionObserver(([e]) => { vis = e.isIntersecting; cancelAnimationFrame(raf); if (vis) raf = requestAnimationFrame(loop); }).observe(cv);
+</script>
+</body>
+</html>

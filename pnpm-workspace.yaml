@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+# esbuild's postinstall is only an optimisation; the platform binary ships as an optional dependency.
+strictDepBuilds: false
+ignoredBuiltDependencies:
+  - esbuild

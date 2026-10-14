@@ -1,0 +1,21 @@
+# Local development dependencies. Production should use managed Postgres with backups and PITR.
+# Redis is intentionally NOT included: durable jobs live in Postgres (transactional outbox), see docs/architecture.md.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: plinth
+      POSTGRES_PASSWORD: plinth
+      POSTGRES_DB: plinth
+    ports:
+      - "5432:5432"
+    volumes:
+      - plinth-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plinth"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  plinth-pg:

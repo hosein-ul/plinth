@@ -1,0 +1,331 @@
+@import "tailwindcss";
+
+/*
+ * DESIGN TOKENS — direction "Daylight" (.design/direction.md). The only place raw values live.
+ * Components use the utilities these generate (bg-ground, bg-raised, text-ink-2, border-line, text-signal-ink …).
+ * Contrast against ground #F3F5F8: ink 16.9 · ink-2 7.2 · ink-3 4.6 · ink-4 2.9 (placeholders and disabled only).
+ * On tinted fills: signal-ink on signal-quiet 5.9 · warn-ink on warn-quiet 6.4 · bad-ink on bad-quiet 6.6 · info-ink on info-quiet 6.9.
+ * Mint (signal) appears only where the chain has confirmed something, and on focus rings.
+ */
+@theme {
+  --font-sans: "General Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  --color-ground: #f3f5f8;
+  --color-raised: #ffffff;
+  --color-wash: #f7f9fb;
+  --color-sunk: #e9edf2;
+  --color-line: rgb(15 23 42 / 0.08);
+  --color-line-strong: rgb(15 23 42 / 0.16);
+
+  --color-ink: #0c1220;
+  --color-ink-2: #485366;
+  --color-ink-3: #6b7688;
+  --color-ink-4: #8d97a8;
+  --color-on-ink: #ffffff;
+
+  --color-signal: #0ea66b;
+  --color-signal-ink: #0a6f48;
+  --color-signal-quiet: #dff5ea;
+  --color-warn: #c98a04;
+  --color-warn-ink: #7a5200;
+  --color-warn-quiet: #fdf3d7;
+  --color-bad: #d5392f;
+  --color-bad-ink: #9e1f17;
+  --color-bad-quiet: #fce7e4;
+  --color-info: #2f6bff;
+  --color-info-ink: #1e49b8;
+  --color-info-quiet: #e4ecff;
+
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.90625rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --text-4xl: 3rem;
+  --text-display: clamp(2.75rem, 5.2vw, 4.75rem);
+
+  --radius-ctl: 11px;
+  --radius-card: 16px;
+  --radius-panel: 22px;
+
+  --shadow-soft: 0 1px 1px rgb(15 23 42 / 0.04), 0 2px 4px rgb(15 23 42 / 0.03), 0 18px 40px -18px rgb(15 23 42 / 0.22);
+  --shadow-low: 0 1px 1px rgb(15 23 42 / 0.04), 0 4px 12px -6px rgb(15 23 42 / 0.12);
+  --shadow-float: 0 2px 4px rgb(15 23 42 / 0.06), 0 30px 70px -24px rgb(15 23 42 / 0.4);
+  --shadow-btn: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 1px 2px rgb(12 18 32 / 0.3), 0 8px 18px -8px rgb(12 18 32 / 0.45);
+  --shadow-ctl: 0 1px 2px rgb(15 23 42 / 0.05);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-snap: cubic-bezier(0.2, 0, 0, 1);
+  --duration-press: 90ms;
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-slow: 400ms;
+}
+
+@layer base {
+  html {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    font-size: var(--text-base);
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    min-height: 100dvh;
+  }
+  h1, h2, h3, h4 { color: var(--color-ink); text-wrap: balance; }
+  p { text-wrap: pretty; }
+  ::selection { background: var(--color-signal-quiet); color: var(--color-ink); }
+  :focus-visible { outline: 2px solid var(--color-signal); outline-offset: 2px; border-radius: 6px; }
+  button, [role="button"], a { -webkit-tap-highlight-color: transparent; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
+}
+
+@layer components {
+  /* the one surface: white, hairline, long soft shadow */
+  .card { background: var(--color-raised); border: 1px solid var(--color-line); border-radius: var(--radius-card); box-shadow: var(--shadow-soft); }
+  .card-flat { background: var(--color-raised); border: 1px solid var(--color-line); border-radius: var(--radius-card); box-shadow: var(--shadow-low); }
+  /* headline levels */
+  .t-display { font-size: var(--text-display); line-height: 1; letter-spacing: -0.045em; font-weight: 500; }
+  .t-1 { font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.05; letter-spacing: -0.04em; font-weight: 500; }
+  .t-2 { font-size: var(--text-2xl); line-height: 1.1; letter-spacing: -0.03em; font-weight: 500; }
+  .t-3 { font-size: 1.125rem; line-height: 1.3; letter-spacing: -0.015em; font-weight: 600; }
+  .label { font-size: var(--text-xs); font-weight: 500; color: var(--color-ink-3); }
+  .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+}
+
+@layer utilities {
+  /* page background for marketing and auth surfaces: light, mint tint, masked dot grid */
+  .bg-daylight {
+    background:
+      radial-gradient(60% 50% at 78% 18%, #fff 0, transparent 70%),
+      radial-gradient(38% 34% at 92% 60%, rgb(14 166 107 / 0.08), transparent 70%),
+      var(--color-ground);
+  }
+  .dotgrid { position: relative; isolation: isolate; }
+  .dotgrid::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(circle, rgb(15 23 42 / 0.13) 1px, transparent 1.4px) 0 0 / 22px 22px;
+    -webkit-mask: radial-gradient(60% 65% at var(--dot-x, 75%) var(--dot-y, 40%), #000, transparent 78%);
+            mask: radial-gradient(60% 65% at var(--dot-x, 75%) var(--dot-y, 40%), #000, transparent 78%);
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--color-sunk) 0%, var(--color-wash) 50%, var(--color-sunk) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+    border-radius: 8px;
+  }
+}
+
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes tick-in { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pop-in { from { opacity: 0; transform: translate(-50%, 8px) scale(0.98); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes menu-in { from { opacity: 0; transform: scale(0.97) translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes travel { from { offset-distance: 0%; opacity: 0; } 10%, 90% { opacity: 1; } to { offset-distance: 100%; opacity: 0; } }
+
+/* ── landing motion additions (marketing) ───────────────────────────────────────────────────────── */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes dash-flow { to { stroke-dashoffset: -14; } }
+@keyframes bar-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes ring-out { from { transform: scale(0.6); opacity: 0.55; } to { transform: scale(2.2); opacity: 0; } }
+@keyframes slide-up-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+@layer utilities {
+  .mask-fade-x {
+    -webkit-mask: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+            mask: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  }
+  .mask-fade-b {
+    -webkit-mask: linear-gradient(180deg, #000 55%, transparent);
+            mask: linear-gradient(180deg, #000 55%, transparent);
+  }
+  /* pointer-following highlight used by <Spotlight>; the vars are written from JS without re-rendering */
+  .spot::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgb(14 166 107 / 0.10), transparent 70%);
+    transition: opacity var(--duration-base) var(--ease-out);
+  }
+  .spot:hover::after { opacity: 1; }
+  .spot-dark::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgb(255 255 255 / 0.08), transparent 70%);
+    transition: opacity var(--duration-base) var(--ease-out);
+  }
+  .spot-dark:hover::after { opacity: 1; }
+  @media (hover: none) { .spot::after, .spot-dark::after { display: none; } }
+  .bg-ink-panel {
+    background:
+      radial-gradient(70% 90% at 85% 0%, rgb(14 166 107 / 0.16), transparent 62%),
+      linear-gradient(180deg, #121a2c, var(--color-ink));
+  }
+}
+
+/* ── curve vocabulary: oversized organic section silhouettes (landing art direction) ───────────────
+ * Curves belong to section silhouettes and big framing shapes. Small UI stays on --radius-ctl/card/panel.
+ * Radii scale with vw so phones keep an elegant, smaller version of the same gesture.
+ */
+@theme {
+  --radius-notch: clamp(0.5rem, 1.4vw, 1.75rem);
+  --radius-sweep-sm: clamp(1.5rem, 4vw, 3.5rem);
+  --radius-sweep-md: clamp(2.5rem, 8vw, 7rem);
+  --radius-sweep-lg: clamp(4rem, 14vw, 14rem);
+  --radius-sweep-xl: clamp(6rem, 24vw, 24rem);
+
+  --color-ink-deep: #080d19;
+  --color-ink-lift: #121a2c;
+  --color-ink-rise: #19233a;
+}
+
+:root {
+  /* how far a section reaches under its neighbour, and the shared vertical rhythm */
+  --seam: 0px;
+  --band-pad: clamp(4rem, 9vw, 8rem);
+  --curve-ease: cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+@layer utilities {
+  /* single-gesture shapes: one huge radius against small notches */
+  .shape-arch { border-radius: 999rem 999rem 0 0; }
+  .shape-pill { border-radius: 999rem; }
+  .shape-sweep-tl { border-radius: var(--radius-sweep-lg) var(--radius-notch) var(--radius-notch) var(--radius-notch); }
+  .shape-sweep-tr { border-radius: var(--radius-notch) var(--radius-sweep-lg) var(--radius-notch) var(--radius-notch); }
+  .shape-sweep-br { border-radius: var(--radius-notch) var(--radius-notch) var(--radius-sweep-lg) var(--radius-notch); }
+  .shape-sweep-bl { border-radius: var(--radius-notch) var(--radius-notch) var(--radius-notch) var(--radius-sweep-lg); }
+  .shape-leaf { border-radius: var(--radius-sweep-lg) var(--radius-notch) var(--radius-sweep-lg) var(--radius-notch); }
+  .shape-leaf-r { border-radius: var(--radius-notch) var(--radius-sweep-lg) var(--radius-notch) var(--radius-sweep-lg); }
+  .shape-quarter-tr { border-radius: 0 100% 0 0; }
+  .shape-quarter-bl { border-radius: 0 0 0 100%; }
+
+  /* section silhouettes: the top and bottom edge of a full-width band */
+  .section-curve-top { border-top-left-radius: var(--radius-sweep-lg); border-top-right-radius: var(--radius-notch); }
+  .section-curve-top-r { border-top-right-radius: var(--radius-sweep-lg); border-top-left-radius: var(--radius-notch); }
+  .section-curve-top-xl { border-top-left-radius: var(--radius-sweep-xl); border-top-right-radius: var(--radius-notch); }
+  .section-curve-bottom { border-bottom-right-radius: var(--radius-sweep-lg); border-bottom-left-radius: var(--radius-notch); }
+  .section-curve-bottom-l { border-bottom-left-radius: var(--radius-sweep-lg); border-bottom-right-radius: var(--radius-notch); }
+  .section-curve-bottom-xl { border-bottom-right-radius: var(--radius-sweep-xl); border-bottom-left-radius: var(--radius-notch); }
+
+  /* a band reaches under the previous one; padding keeps its content clear of the curve */
+  .band-pull { margin-top: 0; }
+  /* island: a dark panel inset from the viewport edge. leaf-a/leaf-b make the radii unequal (two big corners, two small). */
+  .island { border-radius: clamp(1.75rem, 4.2vw, 3.5rem); }
+  .island-leaf-a { border-radius: clamp(3rem, 9vw, 8rem) clamp(1.25rem, 2.4vw, 2.25rem) clamp(3rem, 9vw, 8rem) clamp(1.25rem, 2.4vw, 2.25rem); }
+  .island-leaf-b { border-radius: clamp(1.25rem, 2.4vw, 2.25rem) clamp(3rem, 9vw, 8rem) clamp(1.25rem, 2.4vw, 2.25rem) clamp(3rem, 9vw, 8rem); }
+
+  /* deep ink surface for dark bands: flat tinted near-black, patterns are layered on top by <DarkField> */
+  .surface-ink { background: var(--color-ink); color: var(--color-on-ink); }
+  .surface-ink h1, .surface-ink h2, .surface-ink h3 { color: var(--color-on-ink); }
+
+  /* subtle structure for dark bands */
+  .grid-ink::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px) 0 0 / 64px 64px,
+      linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px) 0 0 / 64px 64px;
+    -webkit-mask: radial-gradient(85% 75% at var(--grid-x, 70%) var(--grid-y, 30%), #000, transparent 85%);
+            mask: radial-gradient(85% 75% at var(--grid-x, 70%) var(--grid-y, 30%), #000, transparent 85%);
+  }
+  /* the same grid, lit near the pointer; --gx/--gy are written from JS */
+  .grid-ink-lit::after {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
+    background:
+      linear-gradient(rgb(52 211 153 / 0.2) 1px, transparent 1px) 0 0 / 64px 64px,
+      linear-gradient(90deg, rgb(52 211 153 / 0.2) 1px, transparent 1px) 0 0 / 64px 64px;
+    -webkit-mask: radial-gradient(260px circle at var(--gx, 50%) var(--gy, 50%), #000, transparent 100%);
+            mask: radial-gradient(260px circle at var(--gx, 50%) var(--gy, 50%), #000, transparent 100%);
+    transition: opacity var(--duration-slow) var(--ease-out);
+  }
+  .grid-ink-lit[data-lit="1"]::after { opacity: 1; }
+  .dots-ink::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(circle, rgb(255 255 255 / 0.16) 1px, transparent 1.4px) 0 0 / 24px 24px;
+    -webkit-mask: radial-gradient(70% 70% at var(--grid-x, 80%) var(--grid-y, 20%), #000, transparent 80%);
+            mask: radial-gradient(70% 70% at var(--grid-x, 80%) var(--grid-y, 20%), #000, transparent 80%);
+  }
+  /* hairline grid for light bands */
+  .grid-paper::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      linear-gradient(rgb(15 23 42 / 0.05) 1px, transparent 1px) 0 0 / 64px 64px,
+      linear-gradient(90deg, rgb(15 23 42 / 0.05) 1px, transparent 1px) 0 0 / 64px 64px;
+    -webkit-mask: radial-gradient(70% 70% at var(--grid-x, 20%) var(--grid-y, 30%), #000, transparent 80%);
+            mask: radial-gradient(70% 70% at var(--grid-x, 20%) var(--grid-y, 30%), #000, transparent 80%);
+  }
+  /* a large mint tint that sits in one corner of a dark band */
+  .tint-mint-tr { background: radial-gradient(60% 60% at 100% 0%, rgb(14 166 107 / 0.16), transparent 62%); }
+  .tint-mint-bl { background: radial-gradient(60% 60% at 0% 100%, rgb(14 166 107 / 0.12), transparent 62%); }
+  .paint-clip { will-change: clip-path; }
+}
+
+@layer utilities {
+  /* cursor-follow glow on dark bands; --gx/--gy are written from JS on the band */
+  .band-glow {
+    position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
+    background: radial-gradient(520px circle at var(--gx, 50%) var(--gy, 50%), rgb(14 166 107 / 0.11), transparent 70%);
+    transition: opacity var(--duration-slow) var(--ease-out);
+  }
+  [data-lit="1"] > .band-glow { opacity: 1; }
+  @media (hover: none) { .band-glow, .grid-ink-lit::after { display: none; } }
+}
+
+@keyframes orbit { to { transform: rotate(360deg); } }
+
+/* the footer is a curved dark mass; when the last band is also dark it continues that band with no seam */
+main:has([data-joins-footer]) + .site-footer { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+main:has([data-joins-footer]) + .site-footer.grid-ink::before { display: none; }
+
+/* ── hero scenes: CSS-only loops so they run before hydration and cost no JS ───────────────────── */
+@keyframes scene-float { from { transform: translateY(0); } to { transform: translateY(-9px); } }
+@keyframes coin-drop {
+  0%   { transform: translateY(-230px); opacity: 0; }
+  10%  { opacity: 1; }
+  42%  { transform: translateY(0); }
+  47%  { transform: translateY(-14px); }
+  53%  { transform: translateY(0); }
+  80%  { transform: translateY(0); opacity: 1; }
+  92%  { transform: translateY(14px); opacity: 0; }
+  100% { transform: translateY(-230px); opacity: 0; }
+}
+@keyframes coin-ring {
+  0%, 41% { transform: scale(0.5); opacity: 0; }
+  42%     { transform: scale(0.5); opacity: 0.9; }
+  66%     { transform: scale(2.4); opacity: 0; }
+  100%    { transform: scale(2.4); opacity: 0; }
+}
+@keyframes cap-glow { 0%, 41% { opacity: 0; } 50% { opacity: 0.55; } 82% { opacity: 0.22; } 94%, 100% { opacity: 0; } }
+@keyframes tag-in { 0%, 44% { opacity: 0; transform: translateY(8px); } 52%, 84% { opacity: 1; transform: translateY(0); } 94%, 100% { opacity: 0; transform: translateY(-4px); } }
+@keyframes phone-swap-a { 0%, 38% { opacity: 1; } 46%, 90% { opacity: 0; } 98%, 100% { opacity: 1; } }
+@keyframes phone-swap-b { 0%, 38% { opacity: 0; } 46%, 90% { opacity: 1; } 98%, 100% { opacity: 0; } }
+@keyframes toast-in { 0%, 44% { opacity: 0; transform: translateY(14px) scale(0.98); } 52%, 88% { opacity: 1; transform: translateY(0) scale(1); } 96%, 100% { opacity: 0; transform: translateY(-6px); } }
+@keyframes feed-1 { 0%, 4% { opacity: 0; transform: translateY(18px); } 12%, 90% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
+@keyframes feed-2 { 0%, 22% { opacity: 0; transform: translateY(18px); } 30%, 90% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
+@keyframes feed-3 { 0%, 40% { opacity: 0; transform: translateY(18px); } 48%, 90% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
+@keyframes feed-4 { 0%, 58% { opacity: 0; transform: translateY(18px); } 66%, 90% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
+@keyframes feed-line { 0%, 4% { transform: scaleY(0); } 62% { transform: scaleY(1); } 90% { transform: scaleY(1); opacity: 1; } 97%, 100% { transform: scaleY(1); opacity: 0; } }
+@keyframes hero-line-in { from { opacity: 0; transform: translateY(0.35em); filter: blur(7px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .scene-anim, .scene-anim * { animation: none !important; }
+  .hero-line-in { animation: none !important; opacity: 1 !important; filter: none !important; }
+}
+
+/* Paused by <OffscreenPause />: nothing inside a section that is off screen needs to animate. */
+[data-offscreen] *, [data-offscreen] *::before, [data-offscreen] *::after { animation-play-state: paused !important; }
+
+/* Phones: no ambient float and no 3D layers on the hero scene (touch cannot tilt it), fewer repaints while scrolling. */
+@media (max-width: 767px), (pointer: coarse) {
+  .scene-anim, .scene-anim * { animation-name: none !important; }
+  .scene-anim [style*="perspective"] { perspective: none !important; }
+}

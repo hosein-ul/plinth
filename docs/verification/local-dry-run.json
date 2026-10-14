@@ -1,0 +1,112 @@
+{
+  "startedAt": "2026-10-09T11:09:43.159Z",
+  "steps": [
+    {
+      "name": "customer funded",
+      "address": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "usdc": "10",
+      "at": "2026-10-09T11:09:54.843Z"
+    },
+    {
+      "name": "vault deployed by relayer, owned by merchant",
+      "vault": "0x2be8B5D61d0e983D3429d31B0D3815026CacE1c8",
+      "owner": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "gatewayIsOwner": false,
+      "explorer": "local:address/0x2be8B5D61d0e983D3429d31B0D3815026CacE1c8",
+      "at": "2026-10-09T11:09:55.965Z"
+    },
+    {
+      "name": "invoice created with counterfactual address",
+      "id": "pi_5cce5343344006a2775bf112fbba142c",
+      "depositAddr": "0x84E3921317AcC99e54BF7958c2Fec112Bd3493A5",
+      "deployed": false,
+      "at": "2026-10-09T11:09:56.006Z"
+    },
+    {
+      "name": "customer transferred USDC to the deposit address",
+      "tx": "0xc13d12051b4598da782af73e3bcdf77fd382fb09c8be9fe980170a53f936db1f",
+      "explorer": "local:tx/0xc13d12051b4598da782af73e3bcdf77fd382fb09c8be9fe980170a53f936db1f",
+      "invoiceNativeBalance": "0",
+      "at": "2026-10-09T11:09:56.924Z"
+    },
+    {
+      "name": "address payment SETTLED",
+      "transfer": "http://localhost/explorer/tx/0xc13d12051b4598da782af73e3bcdf77fd382fb09c8be9fe980170a53f936db1f",
+      "sweep": "http://localhost/explorer/tx/0x012013bc467891de85712e528bc833055546f4e814a1839ec1cf994931b7a60e",
+      "vaultDelta": "0.05",
+      "invoiceAddressNativeBalanceAfter": "0",
+      "invoiceDeployed": true,
+      "relayerGasSpentWei": "230602590944400",
+      "at": "2026-10-09T11:10:00.771Z"
+    },
+    {
+      "name": "wallet payment SETTLED (customer signed; relayer paid gas)",
+      "tx": "http://localhost/explorer/tx/0x65729ce956c58c0ccba1c4e56300bc61bd926955a6fd82637f02c33014e82fda",
+      "vaultDelta": "0.03",
+      "at": "2026-10-09T11:10:03.762Z"
+    },
+    {
+      "name": "signed webhooks delivered",
+      "count": 8,
+      "types": [
+        "payment.detected",
+        "payment.confirmed",
+        "settlement.submitted",
+        "settlement.completed",
+        "payment.completed"
+      ],
+      "invalidSignatures": 0,
+      "at": "2026-10-09T11:10:03.767Z"
+    },
+    {
+      "name": "relayer operations",
+      "ops": [
+        {
+          "kind": "CREATE_VAULT",
+          "status": "CONFIRMED",
+          "tx": "0xc8edbd5129398a797afd6a15b8607f3f0874fa3f6aaa0def72661a5985309874",
+          "gasUsed": "1287669",
+          "feeNativeWei": "1889615811566667",
+          "feeUsdc": null
+        },
+        {
+          "kind": "DEPLOY_AND_SWEEP",
+          "status": "CONFIRMED",
+          "tx": "0x012013bc467891de85712e528bc833055546f4e814a1839ec1cf994931b7a60e",
+          "gasUsed": "175075",
+          "feeNativeWei": "230602590944400",
+          "feeUsdc": null
+        },
+        {
+          "kind": "WALLET_PAYMENT",
+          "status": "CONFIRMED",
+          "tx": "0x65729ce956c58c0ccba1c4e56300bc61bd926955a6fd82637f02c33014e82fda",
+          "gasUsed": "90136",
+          "feeNativeWei": "109319624779672",
+          "feeUsdc": null
+        }
+      ],
+      "at": "2026-10-09T11:10:03.770Z"
+    }
+  ],
+  "network": "local-dev",
+  "contracts": {
+    "networkId": "local-dev",
+    "chainId": 31337,
+    "version": 1,
+    "vaultFactory": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+    "invoiceImplementation": "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0",
+    "invoiceFactory": "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9",
+    "paymentRouter": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+    "deployBlock": 5,
+    "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "bytecodeVerified": true,
+    "productionApproved": false,
+    "vaultConfigDelaySeconds": 60
+  },
+  "relayer": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+  "customer": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+  "vaultOwner": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+  "ok": true,
+  "finishedAt": "2026-10-09T11:10:03.770Z"
+}

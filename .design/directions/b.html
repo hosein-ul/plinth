@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plinth — Direction B: Stub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500..900&family=DM+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400..800&display=swap" rel="stylesheet">
+<style>
+/* Direction B — Stub. An invoice is a ticket that gets punched.
+   Raffle-yellow colour field, ultrabold condensed poster type, a physical ticket object, punch / tear / stamp motion. */
+:root {
+  --y: #ffdf1e; --y-deep: #f2cc00; --ink: #15130a; --ink-2: #4b4630; --paper: #f7f7f4; --paper-2: #e9e9e4; --stamp: #e3241b;
+  --line: rgb(21 19 10 / .22);
+  --poster: "Big Shoulders Display", Impact, sans-serif; --text: "Schibsted Grotesk", "Segoe UI", sans-serif; --mono: "DM Mono", ui-monospace, monospace;
+  --m: clamp(18px, 3.2vw, 52px);
+  --snap: cubic-bezier(.2, 0, 0, 1); --out: cubic-bezier(.16, 1, .3, 1);
+  --thump: linear(0, .6 12%, 1.12 28%, .96 44%, 1.02 62%, 1);
+}
+* { box-sizing: border-box; }
+html { background: var(--y); color: var(--ink); font-family: var(--text); -webkit-font-smoothing: antialiased; }
+body { margin: 0; font-size: 16px; line-height: 1.5; overflow-x: hidden; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.mono { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ticket-shaped button: notches cut from both ends */
+.btn { display: inline-flex; align-items: center; gap: 14px; height: 52px; padding: 0 30px; background: var(--ink); color: var(--y); font: 700 16px/1 var(--text); border: 0; cursor: pointer;
+  -webkit-mask: radial-gradient(circle 9px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 9px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle 9px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 9px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
+  transition: transform 110ms var(--snap), background 160ms; }
+.btn:hover { background: var(--stamp); color: var(--paper); transform: rotate(-1.2deg); } .btn:active { transform: rotate(-1.2deg) scale(.97); }
+.btn.sm { height: 40px; padding: 0 22px; font-size: 14px; } .btn.inv { background: var(--y); color: var(--ink); } .btn.inv:hover { background: var(--paper); color: var(--ink); }
+.under { font-weight: 600; background: linear-gradient(var(--ink), var(--ink)) 0 100% / 100% 2px no-repeat; padding-bottom: 3px; transition: background-size 220ms var(--snap); }
+.under:hover { background-size: 100% 100%; color: var(--y); }
+
+.nav { display: flex; align-items: center; gap: 30px; padding: 16px var(--m); position: relative; z-index: 6; }
+.brand { font: 900 30px/1 var(--poster); letter-spacing: .01em; }
+.nav ul { display: flex; gap: 24px; list-style: none; margin: 0 0 0 8px; padding: 0; font-size: 14.5px; font-weight: 600; }
+.nav ul a { padding: 4px 0; border-bottom: 2px solid transparent; transition: border-color 140ms; } .nav ul a:hover { border-color: var(--ink); }
+.nav .r { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.chip { border: 1.5px solid var(--ink); padding: 5px 9px 4px; transform: rotate(-2deg); }
+
+/* hero */
+.hero { position: relative; padding: clamp(8px, 1.4vw, 24px) var(--m) clamp(28px, 4vw, 56px); overflow: hidden; }
+.hero h1 { font: 900 clamp(84px, 18.3vw, 310px)/.79 var(--poster); text-transform: uppercase; letter-spacing: -.012em; margin: 0; }
+.hero h1 span { display: block; white-space: nowrap; animation: slab 620ms var(--out) both; }
+.hero h1 span:nth-child(2) { animation-delay: 70ms; } .hero h1 span:nth-child(3) { animation-delay: 140ms; }
+.hero .foot { display: grid; grid-template-columns: minmax(0, 30rem) 1fr; gap: 32px; align-items: end; margin-top: clamp(20px, 3vw, 44px); position: relative; z-index: 4; }
+.hero .foot p { margin: 0 0 22px; font-size: clamp(16px, 1.3vw, 20px); font-weight: 500; line-height: 1.42; }
+.hero .act { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
+.hero .side { justify-self: end; text-align: right; max-width: 17rem; }
+
+/* the ticket */
+.tk-wrap { position: absolute; z-index: 3; right: clamp(8px, 5vw, 96px); top: clamp(150px, 19vw, 300px); width: min(47vw, 640px); transform: rotate(-6deg); filter: drop-shadow(0 26px 30px rgb(74 58 0 / .36)); transition: transform 500ms var(--out); will-change: transform; }
+.ticket { display: grid; grid-template-columns: minmax(0, 1fr) 29%; }
+.tk-main, .tk-stub { background: var(--paper); position: relative; }
+.tk-main { padding: 22px 26px 20px;
+  -webkit-mask: radial-gradient(circle 13px at 100% 0, #0000 97%, #000) top / 100% 51% no-repeat, radial-gradient(circle 13px at 100% 100%, #0000 97%, #000) bottom / 100% 51% no-repeat;
+          mask: radial-gradient(circle 13px at 100% 0, #0000 97%, #000) top / 100% 51% no-repeat, radial-gradient(circle 13px at 100% 100%, #0000 97%, #000) bottom / 100% 51% no-repeat; }
+.tk-stub { padding: 20px 18px; display: grid; gap: 10px; align-content: space-between; justify-items: center; text-align: center; transform-origin: 0 100%; transition: transform 520ms var(--thump);
+  -webkit-mask: radial-gradient(circle 13px at 0 0, #0000 97%, #000) top / 100% 51% no-repeat, radial-gradient(circle 13px at 0 100%, #0000 97%, #000) bottom / 100% 51% no-repeat;
+          mask: radial-gradient(circle 13px at 0 0, #0000 97%, #000) top / 100% 51% no-repeat, radial-gradient(circle 13px at 0 100%, #0000 97%, #000) bottom / 100% 51% no-repeat; }
+.tk-stub::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; border-left: 2px dashed rgb(21 19 10 / .4); }
+.ticket.torn .tk-stub { transform: translate(20px, 12px) rotate(8deg); }
+.tk-top { display: flex; justify-content: space-between; border-bottom: 2px solid var(--ink); padding-bottom: 8px; }
+.tk-amt { font: 900 clamp(52px, 6.5vw, 98px)/.84 var(--poster); margin: 14px 0 2px; letter-spacing: -.01em; white-space: nowrap; } .tk-amt small { font-size: .3em; font-weight: 800; margin-left: .25em; }
+.punches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 16px 0 14px; padding: 12px 0 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.punch { display: grid; justify-items: center; gap: 7px; font: 500 9.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+.punch i { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--ink); position: relative; }
+.punch i::after { content: ""; position: absolute; inset: -1.5px; border-radius: 50%; background: var(--ink); transform: scale(0); }
+.punch.on i::after { transform: scale(1); transition: transform 180ms var(--thump); } .punch.on { color: var(--ink); }
+.tk-addr { word-break: break-all; line-height: 1.6; text-transform: none; letter-spacing: 0; font-size: 11.5px; } .tk-addr b { font-weight: 500; background: var(--y); padding: 0 2px; }
+.tk-stub .qr { width: 100%; max-width: 132px; } .tk-stub .qr svg { width: 100%; height: auto; display: block; }
+.tk-stub .serial { font: 900 30px/1 var(--poster); }
+.stampmark { position: absolute; right: 5%; top: 47%; font: 900 clamp(30px, 3.6vw, 52px)/1 var(--poster); letter-spacing: .04em; color: var(--stamp); border: 5px solid var(--stamp); padding: 4px 16px 2px; transform: rotate(-13deg) scale(1.9); opacity: 0; mix-blend-mode: multiply; pointer-events: none; }
+.ticket.torn .stampmark { transform: rotate(-13deg) scale(1); opacity: .9; transition: transform 240ms var(--thump) 180ms, opacity 60ms linear 180ms; }
+
+/* black band: the roll */
+.band { background: var(--ink); color: var(--paper); padding: clamp(80px, 11vw, 168px) var(--m); }
+.statement { font: 600 clamp(26px, 3.5vw, 54px)/1.08 var(--text); letter-spacing: -.028em; max-width: 21em; margin: 0; text-wrap: balance; } .statement em { font-style: normal; color: var(--y); }
+.roll { display: grid; grid-template-columns: 1.35fr 1fr 1fr; margin-top: clamp(48px, 7vw, 104px); background: var(--y); color: var(--ink); position: relative;
+  -webkit-mask: radial-gradient(circle 12px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 12px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle 12px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 12px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat; }
+.cut { padding: 26px 30px 28px; border-right: 2px dashed rgb(21 19 10 / .45); } .cut:last-child { border: 0; } .cut:first-child { padding-left: 44px; }
+.cut .big { display: block; font: 900 clamp(88px, 13vw, 210px)/.8 var(--poster); margin: 12px 0 14px; } .cut .big small { font-size: .26em; font-weight: 800; margin-left: .2em; }
+.cut p { margin: 0; font-size: 15px; font-weight: 500; max-width: 24em; }
+
+/* product on paper */
+.desk { background: var(--paper); padding: clamp(72px, 9vw, 140px) var(--m) clamp(72px, 9vw, 132px); }
+.desk h2 { font: 900 clamp(60px, 10.5vw, 172px)/.8 var(--poster); text-transform: uppercase; margin: 0 0 22px; }
+.desk h2 s { text-decoration: none; background: var(--y); padding: 0 .08em; }
+.desk > p { max-width: 34rem; margin: 0 0 clamp(36px, 5vw, 64px); font-weight: 500; }
+.rig { display: grid; grid-template-columns: 380px 1fr; gap: 36px; align-items: start; }
+.co { background: var(--y); filter: drop-shadow(0 18px 22px rgb(21 19 10 / .16)); transform: rotate(-1.4deg);
+  -webkit-mask: radial-gradient(circle 11px at 0 116px, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 11px at 100% 116px, #0000 97%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle 11px at 0 116px, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 11px at 100% 116px, #0000 97%, #000) right / 51% 100% no-repeat; }
+.co header { padding: 16px 22px 14px; height: 116px; border-bottom: 2px dashed rgb(21 19 10 / .45); }
+.co header strong { display: block; font: 900 64px/.86 var(--poster); margin-top: 8px; } .co header strong small { font-size: .32em; margin-left: .2em; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 14px 22px 0; }
+.tabs button { all: unset; cursor: pointer; text-align: center; padding: 10px 8px; font: 700 14px var(--text); border: 2px solid var(--ink); transition: background 140ms, color 140ms; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--y); } .tabs button:focus-visible { outline: 3px solid var(--stamp); outline-offset: 2px; }
+.pane { display: none; padding: 16px 22px 22px; } .pane.on { display: block; animation: slab 300ms var(--out); }
+.pane .qr2 { display: grid; grid-template-columns: 120px 1fr; gap: 14px; } .pane .qr2 > div:first-child { background: var(--paper); padding: 8px; } .pane svg { width: 100%; height: auto; display: block; }
+.copy { all: unset; cursor: pointer; margin-top: 10px; font: 700 13px var(--text); border-bottom: 2px solid var(--ink); } .copy:hover { color: var(--stamp); border-color: var(--stamp); } .copy:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.warn { margin: 14px 0 0; font-size: 13px; font-weight: 500; padding-top: 12px; border-top: 1px solid var(--line); }
+.book { border-top: 3px solid var(--ink); }
+.sum { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--ink); } .sum div { padding: 16px 18px 12px 0; } .sum div + div { padding-left: 18px; border-left: 1px solid var(--line); }
+.sum strong { display: block; font: 900 clamp(40px, 4.6vw, 68px)/.9 var(--poster); margin-top: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 14.5px; font-weight: 500; }
+th { text-align: left; font: 500 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 12px 12px 10px 0; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+td { padding: 0 12px 0 0; height: 52px; border-bottom: 1px solid var(--line); white-space: nowrap; } td.r, th.r { text-align: right; padding-right: 0; }
+tbody tr { transition: background 120ms; } tbody tr:hover { background: var(--y); }
+.pd { display: inline-grid; grid-auto-flow: column; gap: 4px; vertical-align: -2px; margin-right: 10px; } .pd i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink); } .pd i.on { background: var(--ink); }
+td .serial { font: 800 19px/1 var(--poster); letter-spacing: .02em; }
+
+footer { background: var(--ink); color: var(--paper); padding: 52px var(--m) 0; overflow: hidden; }
+.cols { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 32px; font-size: 14.5px; padding-bottom: 40px; }
+.cols p { margin: 0; max-width: 27em; color: #c9c7b9; } .cols h4 { font: 500 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--y); margin: 0 0 12px; } .cols a { display: block; padding: 4px 0; font-weight: 500; } .cols a:hover { color: var(--y); }
+.wordmark { font: 900 34.5vw/.74 var(--poster); color: var(--y); margin: 0 0 -.06em -.01em; white-space: nowrap; user-select: none; }
+
+@keyframes slab { from { opacity: 0; transform: translateY(.18em) skewY(2deg); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 900px) {
+  .nav ul, .nav .chip { display: none; }
+  .hero h1 { font-size: 21.6vw; } .tk-wrap { position: relative; right: auto; top: auto; width: 100%; margin: 26px 0 8px; transform: rotate(-3deg); }
+  .tk-main { padding: 16px 16px 14px; } .punch { font-size: 8px; } .punch i { width: 20px; height: 20px; } .tk-stub { padding: 14px 10px; } .tk-stub .serial { font-size: 22px; }
+  .hero .foot { grid-template-columns: 1fr; } .hero .side { justify-self: start; text-align: left; }
+  .roll { grid-template-columns: 1fr; } .cut, .cut:first-child { border-right: 0; border-bottom: 2px dashed rgb(21 19 10 / .45); padding: 22px 30px; }
+  .rig { grid-template-columns: 1fr; } .co { transform: none; } .book { overflow-x: auto; } .book table { min-width: 560px; }
+  .cols { grid-template-columns: 1fr 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .hero h1 span, .pane.on { animation: none; } * { transition-duration: 1ms !important; transition-delay: 0s !important; } }
+</style>
+</head>
+<body>
+<nav class="nav" aria-label="Primary">
+  <a class="brand" href="#">PLINTH</a>
+  <ul><li><a href="#">Product</a></li><li><a href="#">Networks</a></li><li><a href="#">Developers</a></li><li><a href="#">Security</a></li><li><a href="#">Pricing</a></li></ul>
+  <div class="r"><span class="chip mono">Testnet · not audited yet</span><a class="btn sm" href="#">Open dashboard</a></div>
+</nav>
+
+<header class="hero">
+  <h1><span>Paid straight</span><span>into your</span><span>vault.</span></h1>
+  <div class="tk-wrap" id="wrap" aria-hidden="true">
+    <div class="ticket" id="ticket">
+      <div class="tk-main">
+        <div class="tk-top mono"><span>Plinth invoice</span><span>No. 2048</span></div>
+        <div class="tk-amt num">1,250.00<small>USDC</small></div>
+        <div class="mono">Arc Testnet · pays one vault only</div>
+        <div class="punches" id="punches">
+          <div class="punch"><i></i>Detected</div><div class="punch"><i></i>Verified</div><div class="punch"><i></i>Final</div><div class="punch"><i></i>Swept</div><div class="punch"><i></i>In vault</div>
+        </div>
+        <div class="mono tk-addr"><b>0x7A3f</b>9C02e41bD85f0A6c3E1d7B94a2F0c8<b>D51e</b></div>
+        <div class="stampmark">SETTLED</div>
+      </div>
+      <div class="tk-stub"><span class="mono">Scan to pay</span><div class="qr" id="qr1"></div><span class="serial">2048</span></div>
+    </div>
+  </div>
+  <div class="foot">
+    <div><p>Every invoice gets its own USDC address that can only pay your vault. A relayer covers the gas. You hold the only key.</p>
+      <div class="act"><a class="btn" href="#">Create a test invoice</a><a class="under" href="#">Read the contracts</a></div></div>
+    <p class="side mono">Punched by the chain, not by us. Each mark is a block, a confirmation or a transaction hash.</p>
+  </div>
+</header>
+
+<section class="band">
+  <p class="statement">The address exists before its contract does, and it has one exit: your vault. <em>No key per invoice, no gas for your customer, no admin role for us.</em></p>
+  <div class="roll">
+    <div class="cut"><span class="mono">Deploy and sweep, one transaction</span><span class="big num">175<small>K GAS</small></span><p>Measured on a local EVM. The relayer pays it, so a deposit address never needs funding.</p></div>
+    <div class="cut"><span class="mono">Gas your customer needs</span><span class="big num">0</span><p>Wallet payments are signed, not sent. The relayer submits them.</p></div>
+    <div class="cut"><span class="mono">Keys we hold over your vault</span><span class="big num">0</span><p>The vault has an owner and nothing else. Sweep only goes one way.</p></div>
+  </div>
+</section>
+
+<section class="desk">
+  <h2>Received is<br>not <s>settled.</s></h2>
+  <p>Received means final on-chain at the invoice address. Settled means inside your vault. You always see both, and only what the chain has confirmed. Sample data below.</p>
+  <div class="rig">
+    <div class="co">
+      <header><div class="mono" style="display:flex;justify-content:space-between"><span>INV-2048 · Arc Testnet</span><span>Expires 14:52</span></div><strong class="num">1,250.00<small>USDC</small></strong></header>
+      <div class="tabs" role="tablist" id="tabs"><button role="tab" aria-selected="false">Pay with wallet</button><button role="tab" aria-selected="true">Send to address</button></div>
+      <div class="pane" role="tabpanel"><p style="margin:0 0 14px;font-weight:500;font-size:14.5px">Sign once. You need no ETH or native token; the relayer submits the transfer.</p><a class="btn" href="#" style="width:100%;justify-content:center">Connect wallet</a></div>
+      <div class="pane on" role="tabpanel">
+        <div class="qr2"><div id="qr2"></div><div><span class="mono">One-time address</span><div class="mono tk-addr" style="margin-top:6px"><b style="background:var(--paper)">0x7A3f</b>9C02e41bD85f0A6c3E1d7B94a2F0c8<b style="background:var(--paper)">D51e</b></div><button class="copy" id="copy" type="button">Copy address</button></div></div>
+        <p class="warn">Send USDC on Arc Testnet only. Other tokens are not credited.</p>
+      </div>
+    </div>
+    <div class="book">
+      <div class="sum"><div><span class="mono">Received · 7 days</span><strong class="num">18,400.00</strong></div><div><span class="mono">Settled to vault</span><strong class="num">17,150.00</strong></div><div><span class="mono">In flight</span><strong class="num">1,250.00</strong></div></div>
+      <table><thead><tr><th>No.</th><th>Customer</th><th>Network</th><th>Punched</th><th class="r">USDC</th></tr></thead><tbody id="rows"></tbody></table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="cols">
+    <p>Plinth is running on testnets. The contracts have not been audited yet, and this page will say so until they have.</p>
+    <div><h4>Product</h4><a href="#">Checkout</a><a href="#">Vaults</a><a href="#">Relayer</a></div>
+    <div><h4>Developers</h4><a href="#">API reference</a><a href="#">Webhooks</a><a href="#">Contracts</a></div>
+    <div><h4>Trust</h4><a href="#">Threat model</a><a href="#">Verification report</a><a href="#">Status</a></div>
+  </div>
+  <div class="wordmark" aria-hidden="true">PLINTH</div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+const ADDR = '0x7A3f9C02e41bD85f0A6c3E1d7B94a2F0c8D51e';
+for (const id of ['qr1', 'qr2']) { try { const q = qrcode(0, 'M'); q.addData(ADDR); q.make(); document.getElementById(id).innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); } catch { document.getElementById(id).textContent = 'QR unavailable offline'; } }
+
+// punch, tear, stamp — driven by a five-stage loop
+const ticket = document.getElementById('ticket'), punches = [...document.querySelectorAll('#punches .punch')];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function show(stage) { punches.forEach((p, i) => p.classList.toggle('on', i < stage)); ticket.classList.toggle('torn', stage >= 5); }
+if (reduce) show(5); else { let s = 0; const tick = () => { show(s); const wait = s === 5 ? 3200 : s === 0 ? 900 : 1050; s = s === 5 ? 0 : s + 1; setTimeout(tick, wait); }; tick(); }
+
+// the ticket leans toward the pointer a little (fine pointers only)
+const wrap = document.getElementById('wrap');
+if (!reduce && matchMedia('(pointer: fine)').matches && innerWidth > 900) addEventListener('pointermove', (e) => {
+  const x = e.clientX / innerWidth - .5, y = e.clientY / innerHeight - .5;
+  wrap.style.transform = `rotate(${(-6 + x * 3).toFixed(2)}deg) translate(${(x * 14).toFixed(1)}px, ${(y * 10).toFixed(1)}px)`;
+}, { passive: true });
+
+const tabs = [...document.querySelectorAll('#tabs button')], panes = [...document.querySelectorAll('.pane')];
+tabs.forEach((b, i) => b.addEventListener('click', () => { tabs.forEach((x, j) => x.setAttribute('aria-selected', i === j)); panes.forEach((p, j) => p.classList.toggle('on', i === j)); }));
+const copy = document.getElementById('copy'); copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(ADDR); } catch {} copy.textContent = 'Copied'; setTimeout(() => (copy.textContent = 'Copy address'), 1400); });
+
+const ROWS = [['2048', 'Halden Supply', 'Arc Testnet', 2, '1,250.00'], ['2047', 'Otto & Reyes', 'Base Sepolia', 5, '4,900.00'], ['2046', 'Northfold', 'Arc Testnet', 5, '320.50'], ['2045', 'Kite Works', 'Arc Testnet', 5, '8,000.00'], ['2044', 'Marrow Studio', 'Base Sepolia', 5, '3,929.50']];
+const LABEL = ['Created', 'Detected', 'Verified', 'Final', 'Swept', 'In vault'];
+document.getElementById('rows').innerHTML = ROWS.map(([id, c, n, s, amt]) => `<tr><td><span class="serial">${id}</span></td><td>${c}</td><td><span class="mono">${n}</span></td><td><span class="pd" aria-hidden="true">${[0,1,2,3,4].map((i) => `<i class="${i < s ? 'on' : ''}"></i>`).join('')}</span>${LABEL[s]}</td><td class="r num">${amt}</td></tr>`).join('');
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "@plinth/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "typecheck": "tsc -p .", "start": "tsx src/main.ts" },
+  "dependencies": {
+    "@plinth/db": "workspace:*",
+    "@plinth/engine": "workspace:*"
+  }
+}

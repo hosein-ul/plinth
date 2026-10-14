@@ -1,0 +1,23 @@
+{
+  "name": "@plinth/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run",
+    "start": "tsx src/main.ts",
+    "openapi": "tsx src/openapi-export.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.3.0",
+    "@fastify/rate-limit": "11.2.0",
+    "@plinth/blockchain": "workspace:*",
+    "@plinth/db": "workspace:*",
+    "@plinth/engine": "workspace:*",
+    "@plinth/shared": "workspace:*",
+    "fastify": "5.12.5",
+    "zod": "^4.1.0"
+  }
+}

@@ -1,0 +1,24 @@
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.data/
+*.log
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/**/.git
+# local-only secrets and keystores — never commit
+secrets/
+*.keystore
+*.pem
+
+.data-*.log
+.data/
+contracts/cache/
+.vercel
+.env*

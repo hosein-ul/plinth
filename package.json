@@ -1,0 +1,42 @@
+{
+  "name": "plinth",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@12.8.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:contracts": "cd contracts && forge test",
+    "db:generate": "pnpm --filter @plinth/db generate",
+    "db:migrate": "pnpm --filter @plinth/db migrate",
+    "dev:stack": "tsx scripts/dev-stack.ts",
+    "api": "pnpm --filter @plinth/api start",
+    "worker": "pnpm --filter @plinth/worker start",
+    "web": "pnpm --filter @plinth/web dev",
+    "verify:networks": "tsx scripts/verify-networks.ts",
+    "finalize:deployment": "tsx scripts/finalize-deployment.ts",
+    "approve:deployment": "tsx scripts/approve-deployment.ts",
+    "abis": "node scripts/export-abis.mjs",
+    "keys:testnet": "tsx scripts/gen-testnet-keys.ts",
+    "e2e:testnet": "tsx scripts/testnet-e2e.ts",
+    "e2e:local": "tsx scripts/testnet-e2e.ts --local",
+    "dev:wallet": "tsx scripts/dev-wallet-signer.ts",
+    "openapi": "pnpm --filter @plinth/api openapi"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "viem": "2.57.4",
+    "vitest": "^3.2.0",
+    "@plinth/api": "workspace:*",
+    "@plinth/blockchain": "workspace:*",
+    "@plinth/db": "workspace:*",
+    "@plinth/engine": "workspace:*",
+    "@plinth/shared": "workspace:*"
+  },
+  "type": "module"
+}
