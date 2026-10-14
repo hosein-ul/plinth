@@ -198,6 +198,46 @@ describe("hosted checkout — pay with connected wallet over HTTP", () => {
   });
 });
 
+describe("payment lifetime", () => {
+  const lifetime = (pi: { expires_at: string }) => Math.round((Date.parse(pi.expires_at) - (Date.now() + h.clock.offsetMs)) / 1000);
+  const near = (secs: number, want: number) => expect(Math.abs(secs - want)).toBeLessThan(60);
+
+  it("a new payment is open for 20 minutes when nothing is specified", async () => {
+    const r = await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "3.00" } });
+    expect(r.status).toBe(201);
+    near(lifetime(r.body), 1200);
+  });
+
+  it("a request can override the lifetime, within 5 minutes to 30 days", async () => {
+    const ok = await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "3.00", expires_in_seconds: 7200 } });
+    near(lifetime(ok.body), 7200);
+    expect((await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "3.00", expires_in_seconds: 299 } })).status).toBe(400);
+    expect((await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "3.00", expires_in_seconds: 2592001 } })).status).toBe(400);
+    const max = await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "3.00", expires_in_seconds: 2592000 } });
+    expect(max.status).toBe(201);
+  });
+
+  it("the merchant default applies when a request says nothing, and existing values are not rewritten", async () => {
+    const me = await call("GET", "/v1/me", { token: session });
+    expect(me.body.merchant.default_expiry_seconds).toBe(1200);
+    expect((await call("PATCH", "/v1/settlement-policy", { token: session, body: { default_expiry_seconds: 900 } })).status).toBe(200);
+    const r = await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "3.00" } });
+    near(lifetime(r.body), 900);
+    const override = await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "3.00", expires_in_seconds: 600 } });
+    near(lifetime(override.body), 600);
+    await call("PATCH", "/v1/settlement-policy", { token: session, body: { default_expiry_seconds: 1200 } });
+  });
+
+  it("a payment link defaults to 20 minutes per visit and is capped at 7 days", async () => {
+    const link = await call("POST", "/v1/payment-links", { token: apiKey, body: { name: "Lifetime", amount: "2.00" } });
+    const slug = link.body.url.split("/l/")[1];
+    const visit = await call("POST", `/public/links/${slug}/checkout`);
+    near(lifetime(visit.body), 1200);
+    expect((await call("POST", "/v1/payment-links", { token: apiKey, body: { name: "Too long", amount: "2.00", intent_expires_in_seconds: 604801 } })).status).toBe(400);
+    expect((await call("POST", "/v1/payment-links", { token: apiKey, body: { name: "Max", amount: "2.00", intent_expires_in_seconds: 604800 } })).status).toBe(201);
+  });
+});
+
 describe("payment links and invoices over HTTP", () => {
   it("a link spawns a fresh payment per visit", async () => {
     const link = await call("POST", "/v1/payment-links", { token: apiKey, body: { name: "Coffee beans 1kg", amount: "24.00" } });

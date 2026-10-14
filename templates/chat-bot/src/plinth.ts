@@ -8,7 +8,7 @@ export async function createPayment(cfg: PlinthConfig, input: { amount: string; 
   const res = await fetchImpl(`${cfg.apiUrl.replace(/\/$/, "")}/v1/payment-intents`, {
     method: "POST",
     headers: { authorization: `Bearer ${cfg.secretKey}`, "content-type": "application/json", "idempotency-key": input.idempotencyKey },
-    body: JSON.stringify({ amount: input.amount, order_reference: input.orderReference, checkout_methods: ["WALLET", "ADDRESS"], expires_in_seconds: 3600 }),
+    body: JSON.stringify({ amount: input.amount, order_reference: input.orderReference, checkout_methods: ["WALLET", "ADDRESS"] }),
   });
   if (!res.ok) throw new Error(`Plinth returned ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return (await res.json()) as PaymentIntent;

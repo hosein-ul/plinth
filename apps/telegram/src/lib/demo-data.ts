@@ -503,7 +503,7 @@ function build(anchor: number): DemoDataset {
     { id: id("usr"), email: "dev@northwind.example", role: "DEVELOPER", last_login_at: iso(anchor - 5 * HOUR), created_at: iso(anchor - 24 * DAY) },
     { id: id("usr"), email: "books@northwind.example", role: "VIEWER", last_login_at: null, created_at: iso(anchor - 9 * DAY) },
   ];
-  const accounting = { underpayment_tolerance_bps: 0, overpayment_policy: "ACCEPT", default_expiry_seconds: 3600 };
+  const accounting = { underpayment_tolerance_bps: 0, overpayment_policy: "ACCEPT", default_expiry_seconds: 1200 };
   const policy = { accounting, vaults: netIds.map((x) => vaults[x]) };
 
   const actor = (type: string, i: number) => ({ actor_type: type, actor_id: type === "USER" ? team[i % team.length]!.id : type === "API_KEY" ? apiKeys[0]!.id : null });

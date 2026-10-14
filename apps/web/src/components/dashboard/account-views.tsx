@@ -427,7 +427,7 @@ export function SettingsView() {
           <Field label="Underpayment tolerance (basis points)" htmlFor="st-tol" hint="0 = strict. 100 = a payment up to 1% short still counts as paid. Accepted range 0 to 1000.">
             <Input id="st-tol" className="font-mono" inputMode="numeric" value={tol ?? String(m.underpayment_tolerance_bps)} onChange={(e) => setTol(e.target.value)} />
           </Field>
-          <Field label="Default payment lifetime (minutes)" htmlFor="st-exp" hint="How long a new payment stays open. Between 5 minutes and 30 days.">
+          <Field label="Default payment lifetime (minutes)" htmlFor="st-exp" hint="How long a new payment stays open. New accounts start at 20 minutes. Between 5 minutes and 30 days. A request can override it.">
             <Input id="st-exp" className="font-mono" inputMode="numeric" value={exp ?? String(Math.round(m.default_expiry_seconds / 60))} onChange={(e) => setExp(e.target.value)} />
           </Field>
           <p className="text-sm text-ink-3">Overpayments are always accepted, flagged <Chip tone="warn" dot={false}>Overpaid</Chip>, and the excess can be refunded. Late payments are never counted as on-time.</p>

@@ -40,7 +40,7 @@ function CheckoutWindow({ phase }: { phase: number }) {
           </div>
           <div className="rounded-2xl border border-line bg-raised p-3 text-[10.5px]">
             <div className="flex justify-between text-ink-3"><span>Reference</span><span className="font-mono text-ink">order-1047</span></div>
-            <div className="mt-1.5 flex justify-between text-ink-3"><span>Expires in</span><span className="font-medium text-ink">57:17</span></div>
+            <div className="mt-1.5 flex justify-between text-ink-3"><span>Expires in</span><span className="font-medium text-ink">17:42</span></div>
           </div>
           <div className="rounded-2xl border border-line bg-raised p-3">
             <ol className="space-y-1.5">

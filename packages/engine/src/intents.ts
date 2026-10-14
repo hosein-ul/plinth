@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, ilike, inArray, lt, or, schema, sql, type Executor } from "@plinth/db";
-import { formatUsdc, newId, parseUsdc, toBytes32Id, type CreatePaymentIntentInput } from "@plinth/shared";
+import { DEFAULT_EXPIRY_SECONDS, formatUsdc, newId, parseUsdc, toBytes32Id, type CreatePaymentIntentInput } from "@plinth/shared";
 import { InvoiceFactoryAbi } from "@plinth/blockchain";
 import { getAddress, type Hex } from "viem";
 import { audit } from "./audit";
@@ -42,7 +42,7 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
   const id = newId("pi");
   const invoiceId32 = toBytes32Id(id);
   const merchantId32 = toBytes32Id(ctx.merchantId);
-  const expiresAt = opts.expiresAt ?? new Date(e.now().getTime() + (input.expires_in_seconds ?? merchant?.defaultExpirySeconds ?? 3600) * 1000);
+  const expiresAt = opts.expiresAt ?? new Date(e.now().getTime() + (input.expires_in_seconds ?? merchant?.defaultExpirySeconds ?? DEFAULT_EXPIRY_SECONDS) * 1000);
   const methods = input.checkout_methods ?? ["WALLET", "ADDRESS"];
 
   // Derive addresses (and cross-check them against the deployed factory) BEFORE touching the DB.

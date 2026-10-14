@@ -23,9 +23,11 @@ a test fails if they diverge; also served at `/v1/openapi.json`). Regenerate wit
 ```bash
 curl -X POST $API/v1/payment-intents -H "Authorization: Bearer sk_test_…" \
   -H "Idempotency-Key: order-1042" -H "Content-Type: application/json" \
-  -d '{"amount":"25.00","order_reference":"order-1042","checkout_methods":["WALLET","ADDRESS"],"expires_in_seconds":3600,
+  -d '{"amount":"25.00","order_reference":"order-1042","checkout_methods":["WALLET","ADDRESS"],
        "success_url":"https://shop.example/thanks"}'
 ```
+
+A payment stays payable for 20 minutes (1200 seconds) by default. Pass `expires_in_seconds` (300 to 2,592,000) to override it for one payment, or change the merchant default under Settings. Payment links cap `intent_expires_in_seconds` at 7 days and also default to 20 minutes.
 
 Redirect the customer to `checkout_url`, or build your own UI from `networks[].deposit_address`. The checkout shows two methods:
 

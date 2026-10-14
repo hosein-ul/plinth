@@ -14,6 +14,9 @@ export const usdcAmountSchema = z
 export const checkoutMethodSchema = z.enum(["WALLET", "ADDRESS"]);
 export type CheckoutMethod = z.infer<typeof checkoutMethodSchema>;
 
+/** Platform default for how long a payment intent stays payable: 20 minutes. */
+export const DEFAULT_EXPIRY_SECONDS = 20 * 60;
+
 export const createPaymentIntentSchema = z.object({
   amount: usdcAmountSchema,
   currency: z.literal("USDC").default("USDC"),
@@ -21,7 +24,9 @@ export const createPaymentIntentSchema = z.object({
   description: z.string().max(500).optional(),
   networks: z.array(networkIdSchema).min(1).max(8).optional(),
   checkout_methods: z.array(checkoutMethodSchema).min(1).default(["WALLET", "ADDRESS"]),
-  expires_in_seconds: z.number().int().min(300).max(60 * 60 * 24 * 30).default(60 * 60),
+  // No schema default on purpose: when omitted, the engine uses the merchant's default expiry setting
+  // (which starts at DEFAULT_EXPIRY_SECONDS), so the per-merchant override actually applies.
+  expires_in_seconds: z.number().int().min(300).max(60 * 60 * 24 * 30).optional().describe("Seconds the payment stays payable (300 to 2592000). Omit to use the merchant's default expiry, which is 1200 (20 minutes) unless changed in settings."),
   customer_email: z.string().email().max(320).optional(),
   success_url: z.string().url().max(2000).optional(),
   cancel_url: z.string().url().max(2000).optional(),
@@ -36,7 +41,7 @@ export const createPaymentLinkSchema = z.object({
   networks: z.array(networkIdSchema).min(1).optional(),
   checkout_methods: z.array(checkoutMethodSchema).min(1).default(["WALLET", "ADDRESS"]),
   success_url: z.string().url().optional(),
-  intent_expires_in_seconds: z.number().int().min(300).max(60 * 60 * 24 * 7).default(60 * 60),
+  intent_expires_in_seconds: z.number().int().min(300).max(60 * 60 * 24 * 7).default(DEFAULT_EXPIRY_SECONDS),
 });
 
 export const createInvoiceSchema = z.object({

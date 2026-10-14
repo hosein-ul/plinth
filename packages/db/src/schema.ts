@@ -25,7 +25,8 @@ export const merchants = pgTable("merchants", {
   status: text("status").notNull().default("ACTIVE"), // ACTIVE | SUSPENDED
   underpaymentToleranceBps: integer("underpayment_tolerance_bps").notNull().default(0),
   overpaymentPolicy: text("overpayment_policy").notNull().default("ACCEPT"), // ACCEPT | FLAG
-  defaultExpirySeconds: integer("default_expiry_seconds").notNull().default(3600),
+  // 20 minutes; keep in sync with DEFAULT_EXPIRY_SECONDS in @plinth/shared. Existing rows keep their stored value.
+  defaultExpirySeconds: integer("default_expiry_seconds").notNull().default(1200),
   invoiceSeq: integer("invoice_seq").notNull().default(0),
   createdAt: createdAt(),
 });
@@ -163,7 +164,7 @@ export const paymentLinks = pgTable(
     allowedNetworks: text("allowed_networks").array().notNull(),
     checkoutMethods: text("checkout_methods").array().notNull(),
     successUrl: text("success_url"),
-    intentExpirySeconds: integer("intent_expiry_seconds").notNull().default(3600),
+    intentExpirySeconds: integer("intent_expiry_seconds").notNull().default(1200),
     active: boolean("active").notNull().default(true),
     createdAt: createdAt(),
   },

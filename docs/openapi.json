@@ -1192,7 +1192,7 @@
                     }
                   },
                   "expires_in_seconds": {
-                    "default": 3600,
+                    "description": "Seconds the payment stays payable (300 to 2592000). Omit to use the merchant's default expiry, which is 1200 (20 minutes) unless changed in settings.",
                     "type": "integer",
                     "minimum": 300,
                     "maximum": 2592000
@@ -2119,7 +2119,7 @@
                     "format": "uri"
                   },
                   "intent_expires_in_seconds": {
-                    "default": 3600,
+                    "default": 1200,
                     "type": "integer",
                     "minimum": 300,
                     "maximum": 604800
