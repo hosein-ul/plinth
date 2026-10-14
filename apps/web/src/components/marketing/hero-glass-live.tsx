@@ -3,57 +3,148 @@
 import { useEffect, useRef } from "react";
 
 /**
- * The live version of the hero glass. The ribbon is a real 3D surface: a flat (u, s) grid that the vertex shader bends into the
- * ribbon every frame, with a physically based iridescent clearcoat lit by a studio environment. All the motion runs on the GPU;
- * the CPU only updates three uniforms a frame. The pointer presses a soft swell into the glass and tilts it a little.
+ * The hero background, live: a few large sheets of thin, iridescent glass sweeping across a near-white canvas.
  *
- * It mounts over the baked poster and fades in after its first frame, so nothing pops. It never runs on touch devices, on small
- * screens or for reduced motion (the poster stays), and it stops drawing while off screen or in a background tab.
+ * Construction. An orthographic camera maps the scene one-to-one onto the canvas, so every sheet is art-directed in normalized
+ * canvas coordinates (0,0 top-left, 1,1 bottom-right). Each sheet is a ribbon around a smooth centreline with a varying width, a
+ * slow twist about its own axis and a gentle cross-section, so where it turns edge-on it narrows into a bright, coloured edge.
+ * Phones get their own composition, not a stretched desktop one.
+ *
+ * Material. A small custom shader, not a PBR stack: a pearl body lit by one broad soft light, Fresnel-weighted reflection of a
+ * procedural studio environment (softbox, a white strip, pale cyan, lavender and pink panels), silver-blue in the valleys, and a
+ * thin-film tint from the brand palette that only appears at grazing angles. Interiors are partly transparent, so the white page
+ * shows through and overlapping sheets read as layers. The left side (top on phones) is kept quiet for the headline.
+ *
+ * Motion. Only uniforms change per frame: reflections drift along the ridges and the sheets sway by a few pixels. Reduced motion
+ * renders a single still frame. Drawing stops off screen and in background tabs. The baked poster underneath is the fallback for
+ * no WebGL; the canvas fades in over it after its first frame.
  */
 
-const RIBBON_GLSL = /* glsl */ `
+type Pt = [number, number];
+type Sheet = {
+  pts: Pt[]; // centreline, normalized canvas coordinates
+  w: [number, number, number]; // width (fraction of canvas height) at start, middle, end
+  roll: [number, number, number]; // twist: amplitude (rad), turns along the sheet, phase
+  fold: number; // cross-section depth, relative to width
+  alpha: number;
+  tint: number; // strength of the thin-film colour
+  seed: number;
+};
+
+const DESKTOP: Sheet[] = [
+  // C2: the broad lower sheet that fills the bottom edge with soft silver.
+  { pts: [[-0.08, 0.82], [0.12, 0.93], [0.34, 0.97], [0.55, 0.9], [0.76, 0.95], [1.1, 1.04]], w: [0.2, 0.28, 0.24], roll: [0.7, 1.1, 0.4], fold: 0.70, alpha: 0.85, tint: 0.6, seed: 1.3 },
+  // B1: the right curtain, descending from the top-right and turning back out to the right.
+  { pts: [[1.1, -0.06], [0.9, 0.1], [0.76, 0.29], [0.67, 0.47], [0.71, 0.64], [0.87, 0.72], [1.12, 0.68]], w: [0.34, 0.42, 0.26], roll: [0.95, 1.3, 1.9], fold: 0.96, alpha: 0.9, tint: 0.9, seed: 2.7 },
+  // C: the lower fold entering from the left edge.
+  { pts: [[-0.06, 0.5], [0.0, 0.51], [0.18, 0.69], [0.38, 0.68], [0.6, 0.78], [0.8, 0.82], [1.08, 0.85]], w: [0.07, 0.14, 0.18], roll: [1.1, 1.7, 0.2], fold: 0.80, alpha: 0.9, tint: 1.0, seed: 4.1 },
+  // B2: the lighter fold sweeping back up to the right edge.
+  { pts: [[0.52, 0.66], [0.66, 0.52], [0.8, 0.32], [0.91, 0.14], [1.06, -0.06]], w: [0.1, 0.18, 0.16], roll: [1.2, 1.2, 2.6], fold: 0.64, alpha: 0.8, tint: 1.0, seed: 5.6 },
+  // A: the dominant upper sheet, entering at the top, bending to the centre and folding back to the right.
+  { pts: [[0.74, -0.08], [0.7, 0.06], [0.63, 0.13], [0.55, 0.19], [0.48, 0.27], [0.44, 0.36], [0.49, 0.46], [0.64, 0.52], [0.84, 0.5], [1.1, 0.42]], w: [0.24, 0.27, 0.18], roll: [1.2, 1.5, 0.9], fold: 0.90, alpha: 0.92, tint: 1.0, seed: 7.2 },
+];
+
+const PHONE: Sheet[] = [
+  { pts: [[-0.15, 0.86], [0.2, 0.93], [0.55, 0.9], [0.85, 0.97], [1.2, 1.04]], w: [0.1, 0.13, 0.11], roll: [0.7, 1.1, 0.4], fold: 0.70, alpha: 0.85, tint: 0.6, seed: 1.3 },
+  { pts: [[1.2, 0.36], [0.92, 0.5], [0.74, 0.62], [0.78, 0.76], [1.0, 0.82], [1.25, 0.8]], w: [0.09, 0.12, 0.09], roll: [1.0, 1.4, 1.9], fold: 0.96, alpha: 0.9, tint: 0.9, seed: 2.7 },
+  { pts: [[-0.2, 0.6], [0.05, 0.68], [0.35, 0.76], [0.65, 0.8], [1.2, 0.9]], w: [0.04, 0.07, 0.08], roll: [1.1, 1.7, 0.2], fold: 0.80, alpha: 0.9, tint: 1.0, seed: 4.1 },
+  { pts: [[1.15, 0.3], [0.8, 0.4], [0.46, 0.5], [0.4, 0.6], [0.62, 0.68], [1.2, 0.66]], w: [0.06, 0.09, 0.07], roll: [1.25, 1.6, 0.9], fold: 0.90, alpha: 0.92, tint: 1.0, seed: 7.2 },
+];
+
+const PALETTE = {
+  cBg: "#FCFCFD", cPearl: "#F7F7FA", cPale: "#E4E7ED", cSilver: "#CDD4DF", cSB: "#B5C2D2", cSteel: "#97A9BF",
+  cCyan: "#C8EEF2", cAqua: "#B5E6E8", cTurq: "#D0F0ED", cPeri: "#C7CEF2", cLav: "#DCCCF0", cPink: "#F1CDE2",
+  cBlush: "#F6E1E5", cChamp: "#F2EEDC", cPeach: "#F2D8CF",
+} as const;
+
+const VERT = /* glsl */ `
+attribute vec2 aUS;
 uniform float uTime;
-uniform vec3 uPointer;   // xy in object space, z = strength 0..1
-const float PI = 3.14159265;
-
-vec3 centreLine(float u) {
-  float x = mix(-13.5, 14.0, u);
-  float y = mix(-8.4, 8.6, u) + 1.9 * sin(u * 4.4 + 0.4 + 0.18 * sin(uTime * 0.21)) - 1.6 * sin(u * 2.0);
-  float z = 2.6 * sin(u * 3.4 + 0.4 + 0.25 * sin(uTime * 0.13)) + 1.2 * cos(u * 8.0 - uTime * 0.17);
-  return vec3(x, y, z);
-}
-
-vec3 ribbonAt(float u, float s) {
-  vec3 c = centreLine(u);
-  vec3 t = normalize(centreLine(min(1.0, u + 0.002)) - centreLine(max(0.0, u - 0.002)));
-  vec3 side0 = normalize(vec3(-t.y, t.x, 0.0));
-  vec3 up0 = normalize(cross(t, side0));
-  float roll = 0.9 * sin(u * 6.0 + 0.3 + 0.22 * sin(uTime * 0.17)) + 0.7 * sin(u * 2.3 + 1.7);
-  vec3 side = side0 * cos(roll) + up0 * sin(roll);
-  vec3 nrm = normalize(cross(t, side));
-  float width = mix(3.4, 9.6, smoothstep(0.0, 0.9, u)) * (1.0 + 0.14 * sin(u * 8.0 + 1.0));
-  float a = s * 2.0;
-  float f1 = sin(a * 5.2 + u * 9.0 + 0.5 + uTime * 0.31);
-  float f2 = sin(a * 9.6 - u * 5.0 + 2.1 - uTime * 0.23) * 0.5;
-  float f3 = pow(abs(sin(a * 3.1 + u * 12.0 - uTime * 0.19)), 1.6) * 0.9;
-  float edge = 0.5 + 0.5 * cos(a * PI * 0.5);
-  float lift = (0.70 * f1 + 0.34 * f2 + 0.46 * f3) * (0.55 + 0.9 * edge) * mix(0.55, 1.15, u);
-  vec3 p = c + side * (s * width);
-  vec2 d = p.xy - uPointer.xy;
-  lift += 1.1 * uPointer.z * exp(-dot(d, d) / 7.0);
-  return p + nrm * lift;
+uniform float uSeed;
+varying vec3 vN;
+varying vec2 vUS;
+varying vec2 vScreen;
+void main() {
+  vec3 p = position;
+  p.xy += vec2(sin(uTime * 0.11 + aUS.x * 3.0 + uSeed), cos(uTime * 0.083 + aUS.x * 2.4 + uSeed)) * 0.005;
+  vN = normal;
+  vUS = aUS;
+  vec4 cp = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  vScreen = cp.xy * 0.5 + 0.5;
+  gl_Position = cp;
 }
 `;
 
-const FILM_GLSL = /* glsl */ `
-  vec3 Vv = normalize(vViewPosition);
-  float ndv = clamp(abs(dot(normalize(vNormal), Vv)), 0.0, 1.0);
-  float ph = ndv * 2.2 + vViewPosition.x * 0.012 + uTime * 0.04;
-  vec3 film = 0.5 + 0.5 * cos(6.28318 * (vec3(1.0) * ph + vec3(0.0, 0.33, 0.67)));
-  film = mix(vec3(0.78, 0.94, 1.0), film, 0.8);
-  float rim = pow(1.0 - ndv, 1.7);
-  outgoingLight = mix(outgoingLight, outgoingLight * (0.66 + 0.7 * film) + film * 0.2, clamp(rim * 1.7 + 0.38, 0.0, 0.97));
-  #include <opaque_fragment>
+const FRAG = /* glsl */ `
+precision highp float;
+uniform vec3 cBg, cPearl, cPale, cSilver, cSB, cSteel, cCyan, cAqua, cTurq, cPeri, cLav, cPink, cBlush, cChamp, cPeach;
+uniform float uTime, uAlpha, uTint, uSeed;
+uniform vec2 uLook;
+uniform vec4 uQuiet; // x: axis (0 = x, 1 = y), y..z: quiet-to-full ramp, w: opacity left in the quiet zone
+varying vec3 vN;
+varying vec2 vUS;
+varying vec2 vScreen;
+
+// Thin film, approximated with the palette: a slow, uneven cycle aqua > periwinkle > lavender > pink > blush/champagne > cyan.
+vec3 film(float t) {
+  t = fract(t) * 6.0;
+  vec3 c = mix(cAqua, cPeri, smoothstep(0.0, 0.8, t));
+  c = mix(c, cLav, smoothstep(0.8, 1.6, t));
+  c = mix(c, cPink, smoothstep(1.6, 2.4, t));
+  c = mix(c, mix(cBlush, cChamp, 0.5), smoothstep(2.8, 3.8, t));
+  c = mix(c, cTurq, smoothstep(3.8, 4.8, t));
+  c = mix(c, cAqua, smoothstep(4.8, 6.0, t));
+  return c;
+}
+
+// A procedural studio: bright overhead softbox, a vertical white strip, cool floor, coloured side panels.
+vec3 env(vec3 R) {
+  float up = smoothstep(-0.75, 0.85, R.y);
+  vec3 c = mix(cSteel, cPale, up);
+  c = mix(c, cSilver, exp(-pow(R.y * 2.4, 2.0)) * 0.55);
+  c = mix(c, cPearl, smoothstep(0.2, 0.9, R.y));
+  float box = exp(-pow((R.x + 0.22) * 2.0, 2.0) - pow((R.y - 0.5) * 2.6, 2.0));
+  c = mix(c, vec3(1.0), clamp(box * 1.25, 0.0, 1.0));
+  float strip = exp(-pow((R.x - 0.52) * 6.5, 2.0)) * smoothstep(-0.3, 0.5, R.y);
+  c = mix(c, vec3(1.0), strip * 0.85);
+  c = mix(c, cAqua, smoothstep(-0.5, -0.92, R.x) * 0.8);
+  c = mix(c, cLav, smoothstep(0.62, 0.95, R.x) * smoothstep(-0.4, 0.2, R.y) * 0.7);
+  c = mix(c, cPink, exp(-pow((R.y + 0.5) * 4.5, 2.0)) * smoothstep(-0.1, 0.6, R.x) * 0.55);
+  c = mix(c, cSteel, smoothstep(-0.6, -0.95, R.y) * 0.45);
+  return c;
+}
+
+void main() {
+  vec3 N = normalize(vN);
+  N *= sign(N.z + 1e-4); // light both faces as the side facing the viewer
+  // Reflections drift along the ridges: a slow, small rotation of the normal.
+  N = normalize(N + 0.05 * vec3(sin(uTime * 0.07 + vUS.x * 6.0 + uSeed), cos(uTime * 0.053 + vUS.x * 4.0 - uSeed), 0.0));
+  float ndv = clamp(N.z, 0.0, 1.0);
+  vec3 R = normalize(vec3(2.0 * ndv * N.xy + uLook * 0.14, 2.0 * ndv * N.z - 1.0));
+  float F = 0.04 + 0.96 * pow(1.0 - ndv, 2.4);
+
+  vec3 L = normalize(vec3(-0.35, 0.62, 0.7));
+  float ndl = dot(N, L) * 0.5 + 0.5;
+  vec3 body = mix(cSB, cPearl, smoothstep(0.45, 0.98, ndl));
+  body = mix(body, cSteel, (1.0 - smoothstep(0.1, 0.55, ndl)) * 0.55);
+
+  vec3 col = mix(body, env(R), 0.42 + 0.5 * F);
+
+  float thick = 0.3 + 0.22 * sin(vUS.x * 3.1 + uSeed * 1.7) + 0.1 * sin(vUS.y * 4.0 + vUS.x * 7.0 + uSeed) + uTime * 0.008;
+  float graze = smoothstep(0.06, 0.62, 1.0 - ndv);
+  col = mix(col, film(thick + ndv * 0.85), graze * 0.8 * uTint);
+
+  float spec = pow(max(dot(R, L), 0.0), 90.0);
+  col = mix(col, vec3(1.0), spec * 0.7 + pow(max(dot(R, L), 0.0), 400.0) * 0.5);
+
+  vec2 sc = vec2(vScreen.x, 1.0 - vScreen.y);
+  float loud = smoothstep(uQuiet.y, uQuiet.z, uQuiet.x < 0.5 ? sc.x : sc.y);
+  col = mix(mix(cPearl, col, 0.35), col, loud);
+
+  float edge = smoothstep(0.5, 0.43, abs(vUS.y)) * smoothstep(0.0, 0.16, vUS.x) * smoothstep(1.0, 0.9, vUS.x);
+  float a = uAlpha * mix(0.88, 1.0, F) * edge * mix(uQuiet.w, 1.0, loud);
+  gl_FragColor = vec4(col, a);
+}
 `;
 
 export function HeroGlassLive() {
@@ -62,192 +153,159 @@ export function HeroGlassLive() {
   useEffect(() => {
     const el = host.current;
     if (!el) return;
-    const ok =
-      window.matchMedia("(min-width: 1280px) and (pointer: fine)").matches &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!ok) return;
-
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
     let disposed = false;
     let cleanup = () => {};
 
     (async () => {
       const THREE = await import("three");
-      const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
       if (disposed) return;
 
       let renderer: import("three").WebGLRenderer;
       try {
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: coarse ? "low-power" : "high-performance" });
       } catch {
         return; // no WebGL: the poster stays
       }
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.04;
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarse ? 1.5 : 2));
+      renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // the shader works directly in sRGB palette values
+      renderer.setClearColor(PALETTE.cBg, 1);
       const canvas = renderer.domElement;
-      canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity 900ms cubic-bezier(0.16,1,0.3,1)";
+      canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity 700ms cubic-bezier(0.16,1,0.3,1)";
       el.appendChild(canvas);
 
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xffffff);
-      const pmrem = new THREE.PMREMGenerator(renderer);
-      const room = new RoomEnvironment();
-      const panel = (hex: number, i: number, x: number, y: number, z: number, w: number, h: number, ry = 0) => {
-        const m = new THREE.Mesh(
-          new THREE.PlaneGeometry(w, h),
-          new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(i), side: THREE.DoubleSide }),
-        );
-        m.position.set(x, y, z);
-        m.rotation.y = ry;
-        room.add(m);
+      const camera = new THREE.OrthographicCamera(0, 1, 0, -1, -10, 10);
+
+      const srgb = (hex: string) => new THREE.Color().setStyle(hex, THREE.LinearSRGBColorSpace);
+      const shared = {
+        uTime: { value: 0 },
+        uLook: { value: new THREE.Vector2() },
+        uQuiet: { value: new THREE.Vector4(0, 0.1, 0.46, 0.45) },
+        ...Object.fromEntries(Object.entries(PALETTE).map(([k, v]) => [k, { value: srgb(v) }])),
       };
-      panel(0x7fe9ff, 16, -7, 3, 2, 1.6, 6, 0.9);
-      panel(0xc4a8ff, 14, 6, 4, -3, 1.4, 7, -0.8);
-      panel(0xff9fe4, 13, 2, -2, 6, 5, 1.2, 0);
-      panel(0xffe9a0, 5, -3, 6, -5, 4, 1.0, 0.3);
-      panel(0xffffff, 3.2, 0, 7, 3, 12, 3, 0); // a broad softbox overhead lifts the greys into silver
-      panel(0xffffff, 2.2, 0, 0, 9, 14, 6, 0);
-      const envTex = pmrem.fromScene(room, 0.035).texture;
-      scene.environment = envTex;
 
-      const camera = new THREE.PerspectiveCamera(30, 1.6, 0.1, 100);
-      camera.position.set(0, 0, 18.5);
-      camera.lookAt(0, 0, 0);
-
-      // A flat grid of (u, s); the vertex shader turns it into the ribbon.
-      const U = 360, S = 110;
-      const grid = new Float32Array((U + 1) * (S + 1) * 3);
-      for (let i = 0; i <= U; i++) for (let j = 0; j <= S; j++) {
-        const k = (i * (S + 1) + j) * 3;
-        grid[k] = i / U;
-        grid[k + 1] = j / S - 0.5;
-      }
-      const index: number[] = [];
-      for (let i = 0; i < U; i++) for (let j = 0; j < S; j++) {
-        const a = i * (S + 1) + j, b = a + 1, c = a + S + 1, d = c + 1;
-        index.push(a, b, c, b, d, c);
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.BufferAttribute(grid, 3));
-      geo.setIndex(index);
-      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 40);
-
-      const uniforms = { uTime: { value: 0 }, uPointer: { value: new THREE.Vector3(0, 0, 0) } };
-      const mat = new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color(0xe2e7f1),
-        metalness: 0.72, roughness: 0.12,
-        clearcoat: 1, clearcoatRoughness: 0.06,
-        iridescence: 1, iridescenceIOR: 2.0, iridescenceThicknessRange: [320, 1150],
-        sheen: 0.4, sheenColor: new THREE.Color(0xdde8ff), sheenRoughness: 0.4,
-        envMapIntensity: 1.35, side: THREE.DoubleSide,
-      });
-      mat.onBeforeCompile = (sh) => {
-        Object.assign(sh.uniforms, uniforms);
-        sh.vertexShader = RIBBON_GLSL + sh.vertexShader
-          .replace(
-            "#include <beginnormal_vertex>",
-            `float ru = position.x, rs = position.y;
-             vec3 ribbonPos = ribbonAt(ru, rs);
-             vec3 dU = ribbonAt(min(1.0, ru + 0.0015), rs) - ribbonAt(max(0.0, ru - 0.0015), rs);
-             vec3 dS = ribbonAt(ru, min(0.5, rs + 0.004)) - ribbonAt(ru, max(-0.5, rs - 0.004));
-             vec3 objectNormal = normalize(cross(dU, dS));`,
-          )
-          .replace("#include <begin_vertex>", "vec3 transformed = ribbonPos;");
-        sh.fragmentShader = "uniform float uTime;\n" + sh.fragmentShader.replace("#include <opaque_fragment>", FILM_GLSL);
+      const meshes: import("three").Mesh[] = [];
+      const clear = () => {
+        for (const m of meshes) { scene.remove(m); m.geometry.dispose(); (m.material as import("three").Material).dispose(); }
+        meshes.length = 0;
       };
-      const group = new THREE.Group();
-      const ribbon = new THREE.Mesh(geo, mat);
-      ribbon.frustumCulled = false;
-      group.add(ribbon);
 
-      // Glitter: fixed points near the glass that drift with it.
-      const NS = 420, sp = new Float32Array(NS * 3);
-      let seed = 7;
-      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-      for (let n = 0; n < NS; n++) {
-        const u = rnd();
-        const x = -13.5 + 27.5 * u, y = -8.4 + 17 * u + 1.9 * Math.sin(u * 4.4 + 0.4) - 1.6 * Math.sin(u * 2.0);
-        const spread = (rnd() - 0.5) * (5 + 7 * u);
-        sp[n * 3] = x + (rnd() - 0.5) * 4 + spread * 0.3;
-        sp[n * 3 + 1] = y + spread * 0.9;
-        sp[n * 3 + 2] = 2.6 * Math.sin(u * 3.4 + 0.4) + 1 + rnd() * 2;
-      }
-      const sg = new THREE.BufferGeometry();
-      sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
-      const sm = new THREE.PointsMaterial({ color: 0xffffff, size: 0.045, transparent: true, opacity: 0.9, depthWrite: false });
-      group.add(new THREE.Points(sg, sm));
-      group.position.set(2.6, 0.2, 0);
-      scene.add(group);
+      const smooth = (x: number) => x * x * (3 - 2 * x);
+      const build = (aspect: number) => {
+        clear();
+        const phone = aspect < 1.1;
+        shared.uQuiet.value.set(phone ? 1 : 0, phone ? 0.3 : 0.1, phone ? 0.5 : 0.46, phone ? 0.5 : 0.45);
+        (phone ? PHONE : DESKTOP).forEach((sh, order) => {
+          const curve = new THREE.CatmullRomCurve3(sh.pts.map(([x, y]) => new THREE.Vector3(x * aspect, -y, 0)), false, "centripetal");
+          const U = 280, S = 44;
+          const pos = new Float32Array((U + 1) * (S + 1) * 3);
+          const us = new Float32Array((U + 1) * (S + 1) * 2);
+          const side0 = new THREE.Vector3(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), z = new THREE.Vector3(0, 0, 1);
+          for (let i = 0; i <= U; i++) {
+            const u = i / U;
+            const c = curve.getPointAt(u);
+            const t = curve.getTangentAt(u);
+            side0.set(-t.y, t.x, 0).normalize();
+            const roll = sh.roll[0] * Math.sin(u * sh.roll[1] * Math.PI * 2 + sh.roll[2]);
+            side.copy(side0).multiplyScalar(Math.cos(roll)).addScaledVector(z, Math.sin(roll));
+            nrm.crossVectors(t, side).normalize();
+            const w = u < 0.5 ? sh.w[0] + (sh.w[1] - sh.w[0]) * smooth(u * 2) : sh.w[1] + (sh.w[2] - sh.w[1]) * smooth(u * 2 - 1);
+            for (let j = 0; j <= S; j++) {
+              const s = j / S - 0.5, a = s * 2;
+              const lift = sh.fold * w * (0.42 * (1 - a * a) + 0.3 * Math.sin(a * 2.4 + u * 7 + sh.seed) + 0.14 * Math.sin(a * 4.6 - u * 4 + sh.seed * 2));
+              const k = (i * (S + 1) + j) * 3;
+              pos[k] = c.x + side.x * s * w + nrm.x * lift;
+              pos[k + 1] = c.y + side.y * s * w + nrm.y * lift;
+              pos[k + 2] = c.z + side.z * s * w + nrm.z * lift;
+              us[(i * (S + 1) + j) * 2] = u;
+              us[(i * (S + 1) + j) * 2 + 1] = s;
+            }
+          }
+          const index: number[] = [];
+          for (let i = 0; i < U; i++) for (let j = 0; j < S; j++) {
+            const a = i * (S + 1) + j, b = a + 1, c = a + S + 1, d = c + 1;
+            index.push(a, b, c, b, d, c);
+          }
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+          geo.setAttribute("aUS", new THREE.BufferAttribute(us, 2));
+          geo.setIndex(index);
+          geo.computeVertexNormals();
+          const mat = new THREE.ShaderMaterial({
+            vertexShader: VERT,
+            fragmentShader: FRAG,
+            uniforms: { ...shared, uAlpha: { value: sh.alpha }, uTint: { value: sh.tint }, uSeed: { value: sh.seed } },
+            transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+          });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.renderOrder = order;
+          mesh.frustumCulled = false;
+          scene.add(mesh);
+          meshes.push(mesh);
+        });
+      };
 
+      let shown = false;
+      const draw = () => {
+        renderer.render(scene, camera);
+        if (!shown) { shown = true; canvas.style.opacity = "1"; }
+      };
+
+      let builtFor = 0;
       const resize = () => {
         const w = el.clientWidth, h = el.clientHeight;
         if (!w || !h) return;
         renderer.setSize(w, h, false);
-        camera.aspect = w / h;
-        // Keep the horizontal field of view of the 16:10 bake, so the ribbon frames the same on wider or taller heroes.
-        const hfov = 2 * Math.atan(Math.tan((30 * Math.PI) / 360) * 1.6);
-        camera.fov = Math.min(42, Math.max(24, (2 * Math.atan(Math.tan(hfov / 2) / camera.aspect) * 180) / Math.PI));
+        const aspect = w / h;
+        camera.right = aspect;
         camera.updateProjectionMatrix();
+        if (Math.abs(aspect - builtFor) > 0.01) { build(aspect); builtFor = aspect; }
+        if (still) draw();
       };
-      resize();
+
+      const look = new THREE.Vector2(), lookTarget = new THREE.Vector2();
+      const onMove = (e: PointerEvent) => {
+        lookTarget.set((e.clientX / window.innerWidth) * 2 - 1, -((e.clientY / window.innerHeight) * 2 - 1));
+      };
+      if (!coarse && !still) window.addEventListener("pointermove", onMove, { passive: true });
+
       const ro = new ResizeObserver(resize);
       ro.observe(el);
+      resize();
 
-      // Pointer, eased: target in object space on the z = 0 plane, plus a strength that fades when the pointer rests.
-      const ndc = new THREE.Vector2(0, 0);
-      const target = new THREE.Vector3(), eased = new THREE.Vector3();
-      let strength = 0, lastMove = -1e9, tiltX = 0, tiltY = 0;
-      const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), hit = new THREE.Vector3();
-      const onMove = (e: PointerEvent) => {
-        const r = el.getBoundingClientRect();
-        if (e.clientY > r.bottom || e.clientY < r.top) return;
-        ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-        ray.setFromCamera(ndc, camera);
-        if (ray.ray.intersectPlane(plane, hit)) target.copy(hit).sub(group.position).divideScalar(group.scale.x);
-        lastMove = performance.now();
-      };
-      window.addEventListener("pointermove", onMove, { passive: true });
-
-      let visible = true, raf = 0, shown = false, last = performance.now(), t = 0;
-      const io = new IntersectionObserver(([entry]) => {
-        visible = entry?.isIntersecting ?? true;
-        if (visible && !raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
-      });
-      io.observe(el);
-      const onVis = () => {
-        if (!document.hidden && visible && !raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
-      };
-      document.addEventListener("visibilitychange", onVis);
-
-      function frame(now: number) {
+      let visible = true, raf = 0, last = performance.now(), t = 0, acc = 0;
+      const minStep = coarse ? 1 / 30 : 0; // phones: 30 fps is plenty for motion this slow
+      const frame = (now: number) => {
         raf = 0;
         if (!visible || document.hidden) return;
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
-        t += dt;
-        const k = 1 - Math.exp(-dt * 3.2);
-        eased.lerp(target, k);
-        const want = now - lastMove < 1400 ? 1 : 0;
-        strength += (want - strength) * (1 - Math.exp(-dt * (want ? 2.4 : 0.9)));
-        uniforms.uTime.value = t;
-        uniforms.uPointer.value.set(eased.x, eased.y, strength);
-        tiltX += (ndc.y * 0.05 - tiltX) * k;
-        tiltY += (ndc.x * 0.07 - tiltY) * k;
-        group.rotation.set(-tiltX, tiltY, 0);
-        renderer.render(scene, camera);
-        if (!shown) { shown = true; canvas.style.opacity = "1"; }
+        acc += dt;
+        if (acc >= minStep) {
+          t += acc;
+          acc = 0;
+          look.lerp(lookTarget, 1 - Math.exp(-dt * 2.5));
+          shared.uTime.value = t;
+          shared.uLook.value.copy(look);
+          draw();
+        }
         raf = requestAnimationFrame(frame);
-      }
-      raf = requestAnimationFrame(frame);
+      };
+      const start = () => { if (!still && visible && !document.hidden && !raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
+      const io = new IntersectionObserver(([entry]) => { visible = entry?.isIntersecting ?? true; start(); });
+      io.observe(el);
+      document.addEventListener("visibilitychange", start);
+      if (still) draw(); else start();
 
       cleanup = () => {
         cancelAnimationFrame(raf);
         io.disconnect();
         ro.disconnect();
         window.removeEventListener("pointermove", onMove);
-        document.removeEventListener("visibilitychange", onVis);
-        geo.dispose(); mat.dispose(); sg.dispose(); sm.dispose(); envTex.dispose(); pmrem.dispose();
+        document.removeEventListener("visibilitychange", start);
+        clear();
         renderer.dispose();
         canvas.remove();
       };

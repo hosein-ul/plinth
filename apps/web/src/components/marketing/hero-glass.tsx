@@ -2,27 +2,25 @@
 import { HeroGlassLive } from "@/components/marketing/hero-glass-live";
 
 /**
- * The hero background: a sculpted, iridescent liquid-glass ribbon, rendered once offline (a physically based material under a
- * studio environment) and shipped as a small image. A live shader cannot reach this finish at a cost a phone can pay, and an
- * image costs nothing per frame. The only motion is a slow CSS drift, which stops for reduced motion.
+ * The hero background: large sheets of iridescent glass, drawn live by a WebGL shader (hero-glass-live.tsx) on every device that
+ * has WebGL. These two images are frames of that same shader. They paint first, stay if WebGL is missing, and the live canvas
+ * fades in over them once its first frame is drawn, so the swap is invisible.
  *
- * On a desktop with a mouse the same scene then runs live over this poster (hero-glass-live.tsx) and takes over once drawn.
- *
- * The art is white at the top-left on purpose: the headline sits there. Desktop and phone have their own crops.
+ * The art is quiet on the left (top on phones) on purpose: the headline sits there.
  */
 export function HeroGlass() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
       <picture>
-        <source media="(min-width: 1280px)" srcSet="/hero/glass-desktop.webp" />
+        <source media="(min-aspect-ratio: 11/10)" srcSet="/hero/glass-desktop.webp" />
         <img
           src="/hero/glass-mobile.webp"
           alt=""
-          width={1170}
-          height={1500}
+          width={780}
+          height={2008}
           fetchPriority="high"
           decoding="async"
-          className="hero-glass-drift absolute bottom-0 right-0 h-[min(78%,52rem)] w-full select-none object-cover object-top xl:inset-0 xl:h-full xl:w-full xl:object-[right_bottom]"
+          className="absolute inset-0 h-full w-full select-none object-cover object-top xl:object-right"
         />
       </picture>
       <HeroGlassLive />
