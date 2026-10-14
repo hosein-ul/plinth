@@ -11,6 +11,15 @@ import { notifyDemoReadOnly, useHref } from "@/lib/data-source";
 import { DEMO_HREF } from "@/lib/routes";
 import { Logo } from "./logo";
 
+
+/** A wallet sign-in has no real email: its placeholder looks like wallet0x…@sso.plinth.invalid. Show the address, shortened. */
+function shownIdentity(email?: string | null): string | null {
+  if (!email) return null;
+  const m = /^wallet(0x[0-9a-f]+)@sso\.plinth\.invalid$/i.exec(email);
+  if (m) return m[1]!.length >= 42 ? `${m[1]!.slice(0, 6)}…${m[1]!.slice(-4)}` : `${m[1]!.slice(0, 8)}…`;
+  return email.endsWith("@sso.plinth.invalid") ? "Signed in with Web3Auth" : email;
+}
+
 const GROUPS: { label: string; items: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] }[] = [
   {
     label: "Money",
@@ -135,7 +144,7 @@ export function Shell({ me, env, children, variant = "live" }: { me: { merchant:
           <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-[9px] bg-ink text-sm font-semibold text-on-ink">{initial}</span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium leading-tight text-ink">{me.merchant.name}</p>
-            <p className="truncate text-xs text-ink-3">{me.user?.email ?? me.role.toLowerCase()}</p>
+            <p className="truncate text-xs text-ink-3">{shownIdentity(me.user?.email) ?? me.role.toLowerCase()}</p>
           </div>
           {demo ? (
             <Link href="/" className="grid size-8 shrink-0 place-items-center rounded-[9px] text-ink-3 transition-colors hover:bg-sunk hover:text-ink" aria-label="Exit demo"><LogOut className="size-4" aria-hidden /></Link>

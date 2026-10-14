@@ -80,7 +80,7 @@ export async function signInWithIdentity(e: Engine, id: Web3AuthIdentity, input:
   let userId = known?.provider === provider ? known.userId : undefined;
 
   if (!userId) {
-    const email = id.email ?? `${id.subject.replace(/[^a-z0-9]/g, "").slice(0, 40)}@sso.plinth.invalid`;
+    const email = id.email ?? `${id.subject.replace(/[^a-z0-9]/g, "").slice(0, 48)}@sso.plinth.invalid`;
     const [taken] = await e.db.select({ id: schema.merchantUsers.id }).from(schema.merchantUsers).where(eq(schema.merchantUsers.email, email));
     if (taken) throw new EngineError("EMAIL_TAKEN", "An account with this email already exists. Sign in with your password instead.", 409);
     const merchantId = newId("mer");
