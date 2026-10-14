@@ -26,6 +26,17 @@ function resolve(path: string): unknown {
 
   switch (res) {
     case "me": return ds.me;
+    case "payout-methods": {
+      if (a === "history") return list([]);
+      return list(ds.networks.map((n: any) => ({
+        network: n.id, name: n.name, environment: n.environment, operational: true, mode: "VAULT", destination: n.vault?.vault_address ?? null, status: "ACTIVE", fee: n.fee,
+        vault: n.vault ? { status: n.vault.status, address: n.vault.vault_address, owner: n.vault.owner_address } : null, pending: null, cooldown_hours: 24,
+      })));
+    }
+    case "auth": {
+      if (a === "email") return { email: "owner@northwind.example", verified: true, auth_method: "password", email_available: true };
+      throw new DemoNotFound(path);
+    }
     case "overview": return demoOverview(ds, Math.max(1, Math.min(365, Number(q.get("days") ?? 30))));
     case "networks": return list(ds.networks);
     case "vaults": {

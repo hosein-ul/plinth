@@ -5,7 +5,7 @@ import { API_URL } from "@/lib/server-api";
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
   const target = path.join("/");
-  if (!/^(checkout|links|status)(\/|$)/.test(target)) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Not found" } }, { status: 404 });
+  if (!/^(checkout|links|status|auth\/email\/confirm|payout\/confirm)(\/|$)/.test(target)) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Not found" } }, { status: 404 });
   if (req.method !== "GET") {
     const origin = req.headers.get("origin");
     if (!origin || new URL(origin).host !== req.headers.get("host") || req.headers.get("x-plinth-csrf") !== "1") {

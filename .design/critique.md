@@ -60,3 +60,14 @@ Evidence caveat: several competitor checkouts could not be fetched (403/404); cl
 ## Needs owner input
 - Legal entity, address, governing law, privacy contact; counsel review of the three legal drafts.
 - `NEXT_PUBLIC_SUPPORT_EMAIL`, `NEXT_PUBLIC_SECURITY_EMAIL`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_API_URL`, WalletConnect project id.
+
+## 2026-10-15 — Payout methods, email, fee surfaces (inside Daylight, inherit rules)
+Scope: Wallets & payouts (payout cards, wallet-proof dialog, switch-to-vault), Settings email block, vault owner proof form,
+/verify-email and /confirm-payout pages, fee and net on overview, payment detail and settlements.
+Looked at (real local stack, production build): desktop 1280 and phone 375 of the wallets page; the dialog through all four
+steps with a dev wallet shim; email confirmation page before and after use; payout confirmation; settings page text.
+Fixed after looking: the Vault / My wallet switch looked clickable and did nothing (now real buttons); locked steps were
+clickable (now inert); step 1 said "confirmed" while unconfirmed; the connected address was printed twice; fee note too long on phones.
+Not checked: Web3Auth re-authentication in a browser (needs a live Web3Auth project), tablet width, the vault owner dialog with a real wallet,
+dark appearance (the product has none). slop-check ran on the new component files; its page-level findings (font, focus, reduced motion)
+do not apply to fragments and the global stylesheet already carries reduced-motion handling.

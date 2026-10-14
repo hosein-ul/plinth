@@ -193,7 +193,9 @@ function build(anchor: number): DemoDataset {
       const hash = attemptStatus === "FAILED" ? null : txHash();
       const feeUsdc = n.gas_model === "usdc-native" ? "0.01" : null;
       const sttl = {
-        id: id("stl"), object: "settlement", payment_intent_id: pid, network: s.net, kind: "SWEEP", status: attemptStatus, attempt: 1, vault: vaultAddr[s.net],
+        id: id("stl"), object: "settlement", payment_intent_id: pid, network: s.net, kind: "SWEEP", status: attemptStatus, attempt: 1, vault: vaultAddr[s.net], destination: vaultAddr[s.net], destination_kind: "VAULT",
+        fee: attemptStatus === "CONFIRMED" ? money(Math.floor(cents / 500)) : null, net: attemptStatus === "CONFIRMED" ? money(cents - Math.floor(cents / 500)) : null,
+        fee_units: attemptStatus === "CONFIRMED" ? units(Math.floor(cents / 500)) : null, net_units: attemptStatus === "CONFIRMED" ? units(cents - Math.floor(cents / 500)) : null,
         expected_amount: money(cents), swept_amount: attemptStatus === "CONFIRMED" ? money(cents) : null, expected_units: units(cents), swept_units: attemptStatus === "CONFIRMED" ? units(cents) : null,
         tx_hash: hash, failure_reason: attemptStatus === "FAILED" ? "Sweep simulation reverted: relayer fee balance too low. A retry is scheduled." : null,
         created_at: iso(at), confirmed_at: attemptStatus === "CONFIRMED" ? iso(at + 45_000) : null,
@@ -367,6 +369,8 @@ function build(anchor: number): DemoDataset {
       amount_received: money(received), amount_received_units: units(received),
       amount_pending: money(pending), amount_pending_units: units(pending),
       amount_settled: money(settled), amount_settled_units: units(settled),
+      fee_amount: money(Math.floor(settled / 500)), fee_amount_units: units(Math.floor(settled / 500)),
+      net_amount: money(settled - Math.floor(settled / 500)), net_amount_units: units(settled - Math.floor(settled / 500)),
       amount_refunded: money(refunded), excess_amount: overpaid ? money(excess) : "0.00", currency: "USDC",
       order_reference: kind === "PAYMENT_LINK" ? `LINK-${10400 + idx}` : ref,
       description: kind === "INVOICE" ? `Invoice for ${cust![0]}` : s.desc, customer_email: cust ? cust[1] : null, metadata: {},
@@ -379,7 +383,7 @@ function build(anchor: number): DemoDataset {
       // detail-only
       timeline: timeline.sort((a, b) => a.at.localeCompare(b.at)),
       transactions: txs, settlements: sts, attempts: [], refunds,
-      invoice_addresses: [s.net, ...netIds.filter((x) => x !== s.net)].map((x) => ({ network: x, address: deposit[x], vault: vaultAddr[x], deployed: x === s.net && !wallet && sts.length > 0, deploy_tx_hash: null, factory: addr(), contract_version: 1 })),
+      invoice_addresses: [s.net, ...netIds.filter((x) => x !== s.net)].map((x) => ({ network: x, address: deposit[x], vault: vaultAddr[x], destination: vaultAddr[x], destination_kind: "VAULT", fee_bps: 20, deployed: x === s.net && !wallet && sts.length > 0, deploy_tx_hash: null, factory: addr(), contract_version: 1 })),
       _net: s.net, _wallet: wallet,
     };
     payments.push(p);
@@ -414,7 +418,8 @@ function build(anchor: number): DemoDataset {
       chain_native: n.native, native_currency: n.native.symbol, gas_model: n.gas_model, usdc: { address: n.usdc, decimals: 6 }, payment_methods: { address: true, wallet: true },
       authorization: { receive_with_authorization: true, transfer_with_authorization: true, verified_at: "2026-10-01" }, finality: n.finality,
       circle: { cctpDomain: n.cctp, gatewayNanopayments: null, gasStation: null },
-      contracts: { vault_factory: addr(), invoice_factory: addr(), invoice_implementation: addr(), payment_router: addr(), version: 1 }, relayer_address: relayer, vault,
+      contracts: { vault_factory: addr(), invoice_factory: addr(), invoice_implementation: addr(), payment_router: addr(), version: 2 }, relayer_address: relayer, vault,
+      fee: { bps: 20, percent: "0.2%", max_bps: 100, treasury: addr() },
     };
   });
 
@@ -570,6 +575,7 @@ export function demoOverview(ds: DemoDataset, days: number): Json {
   return {
     window_days: days, livemode: false,
     received_final: fmt(sum((p) => Number(p.amount_received_units))), settled_to_vault: fmt(sum((p) => Number(p.amount_settled_units))),
+    settled: fmt(sum((p) => Number(p.amount_settled_units))), platform_fees: fmt(sum((p) => Number(p.fee_amount_units))), net_settled: fmt(sum((p) => Number(p.net_amount_units))),
     pending: fmt(sum((p) => Number(p.amount_pending_units))), refunded: fmt(refunded),
     counts: { total: inWindow.length, successful, pending, failed, settlement_failed: byStatus["SETTLEMENT_FAILED"] ?? 0 },
     success_rate: successful + failed === 0 ? null : Math.round((successful / (successful + failed)) * 100),

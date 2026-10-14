@@ -22,16 +22,15 @@ import { notifyDemoReadOnly, useDataSource, useHref } from "@/lib/data-source";
 import { useAction, useApi } from "@/lib/hooks";
 import { formatDateTime, relativeTime } from "@/lib/format";
 import { cap, FormGroup, Ledger, SecretReveal } from "./parts-account";
+import { EmailPanel } from "./email-panel";
+import { PayoutSection } from "./payout-views";
+import { VaultCreateForm } from "./vault-create-form";
 
 // ─────────────────────────────────────────────────────────────── Networks & assets
 export function NetworksView() {
   const q = useApi<any>("/v1/networks");
   const welcome = useSearchParams().get("welcome");
   const [creating, setCreating] = useState<any>(null);
-  const [owner, setOwner] = useState("");
-  const enable = useAction(() => apiFetch("/v1/vaults", { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: { network: creating.id, owner_address: owner } }), {
-    invalidate: ["/v1/networks", "/v1/vaults"], success: "Vault requested — deploying", onSuccess: () => { setCreating(null); setOwner(""); },
-  });
   const nets: any[] = q.data?.data ?? [];
   return (
     <>
@@ -77,6 +76,7 @@ export function NetworksView() {
                       { k: "EIP-3009 receive", v: n.authorization.receive_with_authorization ? <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-4 text-signal-ink" aria-hidden />Verified {n.authorization.verified_at}</span> : <span className="text-ink-3">Not verified. Wallet checkout is off.</span> },
                       { k: "Finality", v: n.finality.strategy === "finalized-tag" ? "Chain-finalized block" : `${n.finality.confirmations} confirmation${n.finality.confirmations === 1 ? "" : "s"}` },
                       { k: "CCTP domain", v: <span className="font-mono text-xs">{n.circle.cctpDomain ?? "—"}</span> },
+                      ...(n.fee ? [{ k: "Platform fee", v: <span><span className="font-medium text-ink">{n.fee.percent}</span> <span className="text-ink-3">of each payment, taken in the same transaction</span></span> }] : []),
                       ...(n.contracts ? [{ k: "Invoice factory", v: <Hash value={n.contracts.invoice_factory} href={n.explorer_url ? `${n.explorer_url}/address/${n.contracts.invoice_factory}` : undefined} /> }, { k: "Payment router", v: <Hash value={n.contracts.payment_router} href={n.explorer_url ? `${n.explorer_url}/address/${n.contracts.payment_router}` : undefined} /> }] : []),
                       { k: "Your vault", v: hasVault ? <div className="flex flex-wrap items-center gap-3"><Hash value={n.vault.vault_address} lead={10} tail={6} href={n.vault.vault_explorer_url} /><Chip tone={n.vault.status === "ACTIVE" ? "ok" : n.vault.status === "FAILED" ? "bad" : "info"}>{cap(n.vault.status)}</Chip></div> : <span className="text-ink-3">None yet</span> },
                     ]}
@@ -106,13 +106,9 @@ export function NetworksView() {
       <Dialog open={!!creating} onOpenChange={(v) => !v && setCreating(null)}>
         {creating && (
           <DialogContent title={`Create your ${creating.name} vault`} description="A non-upgradeable contract that holds your settled USDC.">
-            <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); enable.mutate(undefined); }}>
-              <Field label="Vault owner address" htmlFor="v-owner" hint="The only address that can withdraw or change payout rules. Use a multisig (e.g. Safe) in production. Plinth never holds this role.">
-                <Input id="v-owner" className="font-mono" value={owner} onChange={(e) => setOwner(e.target.value.trim())} placeholder="0x…" autoFocus />
-              </Field>
-              <p className="flex gap-2 text-sm text-ink-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink-2" aria-hidden />The vault address is derived from your merchant ID and this owner. The gateway relayer pays the deployment fee.</p>
-              <div className="flex justify-end"><Button type="submit" variant="primary" loading={enable.isPending} disabled={!/^0x[0-9a-fA-F]{40}$/.test(owner)}>Create vault</Button></div>
-            </form>
+            <WalletProvider networks={[{ network: creating.id, chain_id: creating.chain_id, name: creating.name, environment: creating.environment, explorer_url: creating.explorer_url, native_currency: creating.chain_native, public_rpc_urls: creating.public_rpc_urls }]}>
+              <VaultCreateForm network={{ id: creating.id, name: creating.name }} onDone={() => setCreating(null)} />
+            </WalletProvider>
           </DialogContent>
         )}
       </Dialog>
@@ -127,21 +123,32 @@ export function WalletsView() {
   const { readOnly } = useDataSource();
   const href = useHref();
   const nets = useApi<any>("/v1/networks");
-  const infos: NetInfo[] = (nets.data?.data ?? []).filter((n: any) => n.vault).map((n: any) => ({ network: n.id, chain_id: n.chain_id, name: n.name, environment: n.environment, explorer_url: n.explorer_url, native_currency: n.chain_native, public_rpc_urls: n.public_rpc_urls }));
+  const all: any[] = nets.data?.data ?? [];
+  const toInfo = (n: any): NetInfo => ({ network: n.id, chain_id: n.chain_id, name: n.name, environment: n.environment, explorer_url: n.explorer_url, native_currency: n.chain_native, public_rpc_urls: n.public_rpc_urls });
+  const vaultInfos: NetInfo[] = all.filter((n) => n.vault).map(toInfo);
+  // Payout choices exist on every network that can take payments, with or without a vault.
+  const payoutInfos: NetInfo[] = all.filter((n) => n.operational || n.vault).map(toInfo);
+  const chainIds = Object.fromEntries(payoutInfos.map((i) => [i.network, i.chain_id]));
   return (
     <>
-      <PageHeader title="Wallets & payouts" description="Your vaults and who controls them. Settlement rules are changed by signing with the vault owner wallet. The gateway cannot do it." />
+      <PageHeader title="Wallets & payouts" description="Where your money lands and who controls it. Vault rules are changed by signing with the owner wallet. The gateway cannot do it." />
       {nets.error && <ErrorState error={nets.error} retry={() => nets.refetch()} />}
       {nets.isLoading && <VaultSkeleton />}
-      {nets.data && infos.length === 0 && (
-        <EmptyState title="No vaults yet" body="Create a vault from Networks & assets. It is the on-chain account your payments settle into, controlled only by the owner address you choose." action={<Button variant="primary" asChild><Link href={href("/dashboard/networks")}>Create a vault</Link></Button>} />
+      {nets.data && payoutInfos.length === 0 && (
+        <EmptyState title="No payout method yet" body="Create a vault from Networks & assets. It is the on-chain account your payments settle into, controlled only by the owner address you choose." action={<Button variant="primary" asChild><Link href={href("/dashboard/networks")}>Create a vault</Link></Button>} />
       )}
-      {infos.length > 0 && readOnly && (
-        <div className="space-y-5">{infos.map((n) => <SampleVaultCard key={n.network} net={n} />)}</div>
+      {payoutInfos.length > 0 && readOnly && (
+        <>
+          <PayoutSection walletReady={false} chainIds={chainIds} />
+          {vaultInfos.length > 0 && <h2 className="t-3 mb-4 text-ink">Your vaults</h2>}
+          <div className="space-y-5">{vaultInfos.map((n) => <SampleVaultCard key={n.network} net={n} />)}</div>
+        </>
       )}
-      {infos.length > 0 && !readOnly && (
-        <WalletProvider networks={infos}>
-          <div className="space-y-5">{infos.map((n) => <VaultCard key={n.network} net={n} />)}</div>
+      {payoutInfos.length > 0 && !readOnly && (
+        <WalletProvider networks={payoutInfos}>
+          <PayoutSection walletReady chainIds={chainIds} />
+          {vaultInfos.length > 0 && <h2 className="t-3 mb-4 text-ink">Your vaults</h2>}
+          <div className="space-y-5">{vaultInfos.map((n) => <VaultCard key={n.network} net={n} />)}</div>
         </WalletProvider>
       )}
     </>
@@ -422,6 +429,9 @@ export function SettingsView() {
       <form className="card-flat divide-y divide-line overflow-hidden" onSubmit={(e) => { e.preventDefault(); if (dirty) save.mutate(undefined); }}>
         <FormGroup title="Business" description="How your business is named across checkout and invoices.">
           <Field label="Business name" htmlFor="st-name" hint="Leave blank to keep the current name."><Input id="st-name" placeholder="Your business" value={name ?? ""} onChange={(e) => setName(e.target.value)} /></Field>
+        </FormGroup>
+        <FormGroup title="Email" description="Confirms changes that affect where your money goes.">
+          <EmailPanel />
         </FormGroup>
         <FormGroup title="Payment accounting" description="Applied only to funds that are final on-chain.">
           <Field label="Underpayment tolerance (basis points)" htmlFor="st-tol" hint="0 = strict. 100 = a payment up to 1% short still counts as paid. Accepted range 0 to 1000.">

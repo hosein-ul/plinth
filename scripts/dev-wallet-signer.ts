@@ -2,7 +2,7 @@
  * DEV ONLY. A stand-in for a browser wallet's signing step, so the hosted checkout's wallet flow can be
  * exercised in a browser that has no wallet extension (e.g. an automated/embedded browser).
  *
- * It holds anvil's PUBLIC test key #3 (mnemonic "test … junk") and signs EIP-712 requests over HTTP on
+ * It holds anvil's PUBLIC test key #3 (mnemonic "test … junk") and signs EIP-712 requests and sign-in messages over HTTP on
  * 127.0.0.1:4010. It refuses any request whose domain chain id is not the local dev chain (31337), so it
  * cannot sign for a real network even if misused. Never put a real key here.
  */
@@ -20,7 +20,13 @@ createServer(async (req, res) => {
   let body = "";
   for await (const c of req) body += c;
   try {
-    const { typedData } = JSON.parse(body);
+    const parsed = JSON.parse(body);
+    if (typeof parsed.personalMessage === "string") {
+      // Sign-In with Ethereum messages (payout wallet and vault owner proofs). Only for the local dev chain.
+      if (!new RegExp(`Chain ID: ${31337}(\n|$)`).test(parsed.personalMessage)) throw new Error("dev signer only signs sign-in messages for chain 31337");
+      return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ signature: await account.signMessage({ message: parsed.personalMessage }) }));
+    }
+    const { typedData } = parsed;
     if (Number(typedData?.domain?.chainId) !== 31337) throw new Error("dev signer only signs for chain 31337");
     const { EIP712Domain: _omit, ...types } = typedData.types;
     const message = { ...typedData.message, value: BigInt(typedData.message.value), validAfter: BigInt(typedData.message.validAfter), validBefore: BigInt(typedData.message.validBefore) };

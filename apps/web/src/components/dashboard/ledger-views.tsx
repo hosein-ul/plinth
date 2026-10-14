@@ -17,7 +17,7 @@ import { useHref } from "@/lib/data-source";
 import { cap, cellLink, CopyField, Ledger, PaymentRef } from "./parts-account";
 import { StartPaymentAction } from "./create-payment";
 
-const KIND: Record<string, string> = { INCOMING_TRANSFER: "Deposit", WALLET_PAYMENT: "Wallet payment", SWEEP: "Sweep to vault", FORWARD: "Forward to payout", REFUND: "Refund", VAULT_CREATE: "Vault" };
+const KIND: Record<string, string> = { INCOMING_TRANSFER: "Deposit", WALLET_PAYMENT: "Wallet payment", SWEEP: "Sweep", FORWARD: "Forward to payout", REFUND: "Refund", VAULT_CREATE: "Vault" };
 
 export function TransactionsView() {
   const q = useApi<any>("/v1/transactions?limit=100", { refetchMs: 8000 });
@@ -56,11 +56,11 @@ export function SettlementsView() {
   const tone = (s: string) => (s === "CONFIRMED" ? "ok" : s === "FAILED" ? "bad" : "info");
   return (
     <>
-      <PageHeader title="Settlements" description="Funds swept from invoice addresses into your vault. The relayer pays the network fee and cannot redirect the funds: the destination is fixed in each invoice contract." />
+      <PageHeader title="Settlements" description="Funds swept from invoice addresses to your vault or wallet. The platform fee is taken in the same transaction. The relayer pays the network fee and cannot redirect the funds: the destination and fee are fixed in each invoice contract." />
       <Ledger<any>
         caption="Settlements" rows={q.data?.data} loading={q.isLoading} error={q.error} retry={() => q.refetch()} rowKey={(s) => s.id}
         filter={{ status: (s) => s.status, text: (s) => `${s.payment_intent_id ?? ""} ${s.tx_hash ?? ""} ${s.network}`, placeholder: "Search payment, hash or network" }}
-        empty={{ title: "No settlements yet", body: "A settlement is created automatically once funds at an invoice address are final, and it ends with the money inside your vault. Wallet payments go straight to the vault and never need one.", action: <Button variant="primary" asChild><Link href={href("/dashboard/payments")}>See your payments</Link></Button> }}
+        empty={{ title: "No settlements yet", body: "A settlement is created automatically once funds at an invoice address are final, and it ends with the money in your vault or wallet. Wallet payments go straight there and never need one.", action: <Button variant="primary" asChild><Link href={href("/dashboard/payments")}>See your payments</Link></Button> }}
         columns={[
           { key: "pay", header: "Payment", cell: (s) => <PaymentRef id={s.payment_intent_id} /> },
           {
@@ -78,6 +78,8 @@ export function SettlementsView() {
             key: "fee", header: "Relayer fee", hideBelow: "lg", align: "right",
             cell: (s) => (s.relayer_fee ? <span className="tnum font-mono text-xs text-ink-3">{s.relayer_fee.usdc ? `${s.relayer_fee.usdc} USDC` : `${(Number(s.relayer_fee.native_wei) / 1e18).toFixed(6)} ${s.relayer_fee.native_symbol}`}</span> : <span className="text-ink-4">—</span>),
           },
+          { key: "to", header: "Paid to", hideBelow: "lg", cell: (s) => <span className="text-ink-2">{s.destination_kind === "DIRECT" ? "Your wallet" : "Your vault"}</span> },
+          { key: "pfee", header: "Platform fee", hideBelow: "md", align: "right", cell: (s) => (s.fee != null ? <Amount value={s.fee} size="sm" unit={false} /> : <span className="text-ink-4">—</span>) },
           { key: "amt", header: "Swept", align: "right", cell: (s) => <Amount value={s.swept_amount ?? s.expected_amount} size="sm" unit={false} /> },
         ]}
       />

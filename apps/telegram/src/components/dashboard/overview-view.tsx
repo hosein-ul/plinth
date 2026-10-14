@@ -31,7 +31,7 @@ export function OverviewView() {
     <>
       <PageHeader
         title="Overview"
-        description="Received means final on-chain. Settled means confirmed inside your vault. They are shown separately on purpose."
+        description="Received means final on-chain. Settled means delivered to your vault or wallet. They are shown separately on purpose."
         actions={hasVault ? <CreatePaymentDialog /> : undefined}
       />
 
@@ -53,19 +53,20 @@ export function OverviewView() {
           <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
             <div className="p-6 sm:p-8">
               <div className="flex items-center gap-2">
-                <p className="label">Settled to vault</p>
+                <p className="label">You received</p>
                 <span className="text-xs text-ink-4" aria-hidden>/</span>
                 <p className="text-xs text-ink-3">Last 30 days</p>
               </div>
               <div className="mt-4">
-                {d ? <Amount value={d.settled_to_vault.amount} size="display" className="max-sm:text-[2.25rem]" /> : <Skeleton className="h-[3.25rem] w-72 max-w-full" />}
+                {d ? <Amount value={(d.net_settled ?? d.settled_to_vault).amount} size="display" className="max-sm:text-[2.25rem]" /> : <Skeleton className="h-[3.25rem] w-72 max-w-full" />}
               </div>
-              <p className="mt-3 max-w-sm text-sm text-ink-3">Confirmed inside your vault, under your control.</p>
+              <p className="mt-3 max-w-sm text-sm text-ink-3">Delivered to your vault or wallet, after the platform fee.</p>
             </div>
             <dl className="divide-y divide-line border-t border-line bg-wash lg:border-l lg:border-t-0">
               <FigureRow label="Received (final)" note="Final at deposit addresses or paid by wallet" value={d?.received_final.amount} />
               <FigureRow label="Pending" note="Seen on-chain, not yet final" value={d?.pending.amount} />
-              <FigureRow label="Refunded" note="Returned from your vault" value={d?.refunded.amount} />
+              <FigureRow label="Platform fee" note="Taken from settled payments" value={d?.platform_fees?.amount} />
+              <FigureRow label="Refunded" note="Returned to customers" value={d?.refunded.amount} />
             </dl>
           </div>
           <dl className="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-4">

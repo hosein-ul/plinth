@@ -24,7 +24,8 @@ await handle.migrate();
 
 const engine = await createEngine({
   db: handle.db,
-  logger: { info: () => {}, warn: (m, c) => console.warn(m, c ?? ""), error: (m, c) => console.error(m, c ?? "") },
+  // Development: print the emails the console sender would have sent (they carry the one-time links).
+  logger: { info: (m, c) => { if (m.startsWith("email")) console.log(m, c ?? ""); }, warn: (m, c) => console.warn(m, c ?? ""), error: (m, c) => console.error(m, c ?? "") },
   env: { APP_SECRET_KEY: "42".repeat(32), PUBLIC_WEB_URL: WEB_URL, ALLOW_PRIVATE_WEBHOOK_TARGETS: "true", NODE_ENV: "development" },
   signers: { getSigner: (n) => (n === chain.network.id ? chain.accounts[1] : undefined) },
   extraNetworks: [{ network: chain.network, deployment: chain.deployment, client: chain.publicClient }],

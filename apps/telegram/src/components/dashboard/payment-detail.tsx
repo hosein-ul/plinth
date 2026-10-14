@@ -28,7 +28,7 @@ const EVENT_LABEL: Record<string, string> = {
   "settlement.queued": "Settlement queued",
   "settlement.submitted": "Settlement transaction submitted by relayer",
   "settlement.swept": "Sweep observed on-chain",
-  "settlement.finalized": "Sweep final — funds in vault",
+  "settlement.finalized": "Sweep final — funds delivered",
   "wallet_payment.submitted": "Signed authorization sent to relayer",
   "wallet_payment.detected": "Wallet payment observed on-chain",
   "chain.reorg": "Block reorganised — observation reversed",
@@ -36,7 +36,7 @@ const EVENT_LABEL: Record<string, string> = {
   "refund.completed": "Refund verified on-chain",
 };
 
-const MOVEMENT_LABEL: Record<string, string> = { INCOMING_TRANSFER: "Deposit", WALLET_PAYMENT: "Wallet payment", SWEEP: "Sweep to vault", FORWARD: "Forward", REFUND: "Refund", VAULT_CREATE: "Vault" };
+const MOVEMENT_LABEL: Record<string, string> = { INCOMING_TRANSFER: "Deposit", WALLET_PAYMENT: "Wallet payment", SWEEP: "Sweep", FORWARD: "Forward", REFUND: "Refund", VAULT_CREATE: "Vault" };
 /** Timeline events that mean the chain has confirmed something: the only ones that get a mint dot. */
 const CONFIRMED_EVENTS = new Set(["transfer.finalized", "settlement.finalized", "refund.completed"]);
 
@@ -84,11 +84,16 @@ export function PaymentDetail({ id }: { id: string }) {
         </div>
         <dl className="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-4">
           <Figure label="Received (final)" value={p.amount_received} />
-          <Figure label="Settled to vault" value={p.amount_settled} />
+          <Figure label="Settled" value={p.amount_settled} />
           <Figure label="Pending" value={p.amount_pending} />
           <Figure label="Refunded" value={p.amount_refunded} />
         </dl>
       </section>
+      {Number(p.fee_amount_units) > 0 && (
+        <p className="mt-4 rounded-ctl bg-sunk px-3.5 py-2.5 text-sm text-ink-2">
+          Platform fee <span className="tnum font-medium text-ink">{p.fee_amount} USDC</span> was taken in the same transaction, so you received <span className="tnum font-medium text-ink">{p.net_amount} USDC</span>. The fee is not refunded.
+        </p>
+      )}
       {p.excess_amount !== "0.00" && <p className="mt-4 rounded-ctl bg-warn-quiet px-3.5 py-2.5 text-sm text-warn-ink">Overpaid by {p.excess_amount} USDC — consider a refund.</p>}
 
       <div className="mt-8 grid gap-x-8 gap-y-8 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
@@ -131,15 +136,17 @@ export function PaymentDetail({ id }: { id: string }) {
           </section>
 
           <section aria-label="Settlements">
-            <TableHeading title="Settlements" description="The relayer sweeps final funds from the invoice address into your vault. It pays the network fee." />
+            <TableHeading title="Settlements" description="The relayer sweeps final funds from the invoice address to your vault or wallet, taking the platform fee in the same transaction. It pays the network fee." />
             <DataTable
               caption="Settlements" rows={p.settlements} rowKey={(s: any) => s.id}
-              empty={<QuietEmpty>{incoming.some((t: any) => t.kind === "WALLET_PAYMENT") ? "Wallet payments go straight to your vault — no sweep needed." : "No settlement yet. One is queued automatically once funds are final."}</QuietEmpty>}
+              empty={<QuietEmpty>{incoming.some((t: any) => t.kind === "WALLET_PAYMENT") ? "Wallet payments go straight to your vault or wallet — no sweep needed." : "No settlement yet. One is queued automatically once funds are final."}</QuietEmpty>}
               columns={[
                 { key: "n", header: "Attempt", cell: (s: any) => <span className="tnum">#{s.attempt}</span> },
                 { key: "st", header: "Status", cell: (s: any) => <div><span className="text-sm font-medium capitalize text-ink">{s.status.toLowerCase()}</span>{s.failure_reason && <p className="max-w-56 text-xs text-bad-ink">{s.failure_reason}</p>}</div> },
                 { key: "tx", header: "Tx", cell: (s: any) => (s.tx_hash ? <Hash value={s.tx_hash} href={s.explorer_url} lead={8} tail={4} /> : <span className="text-ink-3">—</span>) },
-                { key: "amt", header: "Amount", align: "right", cell: (s: any) => <Amount value={(Number(s.swept_units ?? s.expected_units) / 1e6).toFixed(2)} size="sm" unit={false} /> },
+                { key: "to", header: "Paid to", hideBelow: "md", cell: (s: any) => <span className="text-sm text-ink-2">{s.destination_kind === "DIRECT" ? "Your wallet" : "Your vault"}</span> },
+                { key: "fee", header: "Fee", align: "right", hideBelow: "md", cell: (s: any) => (s.fee_units != null ? <Amount value={(Number(s.fee_units) / 1e6).toFixed(2)} size="sm" unit={false} /> : <span className="text-ink-4">—</span>) },
+                { key: "amt", header: "Swept", align: "right", cell: (s: any) => <Amount value={(Number(s.swept_units ?? s.expected_units) / 1e6).toFixed(2)} size="sm" unit={false} /> },
               ]}
             />
           </section>
@@ -181,7 +188,7 @@ export function PaymentDetail({ id }: { id: string }) {
                     </div>
                   ),
                 })),
-                ...(p.invoice_addresses[0] ? [{ k: "Vault", v: <Hash value={p.invoice_addresses[0].vault} lead={8} tail={6} /> }] : []),
+                ...(p.invoice_addresses[0] ? [{ k: p.invoice_addresses[0].destination_kind === "DIRECT" ? "Paid to wallet" : "Vault", v: <Hash value={p.invoice_addresses[0].destination} lead={8} tail={6} /> }, { k: "Platform fee", v: <span className="tnum">{(p.invoice_addresses[0].fee_bps / 100).toString()}%</span> }] : []),
               ]}
             />
           </div>
