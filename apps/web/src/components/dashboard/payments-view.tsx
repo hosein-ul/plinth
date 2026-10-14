@@ -76,7 +76,7 @@ export function PaymentsView() {
         empty={
           debounced || status !== "all"
             ? <EmptyState title="Nothing matches" body="Try a different search or clear the status filter." />
-            : <EmptyState title="No payments yet" body="Create a payment to get a hosted checkout link and a unique deposit address per network. Payments created from your API appear here too." action={<StartPaymentAction />} />
+            : <EmptyState title="No payments yet" body="Create a payment to get a checkout page link and a unique deposit address per network. Payments created from your API appear here too." action={<StartPaymentAction />} />
         }
         columns={[
           { key: "ref", header: "Payment", cell: (r: any) => <PaymentCell title={r.order_reference ?? r.description ?? "—"} id={r.id} idLead={12} idTail={6} /> },

@@ -30,7 +30,7 @@ const CASES: UseCase[] = [
     id: "online-stores",
     icon: ShoppingBag,
     title: "Online stores",
-    lead: "Create one payment per order, send the customer to the hosted checkout, and release the order when a verified webhook says the funds are final.",
+    lead: "Create one payment per order, send the customer to the checkout page, and release the order when a verified webhook says the funds are final.",
     flow: [
       "Your backend creates a payment intent with the order reference and success URL.",
       "The customer opens checkout_url and pays by wallet or by sending USDC to the unique address.",
@@ -110,7 +110,7 @@ const CASES: UseCase[] = [
     flow: [
       "Create a payment link with a name, a fixed amount and an optional success URL.",
       "Share the link anywhere. No code or backend is needed.",
-      "Opening the link creates a new payment and sends the visitor to the hosted checkout.",
+      "Opening the link creates a new payment and sends the visitor to the checkout page.",
       "Funds land in your vault; the dashboard lists every payment under that link.",
     ],
     objects: [

@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
 
 export const metadata = pageMeta({
   title: "Integrations",
-  description: "What you can connect to Plinth today (hosted checkout, payment links, invoices, REST API, signed webhooks) and what is still in progress or planned.",
+  description: "What you can connect to Plinth today (checkout page, payment links, invoices, REST API, signed webhooks) and what is still in progress or planned.",
   path: "/integrations",
 });
 
@@ -20,7 +20,7 @@ type Icon = React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>
 interface Item { icon?: Icon; mark?: React.ReactNode; name: string; body: React.ReactNode; state: Availability; where?: [string, string] }
 
 const ITEMS: Item[] = [
-  { icon: CreditCard, name: "Hosted checkout", body: "A payment page with two methods: pay with a connected wallet (gasless, one signature) or send USDC to a unique address. Status comes from the backend only.", state: "available", where: ["See it in the demo", DEMO_HREF] },
+  { icon: CreditCard, name: "Checkout page", body: "A payment page with two methods: pay with a connected wallet (gasless, one signature) or send USDC to a unique address. Status comes from the backend only.", state: "available", where: ["See it in the demo", DEMO_HREF] },
   { icon: Link2, name: "Payment links", body: "Reusable fixed-amount links at /l/{slug}. Opening one creates a fresh payment.", state: "available", where: ["Use cases", "/use-cases#donations"] },
   { icon: FileText, name: "Invoices", body: "Numbered invoices with line items and a due date, shared as a link. They are not emailed by Plinth.", state: "available", where: ["Use cases", "/use-cases#invoices"] },
   { icon: Braces, name: "REST API and OpenAPI", body: "Versioned under /v1 with an OpenAPI 3.1 document generated from the same route definitions the server registers. Exact decimal amounts, structured errors, idempotency keys.", state: "available", where: ["Developers", "/developers#api"] },
@@ -97,7 +97,7 @@ export default function IntegrationsPage() {
     <>
       <JsonLd data={{ "@context": "https://schema.org", "@type": "WebPage", name: "Plinth integrations", description: "Available, in-progress and planned Plinth integrations." }} />
       <PageIntro eyebrow="Integrations" title="What connects today, and what does not">
-        Plinth is an API and a hosted checkout. Everything marked available exists and is tested in the repository. Everything else is labelled as exactly that.
+        Plinth is an API and a checkout page. Everything marked available exists and is tested in the repository. Everything else is labelled as exactly that.
       </PageIntro>
       <div className={cn(wrap, "space-y-24 py-14")}>
         {GROUPS.map((g) => (

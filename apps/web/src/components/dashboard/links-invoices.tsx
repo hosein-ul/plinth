@@ -37,7 +37,7 @@ export function PaymentLinksView() {
         actions={
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setCreated(null); }}>
             <DialogTrigger asChild><Button variant="primary"><Plus className="size-4" aria-hidden />New link</Button></DialogTrigger>
-            <DialogContent title={created ? "Your link is live" : "New payment link"} description={created ? "Share this URL anywhere. Customers pay from the hosted checkout." : "A name your customers see, and a fixed amount in USDC."}>
+            <DialogContent title={created ? "Your link is live" : "New payment link"} description={created ? "Share this URL anywhere. Customers pay from the checkout page." : "A name your customers see, and a fixed amount in USDC."}>
               {created ? (
                 <div className="space-y-5">
                   <div>
@@ -121,7 +121,7 @@ export function InvoicesView() {
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button variant="primary"><Plus className="size-4" aria-hidden />New invoice</Button></DialogTrigger>
-            <DialogContent title="New invoice" description="Your customer pays the exact total from the hosted checkout." className="w-[min(94vw,42rem)]">
+            <DialogContent title="New invoice" description="Your customer pays the exact total from the checkout page." className="w-[min(94vw,42rem)]">
               <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); if (valid) create.mutate(undefined); }}>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Customer" htmlFor="iv-name"><Input id="iv-name" value={cust.name} onChange={(e) => setCust({ ...cust, name: e.target.value })} autoFocus /></Field>
@@ -157,7 +157,7 @@ export function InvoicesView() {
         filter={{ status: (i) => i.status, statusLabel: (s) => STATUS_META[s]?.label ?? s, text: (i) => `${i.number} ${i.customer_name}`, placeholder: "Search number or customer" }}
         empty={{
           title: "No invoices yet",
-          body: "Create an invoice for a customer. They pay the exact total from the hosted checkout, by wallet or by address.",
+          body: "Create an invoice for a customer. They pay the exact total from the checkout page, by wallet or by address.",
           action: <Button variant="primary" onClick={() => setOpen(true)}><Plus className="size-4" aria-hidden />New invoice</Button>,
         }}
         columns={[

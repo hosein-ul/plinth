@@ -131,7 +131,7 @@ export default function SecurityPage() {
               <p className="text-sm text-ink-3">Include what you found, how to reproduce it, the network and any transaction hashes. Do not post it publicly and do not test against funds that are not yours.</p>
             </div>
             <Dots items={[
-              <>In scope: the contracts, the API, the hosted checkout and the dashboard.</>,
+              <>In scope: the contracts, the API, the checkout page and the dashboard.</>,
               <>Out of scope: social engineering, denial-of-service load tests, and issues in third-party services such as RPC providers or the USDC token itself.</>,
               <>There is no bug bounty programme today. A formal safe-harbour statement will be published after legal review.</>,
             ]} />

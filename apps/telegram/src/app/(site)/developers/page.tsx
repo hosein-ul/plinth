@@ -5,8 +5,10 @@ import { PageIntro } from "@/components/marketing/chrome";
 import { C } from "@/components/marketing/code";
 import { CopyCode as Code } from "@/components/marketing/pages/copy-code";
 import { DEMO_HREF } from "@/lib/routes";
-import { pageMeta } from "@/lib/site";
+import { pageMeta, SITE_URL } from "@/lib/site";
 import { Method, OnThisPage, Step } from "@/components/marketing/docs";
+import { LangTabs } from "@/components/marketing/pages/lang-tabs";
+import { createPaymentSamples, webhookSamples } from "@/lib/examples";
 import { H2, TableCard, td, wrap } from "@/components/marketing/parts";
 import { Chip } from "@/components/badge";
 import { buttonStyles } from "@/components/ui/button";
@@ -77,35 +79,63 @@ export default function DevelopersPage() {
           <section id="quickstart" aria-labelledby="quickstart-h" className={SECTION}>
             <H2 id="quickstart-h">Quickstart</H2>
             <p className="mt-3 max-w-2xl text-[0.9375rem] text-ink-2">
-              Create a payment. Use <C>Idempotency-Key</C> so a retried request never creates a second payment.
+              Charge each order at its real total, send the customer to checkout, and fulfil from a signed webhook. These are the same four steps in every language, and every sample below is a real file we run against the API.
             </p>
-            <div className="mt-8 grid gap-x-6 gap-y-10 xl:grid-cols-2">
-              <div className="min-w-0 space-y-4">
-                <Step n={1} title="Request" />
-                <Code label="request">{`curl -X POST $PLINTH_API/v1/payment-intents \\
-  -H "Authorization: Bearer sk_test_…" \\
-  -H "Idempotency-Key: order-1042" \\
-  -H "Content-Type: application/json" \\
-  -d '{ "amount": "25.00", "order_reference": "order-1042" }'`}</Code>
-              </div>
-              <div className="min-w-0 space-y-4">
-                <Step n={2} title="Response" />
-                <Code label="response (abridged)">{`{
-  "id": "pi_9c1e…",
+
+            <ol className="mt-8 space-y-12">
+              <li className="min-w-0 space-y-4">
+                <Step n={1} title="Get your keys" />
+                <p className="max-w-2xl text-[0.9375rem] text-ink-2">
+                  Create a test account, then open <b className="font-medium text-ink">API keys</b> in the dashboard for a secret key (<C>sk_test_…</C>) and <b className="font-medium text-ink">Webhooks</b> for an endpoint secret. Keep both on your server, as environment variables.
+                </p>
+                <Code label=".env">{`PLINTH_API_URL=${API_BASE ?? "https://your-plinth-api.example"}
+PLINTH_SECRET_KEY=sk_test_...
+PLINTH_WEBHOOK_SECRET=whsec_...`}</Code>
+              </li>
+
+              <li className="min-w-0 space-y-4">
+                <Step n={2} title="Create a payment when the customer checks out" />
+                <p className="max-w-2xl text-[0.9375rem] text-ink-2">
+                  Compute the total on your server and send it as a string. The <C>Idempotency-Key</C> makes a retry return the same payment instead of a second one. Then redirect the customer to <C>checkout_url</C>.
+                </p>
+                <LangTabs samples={createPaymentSamples()} caption="Tested: each file is run against a live API by scripts/test-doc-examples.mjs." />
+                <p className="pt-2 text-sm font-medium text-ink">What comes back (abridged)</p>
+                <Code label="response">{`{
+  "id": "pi_9e78c740ce82e30fdbed754ad9a97ea6",
   "status": "AWAITING_PAYMENT",
   "amount": "25.00",
   "amount_units": "25000000",
-  "checkout_url": "https://pay.example.com/pay/pi_9c1e…",
+  "currency": "USDC",
+  "order_reference": "order-1042",
+  "checkout_url": "${SITE_URL}/pay/pi_9e78c740ce82e30fdbed754ad9a97ea6",
+  "success_url": "https://shop.example/thanks",
+  "expires_at": "2026-10-14T14:48:00.720Z",
   "networks": [{
     "network": "arc-testnet",
     "usdc_address": "0x3600000000000000000000000000000000000000",
-    "deposit_address": "0x…",          // unique to this payment, no contract deployed yet
+    "deposit_address": "0x08D7…7188",
     "wallet_checkout_supported": true
-  }],
-  "expires_at": "2026-10-09T12:00:00.000Z"
+  }]
 }`}</Code>
-              </div>
-            </div>
+                <p className="text-xs text-ink-3">Taken from a real response on a local test chain; the network entry is shown for Arc Testnet. The deposit address is unique to this payment and no contract is deployed for it yet.</p>
+              </li>
+
+              <li className="min-w-0 space-y-4">
+                <Step n={3} title="Fulfil from the webhook, never from the redirect" />
+                <p className="max-w-2xl text-[0.9375rem] text-ink-2">
+                  Add an endpoint in the dashboard that points at your server. This receiver verifies the signature on the raw body, rejects stale timestamps, ignores an event it has already seen, and acts on <C>payment.confirmed</C>.
+                </p>
+                <LangTabs samples={webhookSamples()} caption="Tested: valid, tampered, stale and missing signatures, and a replayed event, in both languages." />
+              </li>
+
+              <li className="min-w-0 space-y-4">
+                <Step n={4} title="Test it end to end" />
+                <p className="max-w-2xl text-[0.9375rem] text-ink-2">
+                  Pay the test checkout from a wallet with test USDC, or send test USDC to the deposit address. Your order should turn paid from the webhook alone. Then check the two failure cases: a webhook with a bad signature must be rejected (401), and a replayed event must change nothing.
+                </p>
+                <p className="text-sm text-ink-3">Prefer an AI assistant? <Link href="/build-with-ai" className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink">It can do these four steps for you</Link>.</p>
+              </li>
+            </ol>
           </section>
 
           <section id="api" aria-labelledby="api-h" className={SECTION}>
@@ -163,12 +193,6 @@ export default function DevelopersPage() {
                   </tr>
                 ))}
               </TableCard>
-            </div>
-            <div className="mt-6">
-              <Code label="node, verify">{`const [t, v1] = header.split(",").map((p) => p.split("=")[1]);
-const mac = crypto.createHmac("sha256", secret).update(t + "." + rawBody).digest("hex");
-const ok = Math.abs(Date.now() / 1000 - Number(t)) < 300 &&
-           crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(v1));`}</Code>
             </div>
           </section>
 

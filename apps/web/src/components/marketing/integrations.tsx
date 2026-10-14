@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
 
 type Icon = typeof Code2;
 const AVAILABLE: [Icon, string, string][] = [
-  [Store, "Hosted checkout", "A page per payment with wallet and address flows, ready to link to."],
+  [Store, "Checkout page", "A page per payment with wallet and address flows, ready to link to."],
   [Link2, "Payment links", "Reusable links for a fixed amount, no code needed."],
   [FileText, "Invoices", "Numbered invoices, each with its own address."],
   [Code2, "REST API", "Versioned under /v1 with an OpenAPI 3.1 document."],

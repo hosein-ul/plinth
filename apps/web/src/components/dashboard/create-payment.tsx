@@ -45,7 +45,7 @@ export function CreatePaymentDialog({ label = "Create payment" }: { label?: stri
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setResult(null); setAmount(""); setRef(""); setDesc(""); } }}>
       <DialogTrigger asChild><Button variant="primary"><Plus className="size-4" aria-hidden />{label}</Button></DialogTrigger>
-      <DialogContent title={result ? "Payment created" : "Create a payment"} description={result ? "Share the checkout link, or fetch it via the API." : "A hosted checkout with a unique deposit address per network."}>
+      <DialogContent title={result ? "Payment created" : "Create a payment"} description={result ? "Share the checkout link, or fetch it via the API." : "A checkout page with a unique deposit address per network."}>
         {result ? (
           <div className="space-y-5">
             <div>
