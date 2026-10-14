@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, FlaskConical, Lock, ShieldAlert } from "lucide-react";
 import { buttonStyles } from "@/components/ui/button";
 import { CollageScene } from "@/components/marketing/hero-visuals";
-import { HeroGlass } from "@/components/marketing/hero-glass";
+import { HeroVideo } from "@/components/marketing/hero-video";
 import { DEMO_HREF } from "@/lib/routes";
 import { wrap } from "@/components/marketing/parts";
 
@@ -10,14 +10,13 @@ const TRUST = [[Lock, "Non-custodial by construction"], [FlaskConical, "Testnet 
 
 /**
  * The landing hero. The copy is plain server-rendered text, visible from the first paint; the only motion on it is a CSS reveal on
- * the second line of the headline, which needs no JavaScript, so a slow connection never shows an empty hero. Behind it a slow
- * mint dither field; beside it the checkout, on a desktop browser and on an iPhone.
+ * the second line of the headline, which needs no JavaScript, so a slow connection never shows an empty hero. Behind it a looping glass-wave video, played slowly; beside it the checkout, on a desktop browser and on an iPhone.
  */
 export function Hero() {
   const second = "Straight to your own vault.".split(" ");
   return (
     <section className="relative isolate overflow-clip bg-white">
-      <HeroGlass />
+      <HeroVideo />
       <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-28 bg-gradient-to-b from-transparent to-ground" />
       <div className={`${wrap} relative z-[1] grid items-center gap-x-8 gap-y-12 pb-20 pt-14 xl:grid-cols-[minmax(0,31rem)_minmax(0,1fr)] xl:pb-28 xl:pt-20`}>
         <div className="relative z-10">
