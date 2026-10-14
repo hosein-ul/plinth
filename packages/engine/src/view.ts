@@ -22,6 +22,11 @@ export interface IntentView {
   amount_pending_units: string;
   amount_settled: string;
   amount_settled_units: string;
+  /** Platform fee taken from the settled funds, and what the merchant received after it. */
+  fee_amount: string;
+  fee_amount_units: string;
+  net_amount: string;
+  net_amount_units: string;
   amount_refunded: string;
   excess_amount: string;
   currency: "USDC";
@@ -90,6 +95,10 @@ export function intentView(e: Engine, i: Intent, addrs: Addr[]): IntentView {
     amount_pending_units: i.amountPending.toString(),
     amount_settled: money(i.amountSettled).decimal,
     amount_settled_units: i.amountSettled.toString(),
+    fee_amount: money(i.feeAmount).decimal,
+    fee_amount_units: i.feeAmount.toString(),
+    net_amount: money(i.netAmount).decimal,
+    net_amount_units: i.netAmount.toString(),
     amount_refunded: money(i.amountRefunded).decimal,
     excess_amount: money(i.excessAmount).decimal,
     currency: "USDC",

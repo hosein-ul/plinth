@@ -1,10 +1,11 @@
 import { and, count, eq, schema } from "@plinth/db";
-import { newId, formatUsdc, toBytes32Id } from "@plinth/shared";
+import { computeFee, destinationKindIndex, newId, formatUsdc, toBytes32Id, type DestinationKind } from "@plinth/shared";
 import { buildReceiveAuthorization, recoverAuthorizationSigner, splitSignature, type RouterPayment } from "@plinth/blockchain";
 import { getAddress, isAddressEqual, toHex, type Address, type Hex } from "viem";
 import { randomBytes } from "node:crypto";
 import { audit } from "./audit";
 import { EngineError, norm, type Engine } from "./context";
+import { committedRoute } from "./payout-route";
 import { loadIntentView } from "./view";
 
 const OPEN: string[] = ["AWAITING_PAYMENT", "DETECTED", "CONFIRMING", "INVALID_ASSET", "CREATED"];
@@ -56,8 +57,9 @@ export async function prepareWalletPayment(e: Engine, intentId: string, input: {
   const [{ n } = { n: 0 }] = await e.db.select({ n: count() }).from(schema.paymentAttempts).where(eq(schema.paymentAttempts.paymentIntentId, intentId));
   if (n >= 25) throw new EngineError("TOO_MANY_ATTEMPTS", "Too many payment attempts for this payment", 429);
 
-  const [vault] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, intent.merchantId), eq(schema.merchantVaults.networkId, input.network), eq(schema.merchantVaults.status, "ACTIVE")));
-  if (!vault) throw new EngineError("VAULT_UNAVAILABLE", "The merchant has no active vault on this network", 409);
+  // The destination and fee were committed when the payment was created; changing payout settings later does not touch them.
+  const route = await committedRoute(e.db, intent.id, input.network);
+  if (!route) throw new EngineError("WALLET_UNAVAILABLE", "This payment has no payout route on this network. Pay with the deposit address instead.", 409);
 
   const remaining = intent.amount - intent.amountFinal - intent.amountPending;
   if (remaining <= 0n) throw new EngineError("ALREADY_PAID", "This payment is already fully funded", 409);
@@ -70,14 +72,15 @@ export async function prepareWalletPayment(e: Engine, intentId: string, input: {
   const nowSec = Number((await chain.client.getBlock()).timestamp);
   const validBefore = Math.min(nowSec + 15 * 60, Math.floor(intent.expiresAt.getTime() / 1000) - 10);
   const payment: RouterPayment = {
-    from: payer, vault: getAddress(vault.vaultAddress), merchantId: toBytes32Id(intent.merchantId), invoiceId: intent.invoiceId32 as Hex,
+    from: payer, destination: getAddress(route.destinationAddress), kind: destinationKindIndex(route.destinationKind as DestinationKind), feeBps: route.feeBps,
+    merchantId: toBytes32Id(intent.merchantId), invoiceId: intent.invoiceId32 as Hex,
     value: remaining, validAfter: BigInt(nowSec - 600), validBefore: BigInt(validBefore), salt: toHex(randomBytes(32)),
   };
-  const auth = buildReceiveAuthorization(chain.network, chain.deployment.paymentRouter, payment);
+  const auth = buildReceiveAuthorization(chain.network, chain.deployment.paymentRouter, getAddress(route.treasuryAddress), payment);
   const attemptId = newId("att");
   await e.db.insert(schema.paymentAttempts).values({
     id: attemptId, paymentIntentId: intentId, merchantId: intent.merchantId, networkId: input.network, method: "WALLET", status: "PREPARED", payer: norm(payer), amount: remaining, nonce: auth.nonce.toLowerCase(),
-    authorization: { vault: payment.vault, merchantId: payment.merchantId, invoiceId: payment.invoiceId, value: payment.value.toString(), validAfter: payment.validAfter.toString(), validBefore: payment.validBefore.toString(), salt: payment.salt },
+    authorization: { destination: payment.destination, kind: String(payment.kind), feeBps: String(payment.feeBps), treasury: route.treasuryAddress, merchantId: payment.merchantId, invoiceId: payment.invoiceId, value: payment.value.toString(), validAfter: payment.validAfter.toString(), validBefore: payment.validBefore.toString(), salt: payment.salt },
   });
   return {
     attempt_id: attemptId,
@@ -93,6 +96,8 @@ export async function prepareWalletPayment(e: Engine, intentId: string, input: {
       message: { from: auth.message.from, to: auth.message.to, value: auth.message.value.toString(), validAfter: auth.message.validAfter.toString(), validBefore: auth.message.validBefore.toString(), nonce: auth.message.nonce },
     },
     fee: { customer_network_fee: "0", note: "No network fee for you: the transaction is relayed and its fee is paid by the gateway operator." },
+    // The platform fee is taken from the merchant's side of this payment: the customer pays exactly the amount above.
+    platform_fee: { bps: route.feeBps, amount_units: computeFee(remaining, route.feeBps).toString(), amount: formatUsdc(computeFee(remaining, route.feeBps), { minDecimals: 2 }) },
   };
 }
 
@@ -107,14 +112,15 @@ export async function submitWalletPayment(e: Engine, intentId: string, input: { 
 
   const a = attempt.authorization!;
   const payment: RouterPayment = {
-    from: getAddress(attempt.payer!), vault: a.vault as Address, merchantId: a.merchantId as Hex, invoiceId: a.invoiceId as Hex,
+    from: getAddress(attempt.payer!), destination: a.destination as Address, kind: Number(a.kind), feeBps: Number(a.feeBps),
+    merchantId: a.merchantId as Hex, invoiceId: a.invoiceId as Hex,
     value: BigInt(a.value!), validAfter: BigInt(a.validAfter!), validBefore: BigInt(a.validBefore!), salt: a.salt as Hex,
   };
   const nowSec = (await chain.client.getBlock()).timestamp;
   if (payment.validBefore <= nowSec + 20n) throw new EngineError("AUTHORIZATION_EXPIRED", "This authorization expired. Please start again.", 410);
 
   // The signature must be by the payer over EXACTLY the payload we issued. Anything else is rejected.
-  const auth = buildReceiveAuthorization(chain.network, chain.deployment.paymentRouter, payment);
+  const auth = buildReceiveAuthorization(chain.network, chain.deployment.paymentRouter, getAddress(a.treasury!), payment);
   if (auth.nonce.toLowerCase() !== attempt.nonce) throw new EngineError("INTERNAL", "Authorization mismatch", 500);
   let signer: Address;
   try {

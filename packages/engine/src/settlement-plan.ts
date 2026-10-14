@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, schema, sql, type Executor } from "@plinth/db";
-import { newId } from "@plinth/shared";
-import type { Hex } from "viem";
+import { newId, type DestinationKind } from "@plinth/shared";
+import { getAddress, type Hex } from "viem";
 import { chainOf, type Engine } from "./context";
 
 /** Exponential cool-down between automatic settlement attempts (seconds). */
@@ -57,7 +57,11 @@ export async function planSettlement(e: Engine, tx: Executor, paymentIntentId: s
 
     const settlementId = newId("stl");
     const opId = newId("rop");
-    const call = chain.adapter.encodeDeployAndSweep(a.merchantId32 as Hex, a.invoiceId32 as Hex, a.vaultAddress as `0x${string}`);
+    const call = chain.adapter.encodeDeployAndSweep(a.merchantId32 as Hex, a.invoiceId32 as Hex, {
+      destination: getAddress(a.destinationAddress),
+      kind: a.destinationKind as DestinationKind,
+      feeBps: a.feeBps,
+    });
     const planned = await tx.insert(schema.relayerOperations).values({
       id: opId, networkId: a.networkId, kind: "DEPLOY_AND_SWEEP", dedupeKey: `sweep:${a.id}:${incomingFinal}:${attemptNo}`,
       toAddress: call.to.toLowerCase(), calldata: call.data, relatedType: "settlement", relatedId: settlementId, nextAttemptAt: e.now(),
@@ -65,7 +69,7 @@ export async function planSettlement(e: Engine, tx: Executor, paymentIntentId: s
     if (planned.length === 0) continue; // this exact sweep was already planned
     await tx.insert(schema.settlements).values({
       id: settlementId, merchantId: a.merchantId, paymentIntentId, invoiceAddressId: a.id, networkId: a.networkId,
-      kind: "SWEEP", status: "QUEUED", attemptNo, vaultAddress: a.vaultAddress, expectedAmount: unswept, relayerOperationId: opId, createdAt: e.now(),
+      kind: "SWEEP", status: "QUEUED", attemptNo, vaultAddress: a.vaultAddress, destinationKind: a.destinationKind, destinationAddress: a.destinationAddress, expectedAmount: unswept, relayerOperationId: opId, createdAt: e.now(),
     });
     await tx.insert(schema.paymentEvents).values({
       id: newId("pev"), paymentIntentId, type: "settlement.queued",

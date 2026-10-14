@@ -27,6 +27,8 @@ export const merchants = pgTable("merchants", {
   overpaymentPolicy: text("overpayment_policy").notNull().default("ACCEPT"), // ACCEPT | FLAG
   // 20 minutes; keep in sync with DEFAULT_EXPIRY_SECONDS in @plinth/shared. Existing rows keep their stored value.
   defaultExpirySeconds: integer("default_expiry_seconds").notNull().default(1200),
+  /** Platform fee override in basis points for this merchant; null = the platform default. Always bounded by the on-chain cap. */
+  feeBps: integer("fee_bps"),
   invoiceSeq: integer("invoice_seq").notNull().default(0),
   createdAt: createdAt(),
 });
@@ -134,6 +136,74 @@ export const merchantVaults = pgTable(
   ],
 );
 
+/**
+ * How a merchant wants to be paid on a network. Every change is a new row; the newest CONFIRMED row whose
+ * `active_from` has passed is the one used for NEW invoices. Existing invoice addresses keep the destination
+ * they were issued with. No row means the default: pay into the merchant's vault.
+ */
+export const merchantPayoutConfigs = pgTable(
+  "merchant_payout_configs",
+  {
+    id: text("id").primaryKey(),
+    merchantId: text("merchant_id").notNull().references(() => merchants.id),
+    networkId: text("network_id").notNull().references(() => networks.id),
+    mode: text("mode").notNull(), // VAULT | DIRECT
+    /** The registered payout wallet (DIRECT). Null for VAULT, which uses the merchant's vault. */
+    address: text("address"),
+    /** PENDING_CONFIRMATION | CONFIRMED | SUPERSEDED | DISABLED | EXPIRED */
+    status: text("status").notNull().default("PENDING_CONFIRMATION"),
+    /** Proof of control: the exact EIP-4361 message the wallet signed, and the signature. */
+    proofMessage: text("proof_message"),
+    proofSignature: text("proof_signature"),
+    proofSignedAt: ts("proof_signed_at"),
+    requestedByUserId: text("requested_by_user_id"),
+    confirmationTokenHash: text("confirmation_token_hash"),
+    confirmationExpiresAt: ts("confirmation_expires_at"),
+    confirmedAt: ts("confirmed_at"),
+    /** New invoices use this config only from this moment (confirmation time plus the cooldown). */
+    activeFrom: ts("active_from"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("merchant_payout_configs_lookup_idx").on(t.merchantId, t.networkId, t.createdAt),
+    uniqueIndex("merchant_payout_configs_token_uq").on(t.confirmationTokenHash).where(sql`${t.confirmationTokenHash} is not null`),
+  ],
+);
+
+/** Single-use, short-lived challenge a wallet must sign to prove it controls a payout address. */
+export const payoutChallenges = pgTable(
+  "payout_challenges",
+  {
+    nonce: text("nonce").primaryKey(),
+    merchantId: text("merchant_id").notNull().references(() => merchants.id),
+    networkId: text("network_id").notNull().references(() => networks.id),
+    address: text("address").notNull(),
+    purpose: text("purpose").notNull(), // PAYOUT_WALLET | VAULT_OWNER
+    message: text("message").notNull(),
+    expiresAt: ts("expires_at").notNull(),
+    usedAt: ts("used_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("payout_challenges_merchant_idx").on(t.merchantId, t.createdAt)],
+);
+
+/** The route committed to a payment for each of its networks, whichever checkout method is used. */
+export const paymentIntentRoutes = pgTable(
+  "payment_intent_routes",
+  {
+    id: text("id").primaryKey(),
+    paymentIntentId: text("payment_intent_id").notNull().references(() => paymentIntents.id),
+    networkId: text("network_id").notNull().references(() => networks.id),
+    destinationKind: text("destination_kind").notNull(), // VAULT | DIRECT
+    destinationAddress: text("destination_address").notNull(),
+    feeBps: integer("fee_bps").notNull(),
+    treasuryAddress: text("treasury_address").notNull(),
+    payoutConfigId: text("payout_config_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("payment_intent_routes_uq").on(t.paymentIntentId, t.networkId)],
+);
+
 export const apiKeys = pgTable(
   "api_keys",
   {
@@ -199,6 +269,9 @@ export const paymentIntents = pgTable(
     amountEligible: money("amount_eligible").notNull().default(sql`0`),
     amountSettled: money("amount_settled").notNull().default(sql`0`),
     amountRefunded: money("amount_refunded").notNull().default(sql`0`),
+    /** Platform fee actually taken on FINAL swept funds, and what the merchant received after it (settled - fee). */
+    feeAmount: money("fee_amount").notNull().default(sql`0`),
+    netAmount: money("net_amount").notNull().default(sql`0`),
     excessAmount: money("excess_amount").notNull().default(sql`0`),
     createdAt: createdAt(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
@@ -237,7 +310,13 @@ export const invoiceAddresses = pgTable(
     merchantId: text("merchant_id").notNull().references(() => merchants.id),
     networkId: text("network_id").notNull().references(() => networks.id),
     address: text("address").notNull(),
-    vaultAddress: text("vault_address").notNull(),
+    /** Set for VAULT-kind addresses only (it equals destination_address there). Null for DIRECT. */
+    vaultAddress: text("vault_address"),
+    /** What the address commits to: where the net amount goes, which kind it is, and the fee. All immutable on-chain. */
+    destinationKind: text("destination_kind").notNull().default("VAULT"), // VAULT | DIRECT
+    destinationAddress: text("destination_address").notNull(),
+    feeBps: integer("fee_bps").notNull().default(0),
+    treasuryAddress: text("treasury_address"),
     merchantId32: text("merchant_id32").notNull(),
     invoiceId32: text("invoice_id32").notNull(),
     factoryAddress: text("factory_address").notNull(),
@@ -343,6 +422,8 @@ export const transactions = pgTable(
     fromAddress: text("from_address"),
     toAddress: text("to_address"),
     amount: money("amount").notNull().default(sql`0`),
+    /** Platform fee carried by this movement (SWEEP and WALLET_PAYMENT rows); `amount` is always the gross. */
+    feeAmount: money("fee_amount"),
     blockNumber: bigint("block_number", { mode: "bigint" }),
     blockHash: text("block_hash"),
     blockTimestamp: ts("block_timestamp"),
@@ -371,9 +452,14 @@ export const settlements = pgTable(
     kind: text("kind").notNull().default("SWEEP"), // SWEEP | FORWARD
     status: text("status").notNull().default("QUEUED"), // QUEUED | SUBMITTED | CONFIRMED | FAILED
     attemptNo: integer("attempt_no").notNull().default(1),
-    vaultAddress: text("vault_address").notNull(),
+    vaultAddress: text("vault_address"),
+    destinationKind: text("destination_kind").notNull().default("VAULT"),
+    destinationAddress: text("destination_address").notNull(),
     expectedAmount: money("expected_amount").notNull(),
     sweptAmount: money("swept_amount"),
+    /** Fee taken and net delivered, known once the sweep is observed. Fee is 0 when it was skipped. */
+    feeAmount: money("fee_amount"),
+    netAmount: money("net_amount"),
     relayerOperationId: text("relayer_operation_id").references(() => relayerOperations.id),
     txHash: text("tx_hash"),
     failureReason: text("failure_reason"),

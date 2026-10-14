@@ -48,10 +48,10 @@ describe("schema constraints", () => {
     await seed();
     await h.db.insert(schema.invoiceAddresses).values({
       id: "inv_1", paymentIntentId: "pi_1", merchantId: "mer_1", networkId: "net", address: "0x1",
-      vaultAddress: "0x2", merchantId32: "0x00", invoiceId32: "0x01", factoryAddress: "0x3",
+      vaultAddress: "0x2", destinationAddress: "0x2", merchantId32: "0x00", invoiceId32: "0x01", factoryAddress: "0x3",
       implementationAddress: "0x4", contractVersion: 1, createdBlock: 1n,
     });
-    const s = { merchantId: "mer_1", paymentIntentId: "pi_1", invoiceAddressId: "inv_1", networkId: "net", vaultAddress: "0x2", expectedAmount: 1n };
+    const s = { merchantId: "mer_1", paymentIntentId: "pi_1", invoiceAddressId: "inv_1", networkId: "net", vaultAddress: "0x2", destinationAddress: "0x2", expectedAmount: 1n };
     await h.db.insert(schema.settlements).values({ ...s, id: "stl_1", status: "SUBMITTED" });
     await expect(h.db.insert(schema.settlements).values({ ...s, id: "stl_2", status: "QUEUED" })).rejects.toThrow();
     await h.db.update(schema.settlements).set({ status: "CONFIRMED" }).where(eq(schema.settlements.id, "stl_1"));

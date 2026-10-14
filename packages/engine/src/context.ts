@@ -33,9 +33,14 @@ export interface ChainRuntime {
   signer?: LocalAccount;
   wallet?: WalletClient;
   policy: RelayerPolicy;
-  /** Result of operationalGate(); non-operational chains accept no new invoices. */
+  /** Effective state: the static gate AND the latest on-chain deployment check. Non-operational chains accept no new invoices. */
   operational: boolean;
   gateReasons: string[];
+  /** Result of operationalGate() alone (registry, env and deployment record). */
+  baseOperational: boolean;
+  baseReasons: string[];
+  /** Latest comparison of the deployed contracts with the deployment record and configuration. */
+  deploymentCheck?: { ok: boolean; reasons: string[]; at: number; registry: boolean };
 }
 
 export interface EngineConfig {
@@ -48,6 +53,8 @@ export interface EngineConfig {
   allowPrivateWebhookTargets: boolean;
   alertWebhookUrl?: string;
   sessionTtlSeconds: number;
+  /** Default platform fee in basis points for merchants without their own override. */
+  platformFeeBps: number;
 }
 
 export interface Logger {

@@ -20,3 +20,5 @@ export * from "./forwarding";
 export * from "./worker";
 export * from "./settlement-plan";
 export * from "./web3auth";
+export * from "./payout-route";
+export * from "./deployment-check";

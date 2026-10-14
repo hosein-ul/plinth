@@ -1,4 +1,5 @@
 import type { Engine } from "./context";
+import { recheckDeployments } from "./deployment-check";
 import { forwardTick } from "./forwarding";
 import { expireDueIntents, replanSettlements } from "./recompute";
 import { relayerTick } from "./relayer";
@@ -36,6 +37,7 @@ export async function workerTick(e: Engine): Promise<void> {
         await guarded(e, id, "forwarding", () => forwardTick(e, id));
       }),
   );
+  await guarded(e, "-", "deployment-check", () => recheckDeployments(e));
   await guarded(e, "-", "expiry", () => expireDueIntents(e));
   await guarded(e, "-", "replan", () => replanSettlements(e));
   await guarded(e, "-", "webhooks", () => processWebhookJobs(e));

@@ -18,9 +18,12 @@ export async function quoteFees(client: PublicClient, net: NetworkConfig): Promi
   return { maxFeePerGas, maxPriorityFeePerGas };
 }
 
-/** Replacement transactions must raise both fee fields by >= 10%; use 25% to be safe. */
+/**
+ * Replacement transactions must raise both fee fields by >= 10%; use 25% to be safe. The bump is relative to
+ * the fee that was actually quoted (plus 1 wei, so a zero tip still increases): there is no fixed fee here.
+ */
 export function bumpFees(prev: FeeQuote, pct = 25n): FeeQuote {
-  const bump = (v: bigint) => (v === 0n ? 1_000_000_000n : (v * (100n + pct)) / 100n + 1n);
+  const bump = (v: bigint) => (v * (100n + pct)) / 100n + 1n;
   return { maxFeePerGas: bump(prev.maxFeePerGas), maxPriorityFeePerGas: bump(prev.maxPriorityFeePerGas) };
 }
 

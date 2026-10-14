@@ -22,7 +22,7 @@ Every item must be checked, with an owner and a date, before `pnpm approve:deplo
 
 ## C · Policy and limits
 
-- [ ] `RELAYER_POLICY_<NETWORK>` set explicitly (daily gas, per-tx cap, op cap, min/low balance, `minSweepUnits` sized to gas economics). Mainnets have **no default** and stay observe-only without it.
+- [ ] `RELAYER_POLICY_<NETWORK>` set explicitly (daily gas, per-tx cap, op cap, min/low balance, `minSweepUnits` sized to gas economics). Each network has tier defaults (low caps on the L2s, higher on Ethereum, native-token sized on Polygon and Arc); review them and override per network before opening a mainnet.
 - [ ] Finality parameters for the network reviewed against current chain behaviour (Arc deterministic finality is documented, not assumed; L2 depth chosen per risk appetite).
 - [ ] Per-payment amount ceilings and merchant onboarding limits decided (not yet enforced in code — see verification report).
 

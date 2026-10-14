@@ -1,12 +1,13 @@
 import { EvmAdapter, createChainPublicClient, createChainWalletClient, loadDeployment, resolveRpcUrls } from "@plinth/blockchain";
 import { schema, type Database } from "@plinth/db";
-import { NETWORKS, operationalGate, type Deployment, type NetworkConfig } from "@plinth/shared";
+import { DEFAULT_FEE_BPS, NETWORKS, operationalGate, type Deployment, type NetworkConfig } from "@plinth/shared";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex, LocalAccount, PublicClient } from "viem";
 import { DefaultAlertSink } from "./alerts";
+import { checkChain } from "./deployment-check";
 import type { AlertSink, ChainRuntime, Engine, EngineConfig, Logger } from "./context";
 import { parseSecretKey } from "./crypto";
-import { resolveRelayerPolicy } from "./policy";
+import { resolvePolicyDetails } from "./policy";
 
 export const consoleLogger: Logger = {
   info: (m, c) => console.log(JSON.stringify({ level: "info", msg: m, ...c })),
@@ -68,6 +69,7 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
     allowPrivateWebhookTargets: env.ALLOW_PRIVATE_WEBHOOK_TARGETS === "true",
     alertWebhookUrl: env.ALERT_WEBHOOK_URL,
     sessionTtlSeconds: Number(env.SESSION_TTL_SECONDS ?? 60 * 60 * 24 * 7),
+    platformFeeBps: Number(env.PLATFORM_FEE_BPS ?? DEFAULT_FEE_BPS),
     ...opts.config,
   };
   const alerts = opts.alerts ?? new DefaultAlertSink(opts.db, log, cfg.alertWebhookUrl, undefined, now);
@@ -75,7 +77,8 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
   const chains = new Map<string, ChainRuntime>();
   const register = (network: NetworkConfig, deployment: Deployment | undefined, client?: PublicClient) => {
     const gate = operationalGate(network, deployment, { enabledNetworks: [...enabled, ...(opts.extraNetworks?.map((x) => x.network.id) ?? [])], allowMainnet });
-    const policy = resolveRelayerPolicy(network, env) ?? resolveRelayerPolicy({ ...network, environment: "testnet" }, env)!;
+    const resolved = resolvePolicyDetails(network, env);
+    const policy = resolved.policy;
     if (!deployment) return;
     const urls = resolveRpcUrls(network, env);
     let c = client;
@@ -84,26 +87,32 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
       c = createChainPublicClient(network, urls);
     }
     let signer: LocalAccount | undefined;
-    let policyBlocked = false;
+    const policyBlocked = false;
     if (gate.operational) {
-      if (network.environment === "mainnet" && resolveRelayerPolicy(network, env) === null) {
-        policyBlocked = true;
-        log.warn("mainnet relayer disabled: set RELAYER_POLICY_<NETWORK> to enable it", { network: network.id });
-      } else {
-        signer = signers.getSigner(network.id);
+      if (network.environment === "mainnet" && resolved.source === "default") {
+        log.warn("mainnet relayer is using the default spending limits for its tier; review RELAYER_POLICY_<NETWORK>", { network: network.id, tier: resolved.tier });
       }
+      signer = signers.getSigner(network.id);
     }
     chains.set(network.id, {
       network, deployment, adapter: new EvmAdapter(network, deployment, c), client: c, signer,
       wallet: signer && !client ? createChainWalletClient(network, urls, signer) : undefined, policy,
-      operational: gate.operational, gateReasons: policyBlocked ? [...gate.reasons, "relayer policy not configured"] : gate.reasons,
+      operational: gate.operational && !policyBlocked, gateReasons: policyBlocked ? [...gate.reasons, "relayer policy not configured"] : gate.reasons,
+      baseOperational: gate.operational && !policyBlocked, baseReasons: policyBlocked ? [...gate.reasons, "relayer policy not configured"] : gate.reasons,
     });
+    registryIds.add(network.id);
   };
+  const registryIds = new Set<string>();
 
   for (const net of Object.values(NETWORKS)) register(net, loadDeployment(net.id));
+  const registryOnly = new Set(registryIds);
   for (const x of opts.extraNetworks ?? []) register(x.network, x.deployment, x.client);
 
   const engine: Engine = { db: opts.db, cfg, chains, log, alerts, now };
+  // Read the deployed contracts back and compare them with the records before any network takes payments.
+  for (const chain of chains.values()) {
+    if (chain.baseOperational) await checkChain(engine, chain, registryOnly.has(chain.network.id));
+  }
   await syncNetworks(engine);
   return engine;
 }

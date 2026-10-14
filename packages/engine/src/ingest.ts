@@ -1,9 +1,10 @@
 import { and, eq, inArray, schema, type Executor } from "@plinth/db";
-import { newId, toBytes32Id } from "@plinth/shared";
+import { computeFee, formatFeePercent, newId, toBytes32Id, type DestinationKind } from "@plinth/shared";
 import type { HeadInfo, ObservedRouterPayment, ObservedSweep, ObservedTransfer } from "@plinth/blockchain";
 import { isAddressEqual, type Address, type Hex } from "viem";
 import { audit } from "./audit";
 import { chainOf, norm, type ChainRuntime, type Engine } from "./context";
+import { committedRoute } from "./payout-route";
 import { recomputeIntent } from "./recompute";
 import { emitEvent } from "./webhooks";
 
@@ -28,6 +29,38 @@ async function ledger(
       account, direction, amount, refType: ref.type, refId: ref.id, idempotencyKey: `${account}:${ref.id}:${direction}`,
     })
     .onConflictDoNothing();
+}
+
+/** The ledger account that records the net amount reaching the merchant, by where it went. */
+const settledAccount = (kind: DestinationKind) => (kind === "DIRECT" ? "SETTLED_TO_WALLET" : "SETTLED_TO_VAULT");
+
+async function destinationKindOf(tx: Executor, row: TxRow): Promise<DestinationKind> {
+  if (row.invoiceAddressId) {
+    const [a] = await tx.select().from(schema.invoiceAddresses).where(eq(schema.invoiceAddresses.id, row.invoiceAddressId));
+    if (a) return a.destinationKind as DestinationKind;
+  }
+  if (row.paymentIntentId) {
+    const r = await committedRoute(tx, row.paymentIntentId, row.networkId);
+    if (r) return r.destinationKind as DestinationKind;
+  }
+  return "VAULT";
+}
+
+/**
+ * The fee the contract reported must be exactly what the address committed to, or zero when the fee leg
+ * failed open (FeeSkipped). Anything else cannot happen on genuine contracts and is raised loudly.
+ * Facts win: the movement is recorded as observed either way.
+ */
+async function checkObservedFee(e: Engine, merchantId: string, intentId: string, networkId: string, amount: bigint, fee: bigint, feeBps: number, txHash: string) {
+  const expected = computeFee(amount, feeBps);
+  if (fee === expected) return;
+  if (fee === 0n) {
+    await audit(e.db, { merchantId, actor: { type: "SYSTEM" }, action: "fee.skipped", targetType: "payment_intent", targetId: intentId, data: { txHash, expected_units: expected.toString(), fee_bps: feeBps } });
+    await e.alerts.raise({ key: `fee-skipped:${txHash}`, severity: "warning", title: "Platform fee skipped (the treasury transfer failed); the merchant received the full amount", detail: { network: networkId, intent: intentId, txHash, expectedFeeUnits: expected.toString(), feePercent: formatFeePercent(feeBps) } });
+    return;
+  }
+  await audit(e.db, { merchantId, actor: { type: "SYSTEM" }, action: "fee.mismatch", targetType: "payment_intent", targetId: intentId, data: { txHash, expected_units: expected.toString(), observed_units: fee.toString() } });
+  await e.alerts.raise({ key: `fee-mismatch:${txHash}`, severity: "critical", title: "Observed platform fee differs from the committed fee", detail: { network: networkId, intent: intentId, txHash, expectedFeeUnits: expected.toString(), observedFeeUnits: fee.toString() } });
 }
 
 /** Insert an observation, or revive it if a previous sighting was reorged out and it re-appeared. */
@@ -109,23 +142,24 @@ export async function ingestSweep(e: Engine, chain: ChainRuntime, s: ObservedSwe
     .where(and(eq(schema.invoiceAddresses.networkId, net.id), eq(schema.invoiceAddresses.address, norm(s.emitter))));
   if (!addr) return;
   // The event must describe exactly the invoice this address was derived for.
-  if (addr.invoiceId32.toLowerCase() !== s.invoiceId.toLowerCase() || addr.merchantId32.toLowerCase() !== s.merchantId.toLowerCase() || norm(addr.vaultAddress) !== norm(s.vault) || !isAddressEqual(s.token, net.usdc.address)) {
+  if (addr.invoiceId32.toLowerCase() !== s.invoiceId.toLowerCase() || addr.merchantId32.toLowerCase() !== s.merchantId.toLowerCase() || norm(addr.destinationAddress) !== norm(s.destination) || addr.destinationKind !== s.kind || !isAddressEqual(s.token, net.usdc.address)) {
     await audit(e.db, { merchantId: addr.merchantId, actor: { type: "SYSTEM" }, action: "sweep.mismatch", targetType: "invoice_address", targetId: addr.id, data: { txHash: s.txHash } });
     return;
   }
   const meta = await chain.adapter.blockMeta(s.blockNumber);
   if (!meta || meta.hash.toLowerCase() !== s.blockHash.toLowerCase()) return;
+  await checkObservedFee(e, addr.merchantId, addr.paymentIntentId, net.id, s.amount, s.fee, addr.feeBps, s.txHash);
 
   await e.db.transaction(async (tx) => {
     const { row, isNew, revived } = await recordObserved(tx, {
       id: newId("tx"), networkId: net.id, txHash: s.txHash, logIndex: s.logIndex, kind: "SWEEP",
       merchantId: addr.merchantId, paymentIntentId: addr.paymentIntentId, invoiceAddressId: addr.id,
-      tokenAddress: norm(s.token), isOfficialAsset: true, fromAddress: norm(s.emitter), toAddress: norm(s.vault),
-      amount: s.amount, blockNumber: s.blockNumber, blockHash: s.blockHash, blockTimestamp: new Date(meta.timestamp * 1000),
+      tokenAddress: norm(s.token), isOfficialAsset: true, fromAddress: norm(s.emitter), toAddress: norm(s.destination),
+      amount: s.amount, feeAmount: s.fee, blockNumber: s.blockNumber, blockHash: s.blockHash, blockTimestamp: new Date(meta.timestamp * 1000),
       status: "DETECTED", verifiedAt: e.now(),
     });
     if (isNew || revived) {
-      await tx.insert(schema.paymentEvents).values({ id: newId("pev"), paymentIntentId: addr.paymentIntentId, type: "settlement.swept", data: { network: net.id, tx_hash: s.txHash, amount_units: s.amount.toString() } });
+      await tx.insert(schema.paymentEvents).values({ id: newId("pev"), paymentIntentId: addr.paymentIntentId, type: "settlement.swept", data: { network: net.id, tx_hash: s.txHash, amount_units: s.amount.toString(), fee_units: s.fee.toString(), destination: s.destination, destination_kind: s.kind } });
       // Link to our orchestration record if this was our relayer's transaction.
       const open = await tx
         .select()
@@ -133,12 +167,12 @@ export async function ingestSweep(e: Engine, chain: ChainRuntime, s: ObservedSwe
         .where(and(eq(schema.settlements.invoiceAddressId, addr.id), inArray(schema.settlements.status, ["QUEUED", "SUBMITTED"])));
       const ours = open.find((o) => o.txHash?.toLowerCase() === s.txHash.toLowerCase()) ?? open[0];
       if (ours) {
-        await tx.update(schema.settlements).set({ status: "SUBMITTED", txHash: s.txHash, sweptAmount: s.amount }).where(eq(schema.settlements.id, ours.id));
+        await tx.update(schema.settlements).set({ status: "SUBMITTED", txHash: s.txHash, sweptAmount: s.amount, feeAmount: s.fee, netAmount: s.amount - s.fee }).where(eq(schema.settlements.id, ours.id));
       } else {
         // Someone else (e.g. the merchant) triggered the sweep: record it so accounting stays complete.
         await tx.insert(schema.settlements).values({
           id: newId("stl"), merchantId: addr.merchantId, paymentIntentId: addr.paymentIntentId, invoiceAddressId: addr.id, networkId: net.id,
-          kind: "SWEEP", status: "SUBMITTED", vaultAddress: addr.vaultAddress, expectedAmount: s.amount, sweptAmount: s.amount, txHash: s.txHash,
+          kind: "SWEEP", status: "SUBMITTED", vaultAddress: addr.vaultAddress, destinationKind: addr.destinationKind, destinationAddress: addr.destinationAddress, expectedAmount: s.amount, sweptAmount: s.amount, feeAmount: s.fee, netAmount: s.amount - s.fee, txHash: s.txHash,
         });
       }
     }
@@ -154,29 +188,28 @@ export async function ingestRouterPayment(e: Engine, chain: ChainRuntime, p: Obs
   if (!isAddressEqual(p.emitter, chain.deployment.paymentRouter)) return;
   const [intent] = await e.db.select().from(schema.paymentIntents).where(eq(schema.paymentIntents.invoiceId32, p.invoiceId.toLowerCase()));
   if (!intent) return;
-  const [vault] = await e.db
-    .select()
-    .from(schema.merchantVaults)
-    .where(and(eq(schema.merchantVaults.merchantId, intent.merchantId), eq(schema.merchantVaults.networkId, net.id)));
-  if (!vault || norm(vault.vaultAddress) !== norm(p.vault) || toBytes32Id(intent.merchantId).toLowerCase() !== p.merchantId.toLowerCase()) {
+  // The payment must match the route committed when the intent was created (destination, kind), not the current settings.
+  const route = await committedRoute(e.db, intent.id, net.id);
+  if (!route || norm(route.destinationAddress) !== norm(p.destination) || route.destinationKind !== p.kind || toBytes32Id(intent.merchantId).toLowerCase() !== p.merchantId.toLowerCase()) {
     await audit(e.db, { merchantId: intent.merchantId, actor: { type: "SYSTEM" }, action: "router_payment.mismatch", targetType: "payment_intent", targetId: intent.id, data: { txHash: p.txHash } });
     return;
   }
   const meta = await chain.adapter.blockMeta(p.blockNumber);
   if (!meta || meta.hash.toLowerCase() !== p.blockHash.toLowerCase()) return;
+  await checkObservedFee(e, intent.merchantId, intent.id, net.id, p.amount, p.fee, route.feeBps, p.txHash);
 
   await e.db.transaction(async (tx) => {
     const { row, isNew, revived } = await recordObserved(tx, {
       id: newId("tx"), networkId: net.id, txHash: p.txHash, logIndex: p.logIndex, kind: "WALLET_PAYMENT",
       merchantId: intent.merchantId, paymentIntentId: intent.id, tokenAddress: norm(net.usdc.address), isOfficialAsset: true,
-      fromAddress: norm(p.payer), toAddress: norm(p.vault), amount: p.amount, blockNumber: p.blockNumber, blockHash: p.blockHash,
+      fromAddress: norm(p.payer), toAddress: norm(p.destination), amount: p.amount, feeAmount: p.fee, blockNumber: p.blockNumber, blockHash: p.blockHash,
       blockTimestamp: new Date(meta.timestamp * 1000), status: "DETECTED", verifiedAt: e.now(),
     });
     if (isNew || revived) {
       const ref = { type: "transaction", id: row.id };
       await ledger(tx, row, "DETECTED", "CREDIT", row.amount, ref);
       await ledger(tx, row, "VERIFIED", "CREDIT", row.amount, ref);
-      await tx.insert(schema.paymentEvents).values({ id: newId("pev"), paymentIntentId: intent.id, type: "wallet_payment.detected", data: { network: net.id, tx_hash: p.txHash, payer: row.fromAddress, amount_units: p.amount.toString() } });
+      await tx.insert(schema.paymentEvents).values({ id: newId("pev"), paymentIntentId: intent.id, type: "wallet_payment.detected", data: { network: net.id, tx_hash: p.txHash, payer: row.fromAddress, amount_units: p.amount.toString(), fee_units: p.fee.toString(), destination: p.destination, destination_kind: p.kind } });
       await tx
         .update(schema.paymentAttempts)
         .set({ status: "CONFIRMED", txHash: p.txHash, updatedAt: e.now() })
@@ -210,19 +243,23 @@ async function onFinal(e: Engine, tx: Executor, row: TxRow) {
   if (row.kind === "INCOMING_TRANSFER" && row.isOfficialAsset) {
     await ledger(tx, row, "FINALIZED", "CREDIT", row.amount, ref);
   } else if (row.kind === "WALLET_PAYMENT") {
+    const fee = row.feeAmount ?? 0n;
     await ledger(tx, row, "FINALIZED", "CREDIT", row.amount, ref);
-    await ledger(tx, row, "SETTLED_TO_VAULT", "CREDIT", row.amount, ref);
+    await ledger(tx, row, settledAccount(await destinationKindOf(tx, row)), "CREDIT", row.amount - fee, ref);
+    await ledger(tx, row, "PLATFORM_FEE", "CREDIT", fee, ref);
   } else if (row.kind === "SWEEP") {
-    await ledger(tx, row, "SETTLED_TO_VAULT", "CREDIT", row.amount, ref);
+    const fee = row.feeAmount ?? 0n;
+    await ledger(tx, row, settledAccount(await destinationKindOf(tx, row)), "CREDIT", row.amount - fee, ref);
+    await ledger(tx, row, "PLATFORM_FEE", "CREDIT", fee, ref);
     const [stl] = await tx
       .select()
       .from(schema.settlements)
       .where(and(eq(schema.settlements.invoiceAddressId, row.invoiceAddressId ?? ""), eq(schema.settlements.txHash, row.txHash)));
     if (stl && stl.status !== "CONFIRMED") {
-      await tx.update(schema.settlements).set({ status: "CONFIRMED", sweptAmount: row.amount, confirmedAt: e.now() }).where(eq(schema.settlements.id, stl.id));
+      await tx.update(schema.settlements).set({ status: "CONFIRMED", sweptAmount: row.amount, feeAmount: row.feeAmount ?? 0n, netAmount: row.amount - (row.feeAmount ?? 0n), confirmedAt: e.now() }).where(eq(schema.settlements.id, stl.id));
       const [m] = await tx.select().from(schema.paymentIntents).where(eq(schema.paymentIntents.id, row.paymentIntentId ?? ""));
       if (m) {
-        await emitEvent(e, tx, { merchantId: m.merchantId, environment: m.environment, type: "settlement.completed", paymentIntentId: m.id, dedupeKey: `settlement.completed:${stl.id}`, extra: { settlement: { id: stl.id, tx_hash: row.txHash, amount_units: row.amount.toString(), network: row.networkId } } });
+        await emitEvent(e, tx, { merchantId: m.merchantId, environment: m.environment, type: "settlement.completed", paymentIntentId: m.id, dedupeKey: `settlement.completed:${stl.id}`, extra: { settlement: { id: stl.id, tx_hash: row.txHash, amount_units: row.amount.toString(), fee_units: (row.feeAmount ?? 0n).toString(), net_units: (row.amount - (row.feeAmount ?? 0n)).toString(), destination: stl.destinationAddress, destination_kind: stl.destinationKind, network: row.networkId } } });
       }
     }
   }

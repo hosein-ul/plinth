@@ -44,6 +44,11 @@ export async function recomputeIntent(e: Engine, tx: Executor, intentId: string)
     .filter((t) => t.status === "FINAL" && t.isOfficialAsset && (t.kind === "SWEEP" || t.kind === "WALLET_PAYMENT"))
     .reduce((a, t) => a + t.amount, 0n);
 
+  // The platform fee carried by those same final movements; the merchant received settled - fee.
+  const feeAmount = observed
+    .filter((t) => t.status === "FINAL" && t.isOfficialAsset && (t.kind === "SWEEP" || t.kind === "WALLET_PAYMENT"))
+    .reduce((a, t) => a + (t.feeAmount ?? 0n), 0n);
+
   const refunds = await tx.select().from(schema.refunds).where(eq(schema.refunds.paymentIntentId, intentId));
   const refundRequested = refunds.some((r) => r.status === "REQUESTED");
   const refundedAmount = refunds.filter((r) => r.status === "COMPLETED").reduce((a, r) => a + r.amount, 0n);
@@ -86,6 +91,8 @@ export async function recomputeIntent(e: Engine, tx: Executor, intentId: string)
       amountFinal: d.finalAmount,
       amountEligible: d.eligibleAmount,
       amountSettled: settledAmount,
+      feeAmount,
+      netAmount: settledAmount - feeAmount,
       amountRefunded: refundedAmount,
       excessAmount: d.excessAmount,
       updatedAt: changed ? now : intent.updatedAt,

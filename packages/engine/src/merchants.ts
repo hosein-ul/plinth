@@ -1,10 +1,11 @@
 import { and, eq, schema } from "@plinth/db";
-import { NETWORKS, newId, operationalGate, toBytes32Id } from "@plinth/shared";
+import { formatFeePercent, MAX_FEE_BPS, NETWORKS, newId, operationalGate, toBytes32Id, treasuryFor } from "@plinth/shared";
 import { encodeFunctionData, getAddress, type Address } from "viem";
 import { MerchantVaultAbi } from "@plinth/blockchain";
 import { audit } from "./audit";
 import { requirePermission, type AuthContext } from "./auth";
 import { chainOf, EngineError, norm, type Engine } from "./context";
+import { feeBpsFor } from "./payout-route";
 
 /**
  * Enable a network for a merchant: derive their vault address, record it, and have the gateway relayer
@@ -118,6 +119,7 @@ function readable(reason: string): string {
 
 export async function listNetworks(e: Engine, ctx: AuthContext) {
   const vaults = await e.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, ctx.merchantId));
+  const [merchant] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, ctx.merchantId));
   const live = [...e.chains.values()].map((c) => {
     const v = vaults.find((x) => x.networkId === c.network.id);
     return {
@@ -131,6 +133,8 @@ export async function listNetworks(e: Engine, ctx: AuthContext) {
       circle: c.network.circle,
       contracts: c.operational ? { vault_factory: c.deployment.vaultFactory, invoice_factory: c.deployment.invoiceFactory, invoice_implementation: c.deployment.invoiceImplementation, payment_router: c.deployment.paymentRouter, version: c.deployment.version } : null,
       relayer_address: c.signer?.address ?? null,
+      // What the platform takes on this network for this merchant: committed into every invoice address when it is issued.
+      fee: { bps: feeBpsFor(e, merchant?.feeBps, c), percent: formatFeePercent(feeBpsFor(e, merchant?.feeBps, c)), max_bps: c.deployment.maxFeeBps, treasury: getAddress(c.deployment.treasury) },
       vault: v ? vaultSummary(c.network.explorerUrl, v) : null,
     };
   });
@@ -147,6 +151,7 @@ export async function listNetworks(e: Engine, ctx: AuthContext) {
       finality: { strategy: n.finality.strategy, confirmations: n.finality.confirmations },
       circle: n.circle,
       contracts: null, relayer_address: null, vault: null,
+      fee: { bps: e.cfg.platformFeeBps, percent: formatFeePercent(e.cfg.platformFeeBps), max_bps: MAX_FEE_BPS, treasury: treasuryFor(n.id) },
     }));
   return [...live, ...pending];
 }

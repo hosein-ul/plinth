@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, schema } from "@plinth/db";
 import { buildReceiveAuthorization, MerchantVaultAbi } from "@plinth/blockchain";
-import { parseUsdc, toBytes32Id } from "@plinth/shared";
+import { computeFee, DEFAULT_FEE_BPS, parseUsdc, toBytes32Id } from "@plinth/shared";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { encodeFunctionData, getAddress, parseAbiItem } from "viem";
 import {
@@ -64,7 +64,13 @@ describe("manual address checkout: partial → full payment", () => {
     expect(d.excess_amount).toBe("0.00");
     // The 40 USDC was swept into the merchant vault with no gas ever sent to the invoice address.
     const vault = getAddress((await h.engine.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, m.merchantId)))[0]!.vaultAddress);
-    expect(await h.engine.chains.get(h.net)!.adapter.usdcBalanceOf(vault)).toBe(parseUsdc("40"));
+    // The platform fee (0.20%) goes to the treasury in the same transaction; the vault receives the rest.
+    const fee40 = computeFee(parseUsdc("40"), DEFAULT_FEE_BPS);
+    expect(fee40).toBe(80_000n);
+    expect(await h.engine.chains.get(h.net)!.adapter.usdcBalanceOf(vault)).toBe(parseUsdc("40") - fee40);
+    expect(await h.engine.chains.get(h.net)!.adapter.usdcBalanceOf(h.chain.treasury)).toBe(fee40);
+    expect(d.fee_amount_units).toBe(fee40.toString());
+    expect(d.net_amount_units).toBe((parseUsdc("40") - fee40).toString());
     expect(await h.chain.publicClient.getBalance({ address })).toBe(0n);
     expect(d.settlements[0]!.status).toBe("CONFIRMED");
     expect(events()).not.toContain("payment.confirmed");
@@ -76,9 +82,12 @@ describe("manual address checkout: partial → full payment", () => {
     const d = await paymentDetail(h.engine, m, id);
     expect(d.status).toBe("SETTLED");
     expect(d.amount_received_units).toBe("100000000");
-    expect(d.amount_settled_units).toBe("100000000");
+    expect(d.amount_settled_units).toBe("100000000"); // gross: what the customer paid and was swept
+    expect(d.fee_amount_units).toBe("200000");
+    expect(d.net_amount_units).toBe("99800000");
     const vault = getAddress((await h.engine.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, m.merchantId)))[0]!.vaultAddress);
-    expect(await h.engine.chains.get(h.net)!.adapter.usdcBalanceOf(vault)).toBe(parseUsdc("100"));
+    expect(await h.engine.chains.get(h.net)!.adapter.usdcBalanceOf(vault)).toBe(parseUsdc("100") - 200_000n);
+    expect(await h.engine.chains.get(h.net)!.adapter.usdcBalanceOf(h.chain.treasury)).toBe(200_000n);
 
     const types = events();
     for (const t of ["payment.detected", "payment.confirmed", "settlement.submitted", "settlement.completed", "payment.completed"]) expect(types).toContain(t);
@@ -100,7 +109,9 @@ describe("manual address checkout: partial → full payment", () => {
     expect(total("DETECTED")).toBe(parseUsdc("100"));
     expect(total("VERIFIED")).toBe(parseUsdc("100"));
     expect(total("FINALIZED")).toBe(parseUsdc("100"));
-    expect(total("SETTLED_TO_VAULT")).toBe(parseUsdc("100"));
+    expect(total("SETTLED_TO_VAULT")).toBe(parseUsdc("100") - 200_000n); // net of the platform fee
+    expect(total("PLATFORM_FEE")).toBe(200_000n);
+    expect(total("SETTLED_TO_VAULT") + total("PLATFORM_FEE")).toBe(total("FINALIZED"));
   });
 
   it("re-running the watcher and workers is idempotent: no duplicate transfers, settlements, ledger rows or webhooks", async () => {
@@ -192,9 +203,9 @@ describe("failure handling", () => {
   it("a settlement that reverts is SETTLEMENT_FAILED, alerts, spends no gas, and recovers after the cause is fixed", async () => {
     const pi = await createPaymentIntent(h.engine, m, input("20.00"));
     const [addr] = await h.engine.db.select().from(schema.invoiceAddresses).where(eq(schema.invoiceAddresses.paymentIntentId, pi.id));
-    const goodVault = addr!.vaultAddress;
-    // Corrupt the vault the settlement would target (a registered-vault check fails on-chain).
-    await h.engine.db.update(schema.invoiceAddresses).set({ vaultAddress: h.chain.accounts[5]!.address.toLowerCase() }).where(eq(schema.invoiceAddresses.id, addr!.id));
+    const goodDestination = addr!.destinationAddress;
+    // Corrupt the destination the settlement would target (a registered-vault check fails on-chain).
+    await h.engine.db.update(schema.invoiceAddresses).set({ destinationAddress: h.chain.accounts[5]!.address.toLowerCase() }).where(eq(schema.invoiceAddresses.id, addr!.id));
     const gasBefore = await h.chain.publicClient.getBalance({ address: h.chain.accounts[1]!.address });
     await h.payUsdc(pi.networks[0]!.deposit_address as `0x${string}`, parseUsdc("20"));
     await h.pump(8);
@@ -204,7 +215,7 @@ describe("failure handling", () => {
     expect(h.alerts.alerts.some((a) => a.key.startsWith("op-failed"))).toBe(true);
 
     // Fix the cause; after the retry back-off the planner creates attempt #2 and it succeeds.
-    await h.engine.db.update(schema.invoiceAddresses).set({ vaultAddress: goodVault }).where(eq(schema.invoiceAddresses.id, addr!.id));
+    await h.engine.db.update(schema.invoiceAddresses).set({ destinationAddress: goodDestination }).where(eq(schema.invoiceAddresses.id, addr!.id));
     h.clock.offsetMs += 10 * 60_000;
     await h.chain.setTime(Math.floor((Date.now() + h.clock.offsetMs) / 1000));
     await replanSettlements(h.engine);

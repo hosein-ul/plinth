@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, ilike, inArray, lt, or, schema, sql, type Executor } from "@plinth/db";
 import { DEFAULT_EXPIRY_SECONDS, formatUsdc, newId, parseUsdc, toBytes32Id, type CreatePaymentIntentInput } from "@plinth/shared";
-import { InvoiceFactoryAbi } from "@plinth/blockchain";
 import { getAddress, type Hex } from "viem";
 import { audit } from "./audit";
 import { requirePermission, type AuthContext } from "./auth";
 import { EngineError, norm, type Engine } from "./context";
+import { resolveRoute, type PayoutRoute } from "./payout-route";
 import { loadIntentView, loadIntentViews, type IntentView } from "./view";
 
 export interface CreateOpts {
@@ -27,18 +27,23 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
   const wantEnv = ctx.environment === "live" ? "mainnet" : "testnet";
 
   const vaults = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.status, "ACTIVE")));
-  const candidates = [...e.chains.values()].filter(
-    (c) => c.operational && c.network.environment === wantEnv && (!input.networks || input.networks.includes(c.network.id)) && vaults.some((v) => v.networkId === c.network.id),
-  );
+  const [merchant] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, ctx.merchantId));
   if (input.networks) {
     const unknown = input.networks.filter((n) => !e.chains.has(n));
     if (unknown.length) throw new EngineError("UNKNOWN_NETWORK", `Unknown network(s): ${unknown.join(", ")}`, 400);
   }
+  // A network is offered only when the merchant can actually be paid there: an active vault, or an active payout wallet.
+  const routes: PayoutRoute[] = [];
+  for (const c of e.chains.values()) {
+    if (!c.operational || c.network.environment !== wantEnv || (input.networks && !input.networks.includes(c.network.id))) continue;
+    const r = await resolveRoute(e, opts.tx ?? e.db, merchant!, c, vaults);
+    if (r) routes.push(r);
+  }
+  const candidates = [...e.chains.values()].filter((c) => routes.some((r) => r.networkId === c.network.id));
   if (candidates.length === 0) {
-    throw new EngineError("NO_NETWORK_AVAILABLE", `No ${wantEnv} network is available. Enable a network with an active vault first.`, 422);
+    throw new EngineError("NO_NETWORK_AVAILABLE", `No ${wantEnv} network is available. Set up a payout method on a network first (a vault, or a payout wallet).`, 422);
   }
 
-  const [merchant] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, ctx.merchantId));
   const id = newId("pi");
   const invoiceId32 = toBytes32Id(id);
   const merchantId32 = toBytes32Id(ctx.merchantId);
@@ -46,18 +51,18 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
   const methods = input.checkout_methods ?? ["WALLET", "ADDRESS"];
 
   // Derive addresses (and cross-check them against the deployed factory) BEFORE touching the DB.
-  const addresses: { chain: (typeof candidates)[number]; address: string; vault: string; createdBlock: bigint }[] = [];
+  const addresses: { chain: (typeof candidates)[number]; address: string; route: PayoutRoute; createdBlock: bigint }[] = [];
   if (methods.includes("ADDRESS")) {
     for (const chain of candidates) {
-      const vault = vaults.find((v) => v.networkId === chain.network.id)!.vaultAddress as Hex;
-      const offline = chain.adapter.predictInvoiceAddress(vault, merchantId32, invoiceId32);
-      const onchain = await chain.client.readContract({ address: chain.deployment.invoiceFactory, abi: InvoiceFactoryAbi, functionName: "predict", args: [merchantId32, invoiceId32, vault] });
+      const route = routes.find((r) => r.networkId === chain.network.id)!;
+      const offline = chain.adapter.predictInvoiceAddress(route, merchantId32, invoiceId32);
+      const onchain = await chain.adapter.predictInvoiceAddressOnChain(route, merchantId32, invoiceId32);
       if (norm(offline) !== norm(onchain)) {
         // Never show an address we cannot prove. This indicates a registry/deployment mismatch.
         e.log.error("invoice address derivation mismatch", { network: chain.network.id, offline, onchain });
         throw new EngineError("ADDRESS_DERIVATION_MISMATCH", "Could not derive a verified deposit address for this network", 500);
       }
-      addresses.push({ chain, address: offline, vault, createdBlock: await chain.client.getBlockNumber() });
+      addresses.push({ chain, address: offline, route, createdBlock: await chain.client.getBlockNumber() });
     }
   }
 
@@ -68,9 +73,18 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
       allowedNetworks: candidates.map((c) => c.network.id), checkoutMethods: methods, status: "AWAITING_PAYMENT", expiresAt,
       customerEmail: input.customer_email ?? null, successUrl: input.success_url ?? null, cancelUrl: input.cancel_url ?? null, metadata: input.metadata ?? {},
     });
+    // The route is committed per network whichever checkout method is used, so a wallet payment and a deposit address always agree.
+    for (const r of routes.filter((x) => candidates.some((c) => c.network.id === x.networkId))) {
+      await tx.insert(schema.paymentIntentRoutes).values({
+        id: newId("prt"), paymentIntentId: id, networkId: r.networkId, destinationKind: r.kind, destinationAddress: norm(r.destination),
+        feeBps: r.feeBps, treasuryAddress: norm(r.treasury), payoutConfigId: r.payoutConfigId,
+      });
+    }
     for (const a of addresses) {
       await tx.insert(schema.invoiceAddresses).values({
-        id: newId("inv").replace("inv_", "ia_"), paymentIntentId: id, merchantId: ctx.merchantId, networkId: a.chain.network.id, address: norm(a.address), vaultAddress: norm(a.vault),
+        id: newId("inv").replace("inv_", "ia_"), paymentIntentId: id, merchantId: ctx.merchantId, networkId: a.chain.network.id, address: norm(a.address),
+        vaultAddress: a.route.kind === "VAULT" ? norm(a.route.destination) : null, destinationKind: a.route.kind, destinationAddress: norm(a.route.destination),
+        feeBps: a.route.feeBps, treasuryAddress: norm(a.route.treasury),
         merchantId32, invoiceId32, factoryAddress: norm(a.chain.deployment.invoiceFactory), implementationAddress: norm(a.chain.deployment.invoiceImplementation),
         contractVersion: a.chain.deployment.version, createdBlock: a.createdBlock,
       });
@@ -121,13 +135,14 @@ export async function listPayments(e: Engine, ctx: AuthContext, f: ListFilter = 
 /** Full detail for the payment page: timeline, every observed on-chain movement, settlements, attempts, refunds. */
 export async function paymentDetail(e: Engine, ctx: AuthContext, id: string) {
   const view = await getPaymentIntent(e, ctx, id);
-  const [timeline, txs, stls, attempts, refunds, addrs] = await Promise.all([
+  const [timeline, txs, stls, attempts, refunds, addrs, routes] = await Promise.all([
     e.db.select().from(schema.paymentEvents).where(eq(schema.paymentEvents.paymentIntentId, id)).orderBy(schema.paymentEvents.createdAt),
     e.db.select().from(schema.transactions).where(eq(schema.transactions.paymentIntentId, id)).orderBy(schema.transactions.firstSeenAt),
     e.db.select().from(schema.settlements).where(eq(schema.settlements.paymentIntentId, id)).orderBy(schema.settlements.createdAt),
     e.db.select().from(schema.paymentAttempts).where(eq(schema.paymentAttempts.paymentIntentId, id)).orderBy(schema.paymentAttempts.createdAt),
     e.db.select().from(schema.refunds).where(eq(schema.refunds.paymentIntentId, id)),
     e.db.select().from(schema.invoiceAddresses).where(eq(schema.invoiceAddresses.paymentIntentId, id)),
+    e.db.select().from(schema.paymentIntentRoutes).where(eq(schema.paymentIntentRoutes.paymentIntentId, id)),
   ]);
   const explorer = (net: string, path: string) => `${e.chains.get(net)?.network.explorerUrl ?? ""}/${path}`;
   return {
@@ -136,13 +151,16 @@ export async function paymentDetail(e: Engine, ctx: AuthContext, id: string) {
     transactions: txs.map((t) => ({
       id: t.id, kind: t.kind, network: t.networkId, tx_hash: t.txHash, log_index: t.logIndex, status: t.status, official_asset: t.isOfficialAsset,
       token: t.tokenAddress ? getAddress(t.tokenAddress) : null, from: t.fromAddress ? getAddress(t.fromAddress) : null, to: t.toAddress ? getAddress(t.toAddress) : null,
-      amount: formatUsdc(t.amount), amount_units: t.amount.toString(), block_number: t.blockNumber?.toString() ?? null, confirmations: t.confirmations,
+      amount: formatUsdc(t.amount), amount_units: t.amount.toString(), fee_units: t.feeAmount?.toString() ?? null, block_number: t.blockNumber?.toString() ?? null, confirmations: t.confirmations,
       block_time: t.blockTimestamp?.toISOString() ?? null, explorer_url: explorer(t.networkId, `tx/${t.txHash}`),
     })),
-    settlements: stls.map((s) => ({ id: s.id, network: s.networkId, kind: s.kind, status: s.status, attempt: s.attemptNo, expected_units: s.expectedAmount.toString(), swept_units: s.sweptAmount?.toString() ?? null, tx_hash: s.txHash, failure_reason: s.failureReason, vault: getAddress(s.vaultAddress), created_at: s.createdAt.toISOString(), confirmed_at: s.confirmedAt?.toISOString() ?? null, explorer_url: s.txHash ? explorer(s.networkId, `tx/${s.txHash}`) : null })),
+    settlements: stls.map((s) => ({ id: s.id, network: s.networkId, kind: s.kind, status: s.status, attempt: s.attemptNo, expected_units: s.expectedAmount.toString(), swept_units: s.sweptAmount?.toString() ?? null, tx_hash: s.txHash, failure_reason: s.failureReason, vault: s.vaultAddress ? getAddress(s.vaultAddress) : null, destination: getAddress(s.destinationAddress), destination_kind: s.destinationKind,
+      fee_units: s.feeAmount?.toString() ?? null, net_units: s.netAmount?.toString() ?? null, created_at: s.createdAt.toISOString(), confirmed_at: s.confirmedAt?.toISOString() ?? null, explorer_url: s.txHash ? explorer(s.networkId, `tx/${s.txHash}`) : null })),
     attempts: attempts.map((a) => ({ id: a.id, method: a.method, network: a.networkId, status: a.status, payer: a.payer, tx_hash: a.txHash, error: a.error, created_at: a.createdAt.toISOString() })),
     refunds: refunds.map((r) => ({ id: r.id, status: r.status, amount: formatUsdc(r.amount), recipient: getAddress(r.recipient), tx_hash: r.txHash })),
-    invoice_addresses: addrs.map((a) => ({ network: a.networkId, address: getAddress(a.address), vault: getAddress(a.vaultAddress), deployed: !!a.deployedAt, deploy_tx_hash: a.deployTxHash, factory: getAddress(a.factoryAddress), contract_version: a.contractVersion })),
+    /** The payout route committed per network when the payment was created (merchant-only view). */
+    payout_routes: routes.map((r) => ({ network: r.networkId, mode: r.destinationKind, destination: getAddress(r.destinationAddress), fee_bps: r.feeBps, treasury: getAddress(r.treasuryAddress) })),
+    invoice_addresses: addrs.map((a) => ({ network: a.networkId, address: getAddress(a.address), vault: a.vaultAddress ? getAddress(a.vaultAddress) : null, destination: getAddress(a.destinationAddress), destination_kind: a.destinationKind, fee_bps: a.feeBps, deployed: !!a.deployedAt, deploy_tx_hash: a.deployTxHash, factory: getAddress(a.factoryAddress), contract_version: a.contractVersion })),
   };
 }
 

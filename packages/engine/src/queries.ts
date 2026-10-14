@@ -26,6 +26,8 @@ export async function overview(e: Engine, ctx: AuthContext, days = 30) {
       settlementFailed: sql<number>`count(*) filter (where ${schema.paymentIntents.status} = 'SETTLEMENT_FAILED')::int`,
       receivedFinal: sql<string>`coalesce(sum(${schema.paymentIntents.amountFinal}), 0)`,
       settled: sql<string>`coalesce(sum(${schema.paymentIntents.amountSettled}), 0)`,
+      fees: sql<string>`coalesce(sum(${schema.paymentIntents.feeAmount}), 0)`,
+      net: sql<string>`coalesce(sum(${schema.paymentIntents.netAmount}), 0)`,
       pending: sql<string>`coalesce(sum(${schema.paymentIntents.amountPending}), 0)`,
       refunded: sql<string>`coalesce(sum(${schema.paymentIntents.amountRefunded}), 0)`,
     })
@@ -54,7 +56,11 @@ export async function overview(e: Engine, ctx: AuthContext, days = 30) {
     window_days: days,
     livemode: ctx.environment === "live",
     received_final: money(agg?.receivedFinal),
+    /** Funds that left invoice addresses for the merchant, before the platform fee. Kept under the old key for existing clients. */
     settled_to_vault: money(agg?.settled),
+    settled: money(agg?.settled),
+    platform_fees: money(agg?.fees),
+    net_settled: money(agg?.net),
     pending: money(agg?.pending),
     refunded: money(agg?.refunded),
     counts: { total: agg?.total ?? 0, successful: agg?.fulfilled ?? 0, pending: agg?.open ?? 0, failed: agg?.failed ?? 0, settlement_failed: agg?.settlementFailed ?? 0 },
@@ -76,7 +82,7 @@ export async function listTransactions(e: Engine, ctx: AuthContext, limit = 100)
     .limit(Math.min(limit, 200));
   return rows.map(({ t }) => ({
     id: t.id, kind: t.kind, network: t.networkId, tx_hash: t.txHash, log_index: t.logIndex, payment_intent_id: t.paymentIntentId, status: t.status, official_asset: t.isOfficialAsset,
-    from: t.fromAddress ? getAddress(t.fromAddress) : null, to: t.toAddress ? getAddress(t.toAddress) : null, amount: formatUsdc(t.amount), amount_units: t.amount.toString(),
+    from: t.fromAddress ? getAddress(t.fromAddress) : null, to: t.toAddress ? getAddress(t.toAddress) : null, amount: formatUsdc(t.amount), amount_units: t.amount.toString(), fee_units: t.feeAmount?.toString() ?? null,
     confirmations: t.confirmations, block_number: t.blockNumber?.toString() ?? null, seen_at: t.firstSeenAt.toISOString(),
     explorer_url: `${e.chains.get(t.networkId)?.network.explorerUrl ?? ""}/tx/${t.txHash}`,
   }));
@@ -89,7 +95,8 @@ export async function listSettlements(e: Engine, ctx: AuthContext, limit = 100) 
     const op = ops.find((o) => o.id === s.relayerOperationId);
     return {
       id: s.id, object: "settlement", payment_intent_id: s.paymentIntentId, network: s.networkId, kind: s.kind, status: s.status, attempt: s.attemptNo,
-      vault: getAddress(s.vaultAddress), expected_amount: formatUsdc(s.expectedAmount), swept_amount: s.sweptAmount !== null ? formatUsdc(s.sweptAmount) : null,
+      vault: s.vaultAddress ? getAddress(s.vaultAddress) : null, destination: getAddress(s.destinationAddress), destination_kind: s.destinationKind,
+      fee: s.feeAmount !== null ? formatUsdc(s.feeAmount, { minDecimals: 2 }) : null, net: s.netAmount !== null ? formatUsdc(s.netAmount) : null, expected_amount: formatUsdc(s.expectedAmount), swept_amount: s.sweptAmount !== null ? formatUsdc(s.sweptAmount) : null,
       tx_hash: s.txHash, failure_reason: s.failureReason, created_at: s.createdAt.toISOString(), confirmed_at: s.confirmedAt?.toISOString() ?? null,
       relayer_fee: op?.feeNativeWei !== null && op?.feeNativeWei !== undefined ? { native_wei: op.feeNativeWei.toString(), native_symbol: e.chains.get(s.networkId)?.network.nativeCurrency.symbol, usdc: op.feeUsdcUnits !== null && op.feeUsdcUnits !== undefined ? formatUsdc(op.feeUsdcUnits, { minDecimals: 6 }) : null } : null,
       explorer_url: s.txHash ? `${e.chains.get(s.networkId)?.network.explorerUrl}/tx/${s.txHash}` : null,

@@ -3,7 +3,7 @@ import { eq } from "@plinth/db";
 import { connect, schema, type DbHandle } from "@plinth/db";
 import { MockFiatTokenAbi } from "@plinth/blockchain";
 import { startDevChain, type DevChain } from "@plinth/blockchain/dev";
-import { parseUsdc } from "@plinth/shared";
+import { computeFee, DEFAULT_FEE_BPS, parseUsdc } from "@plinth/shared";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import type { Address } from "viem";
 import {
@@ -80,7 +80,7 @@ describe("one payment engine, several networks", () => {
     expect(d.status).toBe("SETTLED");
     expect(d.transactions.every((t: any) => t.network === "dev-b")).toBe(true);
     const [vA, vB] = await Promise.all(["dev-a", "dev-b"].map(async (n) => (await engine.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.networkId, n)))[0]!.vaultAddress as Address));
-    expect(await engine.chains.get("dev-b")!.adapter.usdcBalanceOf(vB!)).toBeGreaterThanOrEqual(parseUsdc("7"));
+    expect(await engine.chains.get("dev-b")!.adapter.usdcBalanceOf(vB!)).toBe(parseUsdc("7") - computeFee(parseUsdc("7"), DEFAULT_FEE_BPS));
     expect(await engine.chains.get("dev-a")!.adapter.usdcBalanceOf(vA!)).toBe(0n);
   });
 
