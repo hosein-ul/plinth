@@ -46,8 +46,8 @@ const NETS: [string, string][] = [["base-mainnet", "Base"], ["arbitrum-mainnet",
 function V1() {
   return (
     <div className="max-w-[24rem] rounded-2xl rounded-bl-md border border-line bg-raised p-4 shadow-low">
-      <p className="text-sm font-medium text-ink">Studio membership</p>
-      <p className="mt-0.5 text-sm text-ink-3">Private channel, 30 days of access.</p>
+      <p className="text-sm font-medium text-ink">Order #1042</p>
+      <p className="mt-0.5 text-sm text-ink-3">2 items, delivery included.</p>
       <div className="mt-3 grid h-10 place-items-center rounded-xl bg-ink text-sm font-medium text-on-ink">Pay 25 USDC</div>
     </div>
   );
@@ -72,17 +72,17 @@ function V4() {
   return (
     <div className="max-w-[24rem] space-y-2.5">
       <div className="ml-auto w-fit rounded-2xl rounded-br-md bg-ink px-4 py-2.5 text-sm font-medium text-on-ink">Payment received</div>
-      <div className="w-fit rounded-2xl rounded-bl-md border border-line bg-raised px-4 py-2.5 text-sm text-ink shadow-low">You are in. Here is your invite link.</div>
-      <p className="text-xs text-ink-3">Sent by your bot, triggered by a signed message from Plinth.</p>
+      <div className="w-fit rounded-2xl rounded-bl-md border border-line bg-raised px-4 py-2.5 text-sm text-ink shadow-low">Order confirmed. We are packing it.</div>
+      <p className="text-xs text-ink-3">Sent by your app, triggered by a signed message from Plinth.</p>
     </div>
   );
 }
 
 const STEPS = [
-  { n: "1", title: "Your bot adds a pay button", text: "When someone taps buy, your bot asks Plinth for a payment at that item's price and shows a button. Nothing is set up per item, and no links are made by hand.", visual: <V1 /> },
+  { n: "1", title: "Your app asks for the payment", text: "At checkout, your Mini App, bot or shop asks Plinth for a payment at the order total and shows a Pay button. Nothing is set up per product, and no links are made by hand.", visual: <V1 /> },
   { n: "2", title: "They pay in USDC", text: "The customer chooses a network and pays with their wallet, or sends USDC to a one-time address. No account, no card.", visual: <V2 /> },
   { n: "3", title: "We check it on the chain", text: "Status never comes from a click or a screenshot. Plinth reads the chain and waits until the network says the payment is final.", visual: <V3 /> },
-  { n: "4", title: "You are told, and your bot acts", text: "The money is already in your vault. A signed message tells your server to deliver, grant access or reply.", visual: <V4 /> },
+  { n: "4", title: "You are told, and your bot acts", text: "The money is already in your vault. A signed message tells your server to ship the order, unlock access or reply.", visual: <V4 /> },
 ];
 
 export function ChatHow() {
@@ -103,27 +103,6 @@ export function ChatHow() {
             </li>
           ))}
         </ol>
-      </div>
-    </Band>
-  );
-}
-
-/* ── closing call ──────────────────────────────────────────────────────────────────────────── */
-export function ChatClosing() {
-  return (
-    <Band tone="dark" shape="leaf-b" grid={false} labelledBy="cta-h">
-      <div className={wrap}>
-        <div className="max-w-3xl">
-          <h2 id="cta-h" className="t-display text-[clamp(2.5rem,6vw,5.5rem)] text-on-ink">
-            <span className="block">Send a test payment</span>
-            <span className="block text-white/45">from a chat.</span>
-          </h2>
-          <p className="mt-6 max-w-md text-lg text-white/65">Create an account, make a payment link and pay it from a faucet-funded wallet. It takes minutes and costs nothing on a test network.</p>
-          <div className="mt-9 flex flex-wrap items-center gap-3">
-            <Link href="/signup" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "h-12 border-transparent px-6")}>Create a free test account<ArrowRight className="size-4" aria-hidden /></Link>
-            <Link href="/build-with-ai" className="inline-flex h-12 items-center rounded-ctl border border-white/20 px-5 text-[0.9375rem] font-medium text-white transition-colors hover:bg-white/10">Build it with AI</Link>
-          </div>
-        </div>
       </div>
     </Band>
   );

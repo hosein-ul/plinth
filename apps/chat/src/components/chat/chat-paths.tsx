@@ -18,21 +18,21 @@ export function ChatPaths() {
           <Reveal className="min-w-0">
             <div className={tile}>
               <span className="grid size-11 place-items-center rounded-[12px] bg-sunk text-ink"><Bot className="size-5" aria-hidden /></span>
-              <h3 className="mt-6 text-[1.625rem] font-medium leading-tight tracking-[-0.03em] text-ink">Sell inside your bot or Mini App.</h3>
-              <p className="mt-2 max-w-lg text-[0.9375rem] text-ink-2">When someone taps buy, your bot asks Plinth for a payment at that item&apos;s price and shows a Pay button. Nothing to set up per item, and no links to make by hand. Your AI assistant can add it to the bot you already run.</p>
+              <h3 className="mt-6 text-[1.625rem] font-medium leading-tight tracking-[-0.03em] text-ink">Take payments inside your Mini App, bot or shop.</h3>
+              <p className="mt-2 max-w-lg text-[0.9375rem] text-ink-2">When someone checks out, your app asks Plinth for a payment at the order total and shows a Pay button. Nothing to set up per product, and no links to make by hand. Your AI assistant can add it to the project you already run.</p>
 
               <div className="mt-7 grid items-center gap-3 rounded-[1.25rem] bg-sunk p-4 sm:grid-cols-[1fr_auto_1fr] sm:p-5">
                 <div className="min-w-0 space-y-2">
                   <div className="w-fit rounded-2xl rounded-br-md bg-ink px-3.5 py-2 text-sm font-medium text-on-ink">/buy</div>
                   <div className="rounded-2xl rounded-bl-md border border-line bg-raised p-3 shadow-low">
-                    <p className="text-sm font-medium text-ink">Studio membership</p>
+                    <p className="text-sm font-medium text-ink">Order #1042</p>
                     <div className="mt-2 grid h-9 place-items-center rounded-lg bg-ink text-sm font-medium text-on-ink">Pay 25 USDC</div>
                   </div>
                 </div>
                 <ArrowRight className="mx-auto size-4 rotate-90 text-ink-4 sm:rotate-0" aria-hidden />
                 <div className="min-w-0 rounded-2xl border border-line bg-raised p-3.5 shadow-low">
-                  <p className="text-xs text-ink-3">Your bot, a moment later</p>
-                  <p className="mt-1.5 flex items-center gap-2 text-sm font-medium text-ink"><span className="grid size-4 place-items-center rounded-full bg-signal text-on-ink"><Check className="size-2.5" strokeWidth={4} aria-hidden /></span>Payment received. You are in.</p>
+                  <p className="text-xs text-ink-3">Your app, a moment later</p>
+                  <p className="mt-1.5 flex items-center gap-2 text-sm font-medium text-ink"><span className="grid size-4 place-items-center rounded-full bg-signal text-on-ink"><Check className="size-2.5" strokeWidth={4} aria-hidden /></span>Order confirmed.</p>
                 </div>
               </div>
 
@@ -47,7 +47,7 @@ export function ChatPaths() {
             <div className={tile}>
               <span className="grid size-11 place-items-center rounded-[12px] bg-sunk text-ink"><Link2 className="size-5" aria-hidden /></span>
               <h3 className="mt-6 text-[1.625rem] font-medium leading-tight tracking-[-0.03em] text-ink">Or paste a link. One price, no code.</h3>
-              <p className="mt-2 text-[0.9375rem] text-ink-2">For one channel, one course or one service. Make a link in the dashboard and drop it into a message. Nothing to install.</p>
+              <p className="mt-2 text-[0.9375rem] text-ink-2">For one service, one course or a single sale. Make a link in the dashboard and drop it into a message. Nothing to install.</p>
               <div className="mt-7 rounded-[1.25rem] bg-sunk p-4 sm:p-5">
                 <div className="rounded-2xl border border-line bg-raised p-4 shadow-low">
                   <div className="flex items-baseline justify-between"><p className="text-xs text-ink-3">Payment link</p><p className="tnum text-xl font-medium tracking-[-0.03em]">25<span className="text-ink-4">.00</span> <span className="text-xs font-medium text-ink-3">USDC</span></p></div>

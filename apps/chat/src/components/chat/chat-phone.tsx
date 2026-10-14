@@ -22,14 +22,14 @@ export function ChatPhone({ className }: { className?: string }) {
               {/* chat header */}
               <div className="relative z-10 flex h-[84px] items-end gap-2.5 border-b border-line bg-raised px-4 pb-3">
                 <span className="grid size-9 place-items-center rounded-full bg-ink"><LogoMark size={20} tone="dark" /></span>
-                <div className="leading-tight"><p className="text-[13px] font-medium">Studio Hours bot</p><p className="text-[10.5px] text-ink-3">bot</p></div>
+                <div className="leading-tight"><p className="text-[13px] font-medium">Northwind Mini App</p><p className="text-[10.5px] text-ink-3">Mini App</p></div>
               </div>
 
               {/* conversation */}
               <div className="relative z-0 space-y-2.5 px-3.5 pt-4">
                 <div className="cp max-w-[88%] rounded-2xl rounded-bl-md bg-raised p-3 shadow-low" style={{ animationName: "cp-m1" }}>
-                  <p className="text-[12.5px] font-medium">Studio membership</p>
-                  <p className="mt-0.5 text-[11.5px] text-ink-3">Private channel, 30 days of access.</p>
+                  <p className="text-[12.5px] font-medium">Order #1042</p>
+                  <p className="mt-0.5 text-[11.5px] text-ink-3">2 items, delivery included.</p>
                   <p className="tnum mt-2 text-[22px] font-medium leading-none tracking-[-0.04em]">25<span className="text-ink-4">.00</span> <span className="text-[11px] font-medium text-ink-3">USDC</span></p>
                   <div className="cp relative mt-3 grid h-9 place-items-center rounded-xl bg-ink text-[12.5px] font-medium text-on-ink" style={{ animationName: "cp-press" }}>
                     Pay 25 USDC
@@ -43,9 +43,9 @@ export function ChatPhone({ className }: { className?: string }) {
                 </div>
 
                 <div className="cp max-w-[88%] rounded-2xl rounded-bl-md bg-raised p-3 shadow-low" style={{ animationName: "cp-m3" }}>
-                  <p className="text-[12.5px] font-medium">You are in.</p>
-                  <p className="mt-0.5 text-[11.5px] text-ink-3">Here is your private invite link.</p>
-                  <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-sunk px-2.5 py-1.5 font-mono text-[10.5px] text-ink-2"><Send className="size-3" aria-hidden />invite.example/studio</p>
+                  <p className="text-[12.5px] font-medium">Order confirmed.</p>
+                  <p className="mt-0.5 text-[11.5px] text-ink-3">We are packing it now.</p>
+                  <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-sunk px-2.5 py-1.5 font-mono text-[10.5px] text-ink-2"><Send className="size-3" aria-hidden />tracking.example/1042</p>
                 </div>
               </div>
 
