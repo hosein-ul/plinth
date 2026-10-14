@@ -25,3 +25,4 @@ export * from "./deployment-check";
 export * from "./email";
 export * from "./email-templates";
 export * from "./email-verification";
+export * from "./payout-config";

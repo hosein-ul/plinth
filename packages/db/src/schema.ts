@@ -168,7 +168,7 @@ export const merchantPayoutConfigs = pgTable(
     mode: text("mode").notNull(), // VAULT | DIRECT
     /** The registered payout wallet (DIRECT). Null for VAULT, which uses the merchant's vault. */
     address: text("address"),
-    /** PENDING_CONFIRMATION | CONFIRMED | SUPERSEDED | DISABLED | EXPIRED */
+    /** PENDING_CONFIRMATION | CONFIRMED | SUPERSEDED | CANCELLED | EXPIRED */
     status: text("status").notNull().default("PENDING_CONFIRMATION"),
     /** Proof of control: the exact EIP-4361 message the wallet signed, and the signature. */
     proofMessage: text("proof_message"),

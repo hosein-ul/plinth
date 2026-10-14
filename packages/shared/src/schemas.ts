@@ -122,6 +122,10 @@ export const WEBHOOK_EVENT_TYPES = [
   "settlement.failed",
   "refund.requested",
   "refund.completed",
+  "payout.requested",
+  "payout.confirmed",
+  "payout.switched_to_vault",
+  "payout.cancelled",
 ] as const;
 export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
 

@@ -60,6 +60,8 @@ export interface EngineConfig {
   emailLinkTtlSeconds: number;
   /** How recently a user must have signed in again to change sensitive settings. */
   reauthWindowSeconds: number;
+  /** Require a signature from the vault owner wallet when a vault is created (default on in production). */
+  requireVaultOwnerProof: boolean;
   /** Time a newly confirmed payout wallet waits before new invoices use it (0 in development). */
   payoutCooldownSeconds: number;
   /** Web3Auth client id the identity tokens must be issued for. */

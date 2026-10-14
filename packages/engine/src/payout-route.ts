@@ -34,7 +34,8 @@ export async function activePayoutConfig(e: Engine, tx: Executor, merchantId: st
         lte(schema.merchantPayoutConfigs.activeFrom, e.now()),
       ),
     )
-    .orderBy(desc(schema.merchantPayoutConfigs.createdAt))
+    // The last choice the merchant confirmed wins, so confirming a wallet and then switching back to the vault sticks.
+    .orderBy(desc(schema.merchantPayoutConfigs.confirmedAt), desc(schema.merchantPayoutConfigs.createdAt))
     .limit(1);
   return row ?? null;
 }

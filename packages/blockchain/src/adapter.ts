@@ -309,6 +309,23 @@ export class EvmAdapter implements ChainAdapter {
     return this.client.readContract({ address: this.usdc, abi: erc20Abi, functionName: "balanceOf", args: [address] });
   }
 
+  /**
+   * Circle tokens expose `isBlacklisted(address)`. Returns null when this token has no such function (so the
+   * caller can say "could not check" instead of guessing).
+   */
+  async isBlacklisted(address: Address): Promise<boolean | null> {
+    try {
+      return await this.client.readContract({
+        address: this.usdc,
+        abi: [{ type: "function", name: "isBlacklisted", stateMutability: "view", inputs: [{ name: "account", type: "address" }], outputs: [{ type: "bool" }] }] as const,
+        functionName: "isBlacklisted",
+        args: [address],
+      });
+    } catch {
+      return null;
+    }
+  }
+
   async hasCode(address: Address): Promise<boolean> {
     const code = await this.client.getCode({ address });
     return !!code && code !== "0x";

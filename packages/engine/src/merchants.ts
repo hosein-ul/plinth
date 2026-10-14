@@ -5,13 +5,14 @@ import { MerchantVaultAbi } from "@plinth/blockchain";
 import { audit } from "./audit";
 import { requirePermission, type AuthContext } from "./auth";
 import { chainOf, EngineError, norm, type Engine } from "./context";
+import { consumeChallenge, verifyVaultOwnerProof } from "./payout-config";
 import { feeBpsFor } from "./payout-route";
 
 /**
  * Enable a network for a merchant: derive their vault address, record it, and have the gateway relayer
  * deploy it. The vault's OWNER is the merchant-supplied address; the gateway never holds a role in it.
  */
-export async function enableNetwork(e: Engine, ctx: AuthContext, input: { network: string; owner_address: string }) {
+export async function enableNetwork(e: Engine, ctx: AuthContext, input: { network: string; owner_address: string; proof?: { nonce: string; signature: string } }) {
   requirePermission(ctx, "wallets");
   const chain = e.chains.get(input.network);
   if (!chain) throw new EngineError("UNKNOWN_NETWORK", `Unknown network ${input.network}`, 400);
@@ -27,12 +28,15 @@ export async function enableNetwork(e: Engine, ctx: AuthContext, input: { networ
     return vaultSummary(chain.network.explorerUrl, existing);
   }
 
+  // A new vault is owned by whatever address is given here, so the owner must prove they control it (required in production).
+  const proven = await verifyVaultOwnerProof(e, ctx, { network: input.network, owner, proof: input.proof });
   const vault = await chain.adapter.predictVault(merchantId32, owner);
   const alreadyDeployed = await chain.adapter.isRegisteredVault(vault);
   const id = newId("vlt");
   let opId: string | null = null;
 
   await e.db.transaction(async (tx) => {
+    if (proven) await consumeChallenge(e, tx, proven.nonce);
     if (!alreadyDeployed) {
       if (!chain.signer) throw new EngineError("RELAYER_UNAVAILABLE", "No relayer is configured for this network; deploy the vault yourself via VaultFactory.createVault and retry.", 503);
       opId = newId("rop");
