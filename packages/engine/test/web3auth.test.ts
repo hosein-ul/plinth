@@ -32,6 +32,11 @@ describe("Web3Auth identity tokens", () => {
     expect((await verifyWeb3AuthToken(t, CLIENT, keys)).subject).toBe("wallet:0xabc0000000000000000000000000000000000001");
   });
 
+  it("accepts a session token from the SDK v11 citadel service (issuer web3auth.io)", async () => {
+    const t = await sign({ sub: "usr_citadel_1", wallets: [{ address: "0xAbC0000000000000000000000000000000000002" }] }, { iss: "web3auth.io" });
+    expect((await verifyWeb3AuthToken(t, CLIENT, keys)).subject).toBe("wallet:0xabc0000000000000000000000000000000000002");
+  });
+
   it("rejects a wrong audience, a wrong issuer, an expired token, an unsigned token and one signed by another key", async () => {
     await expect(verifyWeb3AuthToken(await sign({ userId: "x" }, { aud: "someone-else" }), CLIENT, keys)).rejects.toMatchObject({ code: "INVALID_TOKEN" });
     await expect(verifyWeb3AuthToken(await sign({ userId: "x" }, { iss: "https://evil.example" }), CLIENT, keys)).rejects.toMatchObject({ code: "INVALID_TOKEN" });

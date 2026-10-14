@@ -10,12 +10,14 @@ import { hashPassword } from "./crypto";
  * Web3Auth identity tokens. The browser signs a user in with Web3Auth and sends us the identity token; we never trust the
  * browser's claims, only a token whose signature verifies against Web3Auth's published keys for OUR client id.
  *
- * Social and email logins are signed by api-auth.web3auth.io; external wallets (MetaMask and similar) by authjs.web3auth.io.
+ * Social and email logins are signed by api-auth.web3auth.io; external wallets (MetaMask and similar) by authjs.web3auth.io; SDK v11 sessions by the citadel service.
  * Source: Embedded Wallets "identity token" documentation.
  */
 const SOURCES = [
   { jwks: "https://api-auth.web3auth.io/jwks", issuer: "https://api-auth.web3auth.io" },
   { jwks: "https://authjs.web3auth.io/jwks", issuer: "https://authjs.web3auth.io" },
+  // SDK v11 signs wallet and social sessions through the "citadel" service. Found by decoding a rejected token's kid and issuer.
+  { jwks: "https://api.web3auth.io/citadel-service/.well-known/jwks.json", issuer: "web3auth.io" },
 ] as const;
 
 export interface Web3AuthIdentity {
@@ -63,7 +65,7 @@ export async function verifyWeb3AuthToken(idToken: string, clientId: string, key
   if (walletAddress && !connection) subject = `wallet:${walletAddress.toLowerCase()}`;
   else if (userId) subject = `${connection ?? "w3a"}:${userId.toLowerCase()}`;
   else if (walletAddress) subject = `wallet:${walletAddress.toLowerCase()}`;
-  if (!subject) throw new EngineError("INVALID_TOKEN", "Web3Auth token carries no stable user id", 401);
+  if (!subject) throw new EngineError("INVALID_TOKEN", `Web3Auth token carries no stable user id (claims: ${Object.keys(payload).join(", ")})`, 401);
   return { subject, email: str(payload.email)?.toLowerCase() ?? null, name: str(payload.name) };
 }
 
