@@ -1,5 +1,5 @@
 {
-  "name": "@plinth/chat",
+  "name": "@plinth/telegram",
   "version": "0.1.0",
   "private": true,
   "scripts": {
