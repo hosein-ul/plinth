@@ -1870,7 +1870,10 @@
                   "currency": {
                     "default": "USDC",
                     "type": "string",
-                    "const": "USDC"
+                    "enum": [
+                      "USDC",
+                      "EURC"
+                    ]
                   },
                   "order_reference": {
                     "type": "string",
@@ -2800,6 +2803,15 @@
                     "type": "string",
                     "pattern": "^\\d{1,12}(\\.\\d{1,6})?$"
                   },
+                  "currency": {
+                    "default": "USDC",
+                    "description": "The token the link is paid in. USDC everywhere; EURC where the network supports it.",
+                    "type": "string",
+                    "enum": [
+                      "USDC",
+                      "EURC"
+                    ]
+                  },
                   "description": {
                     "type": "string",
                     "maxLength": 500
@@ -3660,6 +3672,15 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 90
+                  },
+                  "currency": {
+                    "default": "USDC",
+                    "description": "The token the invoice is paid in. Line item amounts are in this token.",
+                    "type": "string",
+                    "enum": [
+                      "USDC",
+                      "EURC"
+                    ]
                   },
                   "line_items": {
                     "minItems": 1,
@@ -5063,6 +5084,18 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 365
+            }
+          },
+          {
+            "name": "currency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "USDC",
+                "EURC"
+              ]
             }
           }
         ],
@@ -9046,6 +9079,14 @@
                     "type": "string",
                     "pattern": "^[a-z0-9-]{2,40}$"
                   },
+                  "token": {
+                    "default": "USDC",
+                    "type": "string",
+                    "enum": [
+                      "USDC",
+                      "EURC"
+                    ]
+                  },
                   "owner_address": {
                     "type": "string",
                     "pattern": "^0x[0-9a-fA-F]{40}$"
@@ -9270,6 +9311,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "USDC",
+                "EURC"
+              ]
+            }
           }
         ],
         "responses": {
@@ -9464,6 +9517,18 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "USDC",
+                "EURC"
+              ]
             }
           }
         ],
@@ -9660,6 +9725,18 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "USDC",
+                "EURC"
+              ]
             }
           }
         ],

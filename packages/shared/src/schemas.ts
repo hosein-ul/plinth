@@ -39,6 +39,7 @@ export type CreatePaymentIntentInput = z.infer<typeof createPaymentIntentSchema>
 export const createPaymentLinkSchema = z.object({
   name: z.string().min(1).max(120),
   amount: usdcAmountSchema,
+  currency: z.enum(TOKEN_SYMBOLS).default("USDC").describe("The token the link is paid in. USDC everywhere; EURC where the network supports it."),
   description: z.string().max(500).optional(),
   networks: z.array(networkIdSchema).min(1).optional(),
   checkout_methods: z.array(checkoutMethodSchema).min(1).default(["WALLET", "ADDRESS"]),
@@ -51,6 +52,7 @@ export const createInvoiceSchema = z.object({
   customer_email: z.string().email().max(320),
   memo: z.string().max(1000).optional(),
   due_in_days: z.number().int().min(1).max(90).default(14),
+  currency: z.enum(TOKEN_SYMBOLS).default("USDC").describe("The token the invoice is paid in. Line item amounts are in this token."),
   line_items: z
     .array(
       z.object({
@@ -92,6 +94,8 @@ export const createApiKeySchema = z.object({
 
 export const enableNetworkSchema = z.object({
   network: networkIdSchema,
+  /** Which token this vault holds. One vault per merchant, network and token. */
+  token: z.enum(TOKEN_SYMBOLS).default("USDC"),
   /** The merchant's own address that will own the vault (use a multisig in production). */
   owner_address: addressSchema,
   /** Proof that the owner wallet signed the challenge from POST /v1/payout-methods/challenge (purpose VAULT_OWNER). Required in production. */

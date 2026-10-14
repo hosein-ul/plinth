@@ -3,7 +3,7 @@ import { getAddress, type Hex } from "viem";
 import { and, eq, schema, sql } from "@plinth/db";
 import {
   createApiKeySchema, createInvoiceSchema, createPaymentIntentSchema, createPaymentLinkSchema, createRefundRequestSchema, createWebhookEndpointSchema,
-  emailChangeSchema, emailConfirmSchema, enableNetworkSchema, loginSchema, merchantFeeSchema, payoutChallengeSchema, payoutConfirmSchema, payoutVaultSchema, payoutWalletSchema, web3authSchema, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
+  emailChangeSchema, emailConfirmSchema, enableNetworkSchema, loginSchema, merchantFeeSchema, payoutChallengeSchema, payoutConfirmSchema, payoutVaultSchema, payoutWalletSchema, web3authSchema, TOKEN_SYMBOLS, type TokenSymbol, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
 } from "@plinth/shared";
 import * as E from "@plinth/engine";
 import type { Engine } from "@plinth/engine";
@@ -155,7 +155,7 @@ export function buildRoutes(e: Engine): RouteDef[] {
       method: "GET", path: "/v1/settlements", tag: "Ledger", summary: "Settlements into your vault", auth: "merchant", query: z.object({ limit: limitQ }),
       handler: async ({ query, auth }) => list(await E.listSettlements(e, A(auth), query.limit)),
     }),
-    route({ method: "GET", path: "/v1/overview", tag: "Ledger", summary: "Dashboard metrics (received vs settled are labelled separately)", auth: "merchant", query: z.object({ days: z.coerce.number().int().min(1).max(365).optional() }), handler: async ({ query, auth }) => E.overview(e, A(auth), query.days) }),
+    route({ method: "GET", path: "/v1/overview", tag: "Ledger", summary: "Dashboard metrics (received vs settled are labelled separately)", auth: "merchant", query: z.object({ days: z.coerce.number().int().min(1).max(365).optional(), currency: z.enum(TOKEN_SYMBOLS).optional() }), handler: async ({ query, auth }) => E.overview(e, A(auth), query.days, query.currency) }),
     route({ method: "GET", path: "/v1/audit-events", tag: "Ledger", summary: "Audit log", auth: "merchant", query: z.object({ limit: limitQ }), handler: async ({ query, auth }) => { const a = A(auth); E.requirePermission(a, "developers"); return list(await E.listAudit(e, a, query.limit)); } }),
 
     // ------------------------------------------------------------------ refunds
@@ -245,15 +245,16 @@ export function buildRoutes(e: Engine): RouteDef[] {
       description: "`owner_address` becomes the sole owner of the vault. Use a multisig. The gateway never holds an administrative role.",
       handler: async ({ body, auth }) => E.enableNetwork(e, A(auth), body),
     }),
-    route({ method: "GET", path: "/v1/vaults/:network", tag: "Vaults & settlement", summary: "Live on-chain vault state (owner, policy, balance)", auth: "merchant", handler: async ({ params, auth }) => E.readVaultState(e, A(auth), params.network!) }),
-    route({ method: "POST", path: "/v1/vaults/:network/confirm", tag: "Vaults & settlement", summary: "Re-check an externally deployed vault on-chain", auth: "merchant", handler: async ({ params, auth }) => E.confirmVault(e, A(auth), params.network!) }),
+    route({ method: "GET", path: "/v1/vaults/:network", tag: "Vaults & settlement", summary: "Live on-chain vault state (owner, policy, balance)", auth: "merchant", query: z.object({ token: z.enum(TOKEN_SYMBOLS).optional() }), handler: async ({ params, query, auth }) => E.readVaultState(e, A(auth), params.network!, query.token) }),
+    route({ method: "POST", path: "/v1/vaults/:network/confirm", tag: "Vaults & settlement", summary: "Re-check an externally deployed vault on-chain", auth: "merchant", query: z.object({ token: z.enum(TOKEN_SYMBOLS).optional() }), handler: async ({ params, query, auth }) => E.confirmVault(e, A(auth), params.network!, query.token) }),
     route({
       method: "POST", path: "/v1/vaults/:network/settlement-tx", tag: "Vaults & settlement", summary: "Build the transaction that changes your on-chain settlement policy", auth: "merchant",
+      query: z.object({ token: z.enum(TOKEN_SYMBOLS).optional() }), 
       body: z.object({ mode: z.enum(["BALANCE_IN_VAULT", "INSTANT_FORWARD", "THRESHOLD_OR_PERIODIC"]), destination: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(), threshold_units: z.string().regex(/^\d+$/).optional(), interval_seconds: z.number().int().min(0).max(31536000).optional() }),
       description: "Returns calldata only. Sign and send it from the vault owner wallet; the gateway cannot execute it.",
-      handler: async ({ params, body, auth }) => {
+      handler: async ({ params, query, body, auth }) => {
         const a = A(auth); E.requirePermission(a, "wallets");
-        const [v] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, a.merchantId), eq(schema.merchantVaults.networkId, params.network!)));
+        const [v] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, a.merchantId), eq(schema.merchantVaults.networkId, params.network!), eq(schema.merchantVaults.tokenSymbol, query.token ?? "USDC")));
         if (!v) throw new E.EngineError("NOT_FOUND", "No vault for this network", 404);
         const c = E.chainOf(e, params.network!);
         return { chain_id: c.network.chainId, ...E.buildSettlementPolicyTx(e, getAddress(v.vaultAddress), body) };
@@ -266,7 +267,7 @@ export function buildRoutes(e: Engine): RouteDef[] {
         const [m] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, a.merchantId));
         const vaults = await e.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, a.merchantId));
         const onchain = [];
-        for (const v of vaults) onchain.push(await E.readVaultState(e, a, v.networkId).catch(() => ({ network: v.networkId, onchain: null })));
+        for (const v of vaults) onchain.push(await E.readVaultState(e, a, v.networkId, v.tokenSymbol as TokenSymbol).catch(() => ({ network: v.networkId, token: v.tokenSymbol, onchain: null })));
         return { accounting: { underpayment_tolerance_bps: m!.underpaymentToleranceBps, overpayment_policy: m!.overpaymentPolicy, default_expiry_seconds: m!.defaultExpirySeconds }, vaults: onchain };
       },
     }),

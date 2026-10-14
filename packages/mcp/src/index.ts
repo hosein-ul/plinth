@@ -12,7 +12,8 @@ export interface PlinthMcpOptions {
 const ok = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 const fail = (message: string) => ({ isError: true, content: [{ type: "text" as const, text: message }] });
 
-const amount = z.string().regex(/^\d{1,12}(\.\d{1,6})?$/).describe('USDC amount as a decimal string, for example "25.00". Never a number.');
+const amount = z.string().regex(/^\d{1,12}(\.\d{1,6})?$/).describe('Amount in the payment token (USDC unless currency says otherwise) as a decimal string, for example "25.00". Never a number.');
+const currency = z.enum(["USDC", "EURC"]).optional().describe("The token to be paid in. Defaults to USDC. EURC is available on Arc only.");
 
 /**
  * A Model Context Protocol server that lets an AI assistant create and check TEST payments on Plinth, and read the integration
@@ -57,6 +58,7 @@ export function createPlinthMcpServer(opts: PlinthMcpOptions): McpServer {
     description: "Create a payment for one order. Returns a checkout_url to send the customer to. Use the real order total, computed on the server.",
     inputSchema: {
       amount,
+      currency,
       order_reference: z.string().max(200).describe("Your own order id").optional(),
       description: z.string().max(500).optional(),
       success_url: z.string().url().optional(),
@@ -88,14 +90,14 @@ export function createPlinthMcpServer(opts: PlinthMcpOptions): McpServer {
   server.registerTool("create_payment_link", {
     title: "Create a fixed-price payment link",
     description: "Create a reusable link for ONE fixed price (a donation, a single service). Not for a shop: for per-order totals use create_payment from the app's server.",
-    inputSchema: { name: z.string().min(1).max(120), amount, description: z.string().max(500).optional() },
+    inputSchema: { name: z.string().min(1).max(120), amount, currency, description: z.string().max(500).optional() },
   }, async (body) => {
     try { return ok(await call("POST", "/v1/payment-links", body)); } catch (e) { return fail((e as Error).message); }
   });
 
   server.registerTool("list_networks", {
     title: "List networks",
-    description: "The networks this account can accept USDC on, and whether each is enabled.",
+    description: "The networks and tokens (USDC, and EURC on Arc) this account can accept, and whether each is enabled.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
   }, async () => {

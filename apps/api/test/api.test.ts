@@ -381,6 +381,59 @@ describe("vault & settlement policy API", () => {
   });
 });
 
+describe("payment tokens over HTTP", () => {
+  it("a network can hold a USDC and a EURC vault; payments, links and invoices name their token", async () => {
+    const th = await startHarness({ confirmations: 2, tokens: ["EURC"] });
+    const tapp = (await buildServer(th.engine, { adminToken: "op-secret-token", rateLimitDisabled: true })).app;
+    await tapp.ready();
+    const tcall = async (method: string, url: string, opts: { token?: string; body?: unknown } = {}): Promise<Res> => {
+      const r = await tapp.inject({ method: method as never, url, payload: opts.body as never, headers: opts.token ? { authorization: `Bearer ${opts.token}` } : {} });
+      return { status: r.statusCode, body: r.body ? JSON.parse(r.body) : null, headers: r.headers };
+    };
+    try {
+      const su = await tcall("POST", "/v1/auth/signup", { body: { business_name: "Two Token API", email: "two@token.test", password: "a-very-long-passphrase-123" } });
+      const tok = su.body.token as string;
+      const own = th.chain.accounts[2]!.address;
+      expect((await tcall("POST", "/v1/vaults", { token: tok, body: { network: th.net, owner_address: own } })).status).toBe(201);
+      const eurcVault = await tcall("POST", "/v1/vaults", { token: tok, body: { network: th.net, owner_address: own, token: "EURC" } });
+      expect(eurcVault.status).toBe(201);
+      expect(eurcVault.body.token).toBe("EURC");
+      await th.pump(2);
+
+      const usdcState = await tcall("GET", `/v1/vaults/${th.net}`, { token: tok });
+      const eurcState = await tcall("GET", `/v1/vaults/${th.net}?token=EURC`, { token: tok });
+      expect(usdcState.body.token).toBe("USDC");
+      expect(eurcState.body.token).toBe("EURC");
+      expect(eurcState.body.vault_address).not.toBe(usdcState.body.vault_address);
+      expect((await tcall("POST", `/v1/vaults/${th.net}/settlement-tx?token=EURC`, { token: tok, body: { mode: "INSTANT_FORWARD", destination: th.chain.accounts[8]!.address } })).body.to.toLowerCase()).toBe(eurcState.body.vault_address.toLowerCase());
+      expect((await tcall("GET", `/v1/vaults/${th.net}?token=DAI`, { token: tok })).status).toBe(400);
+
+      const key = (await tcall("POST", "/v1/api-keys", { token: tok, body: { name: "k", environment: "test" } })).body.key as string;
+      const pay = await tcall("POST", "/v1/payment-intents", { token: key, body: { amount: "12.50", currency: "EURC", checkout_methods: ["ADDRESS"] } });
+      expect(pay.status).toBe(201);
+      expect(pay.body.currency).toBe("EURC");
+      const link = await tcall("POST", "/v1/payment-links", { token: key, body: { name: "Euro tip", amount: "5.00", currency: "EURC" } });
+      expect(link.status).toBe(201);
+      expect(link.body.currency).toBe("EURC");
+      const inv = await tcall("POST", "/v1/invoices", { token: key, body: { customer_name: "Ada", customer_email: "ada@example.test", currency: "EURC", line_items: [{ description: "Work", quantity: 2, unit_amount: "10.00" }] } });
+      expect(inv.status).toBe(201);
+      expect(inv.body.currency).toBe("EURC");
+      expect(inv.body.total).toBe("20.00");
+
+      const ovE = await tcall("GET", "/v1/overview?currency=EURC", { token: key });
+      const ovU = await tcall("GET", "/v1/overview", { token: key });
+      expect(ovE.body.currency).toBe("EURC");
+      expect(ovU.body.currency).toBe("USDC");
+      const nets = await tcall("GET", "/v1/networks", { token: key });
+      const dev = nets.body.data.find((n: any) => n.id === th.net);
+      expect(dev.tokens.map((t: any) => t.symbol).sort()).toEqual(["EURC", "USDC"]);
+    } finally {
+      await tapp.close();
+      await th.stop();
+    }
+  }, 120_000);
+});
+
 describe("rate limiting", () => {
   it("throttles credential guessing on login", async () => {
     let limited = 0;
