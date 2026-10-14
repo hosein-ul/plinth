@@ -1,57 +1,100 @@
 import Link from "next/link";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check, CreditCard, ShoppingCart, Webhook, Wallet } from "lucide-react";
 import { PageIntro } from "@/components/marketing/chrome";
 import { AiKitPicker } from "@/components/marketing/pages/ai-kit-picker";
+import { CopyCode } from "@/components/marketing/pages/copy-code";
 import { Chip } from "@/components/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { H2, wrap } from "@/components/marketing/parts";
 import { DEMO_HREF } from "@/lib/routes";
 import { pageMeta } from "@/lib/site";
 
-export const metadata = pageMeta({ title: "Build with AI", description: "Copy a ready-made prompt into your AI coding assistant and build a checkout, a bot or an invoicing tool on Plinth, tested on testnet.", path: "/build-with-ai" });
+export const metadata = pageMeta({ title: "Build with AI", description: "Already have an app or a site? Connect your AI assistant to Plinth and ask for payments in plain English. Every order is charged at its real total.", path: "/build-with-ai" });
 
-const STEPS: [string, string][] = [
-  ["Create a test account", "It takes a minute. You get a test API key and a webhook secret in the dashboard."],
-  ["Pick what you are building", "Choose a project below and copy the prompt. It already contains the rules an assistant would otherwise get wrong."],
-  ["Paste it into your assistant", "Any AI coding assistant works. Add your test key and webhook secret as environment variables."],
-  ["Check the four results", "The prompt ends with a definition of done: a created payment, a paid order, a rejected bad signature, a README."],
+const FLOW = [
+  { icon: ShoppingCart, title: "Customer checks out", text: "In your app, as it works today." },
+  { icon: CreditCard, title: "Your server asks Plinth", text: "With the order's real total. Automatic, every time." },
+  { icon: Wallet, title: "Plinth checkout opens", text: "A clean page where they pick a network and pay." },
+  { icon: Webhook, title: "Your app is told", text: "A signed message. Your order flips to paid." },
 ];
 
-const KIT: { name: string; text: string; status: "ok" | "neutral" }[] = [
-  { name: "Plain-text docs for assistants", text: "/llms.txt and /llms-full.txt, kept in step with the real API.", status: "ok" },
-  { name: "OpenAPI 3.1 document", text: "Every endpoint and schema, served by the API at /v1/openapi.json.", status: "ok" },
-  { name: "Test networks and sandbox", text: "Build and break things with test USDC. No real money moves.", status: "ok" },
-  { name: "Copy-and-paste prompts", text: "Four projects below, each with a definition of done.", status: "ok" },
-  { name: "MCP server", text: "Lets an assistant create and check test payments itself. Not built yet.", status: "neutral" },
-  { name: "SDKs and starter projects", text: "Not published yet. The REST API works from any language today.", status: "neutral" },
+const STEPS: [string, string][] = [
+  ["Connect your assistant", "Add the Plinth MCP server, or skip this and use the prompt. The server lets your assistant create and check test payments itself."],
+  ["Ask in plain English", "Paste the prompt for the kind of project you have. It tells the assistant to work inside your existing code."],
+  ["Check four results", "A real total is charged, the order turns paid from the webhook only, a forged webhook is rejected, a replayed one is ignored."],
+];
+
+const MCP_CONFIG = `{
+  "mcpServers": {
+    "plinth": {
+      "command": "pnpm",
+      "args": ["--dir", "/path/to/plinth/packages/mcp", "start"],
+      "env": {
+        "PLINTH_API_URL": "http://localhost:4000",
+        "PLINTH_API_KEY": "sk_test_..."
+      }
+    }
+  }
+}`;
+
+const KIT: { name: string; text: string; ok: boolean }[] = [
+  { name: "MCP server", text: "Tools: create_payment, get_payment, list_payments, create_payment_link, list_networks, plus the integration playbook. Test keys only.", ok: true },
+  { name: "Plain-text docs for assistants", text: "/llms.txt and /llms-full.txt, generated from the same playbook the MCP server serves.", ok: true },
+  { name: "Copy-and-paste prompts", text: "One prompt, tuned for a store, a SaaS, a bot or bookings. Each ends with a checklist.", ok: true },
+  { name: "Test networks and sandbox", text: "Try everything with test USDC. No real money moves.", ok: true },
+  { name: "One-line install of the MCP server", text: "It runs from the repository today. A published package is not out yet.", ok: false },
+  { name: "SDKs and framework starters", text: "Not published. The REST API works from any language today.", ok: false },
 ];
 
 export default function BuildWithAiPage() {
   return (
     <>
-      <PageIntro eyebrow="Build with AI" title="Describe it. Your assistant builds the checkout.">
-        You do not need to be a developer to ship a payment flow. Copy a prompt, paste it into your AI coding assistant, and test the whole thing on a test network.
+      <PageIntro eyebrow="Build with AI" title="Already have an app? Ask your AI assistant to add payments.">
+        Connect it to Plinth and describe what you want in plain English. It adds checkout to the project you already have, and every order is charged at its real total.
       </PageIntro>
 
-      <section className={`${wrap} py-16`} aria-labelledby="ai-how">
-        <H2 id="ai-how">Four steps, no guesswork.</H2>
-        <ol className="mt-8 grid gap-x-10 gap-y-8 sm:grid-cols-2">
-          {STEPS.map(([t, b], i) => (
-            <li key={t} className="flex gap-4">
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-sm font-medium tabular-nums text-on-ink">{i + 1}</span>
-              <div><h3 className="text-lg font-medium tracking-[-0.02em] text-ink">{t}</h3><p className="mt-1 text-[0.9375rem] text-ink-2">{b}</p></div>
+      <section className={`${wrap} py-16`} aria-labelledby="ai-flow">
+        <H2 id="ai-flow">What your customers will see.</H2>
+        <ol className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {FLOW.map((f, i) => (
+            <li key={f.title} className="relative rounded-[1.5rem] border border-line bg-raised p-5 shadow-low">
+              <span className="grid size-10 place-items-center rounded-[12px] bg-sunk text-ink"><f.icon className="size-5" aria-hidden /></span>
+              <p className="mt-4 text-[0.75rem] font-medium tabular-nums text-ink-4">0{i + 1}</p>
+              <h3 className="mt-1 text-[1.0625rem] font-medium tracking-[-0.02em] text-ink">{f.title}</h3>
+              <p className="mt-1 text-sm text-ink-3">{f.text}</p>
             </li>
           ))}
         </ol>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/signup" className={buttonStyles({ variant: "primary", size: "lg" })}>Create a test account<ArrowRight className="size-4" aria-hidden /></Link>
-          <Link href={DEMO_HREF} className={buttonStyles({ variant: "secondary", size: "lg" })}>Look around the demo first</Link>
+        <p className="mt-5 max-w-2xl text-[0.9375rem] text-ink-3">No payment link is made by hand and no product is set up in Plinth. Your app already knows what was bought and how much it costs; it just tells Plinth.</p>
+      </section>
+
+      <section className="bg-sunk/60 py-16" aria-labelledby="ai-how">
+        <div className={wrap}>
+          <H2 id="ai-how">Three steps.</H2>
+          <ol className="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-3">
+            {STEPS.map(([t, b], i) => (
+              <li key={t} className="flex gap-4">
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-sm font-medium tabular-nums text-on-ink">{i + 1}</span>
+                <div><h3 className="text-lg font-medium tracking-[-0.02em] text-ink">{t}</h3><p className="mt-1 text-[0.9375rem] text-ink-2">{b}</p></div>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/signup" className={buttonStyles({ variant: "primary", size: "lg" })}>Create a test account<ArrowRight className="size-4" aria-hidden /></Link>
+            <Link href={DEMO_HREF} className={buttonStyles({ variant: "secondary", size: "lg" })}>Look around the demo first</Link>
+          </div>
         </div>
+      </section>
+
+      <section className={`${wrap} py-16`} aria-labelledby="ai-connect">
+        <H2 id="ai-connect">1. Connect your assistant (optional).</H2>
+        <p className="mt-3 max-w-2xl text-[0.9375rem] text-ink-2">Works with any assistant that supports MCP. Add this to its MCP settings. Use a test key from your dashboard.</p>
+        <div className="mt-6 max-w-2xl"><CopyCode label="mcp settings · json">{MCP_CONFIG}</CopyCode></div>
       </section>
 
       <section className="bg-sunk/60 py-16" aria-labelledby="ai-prompts">
         <div className={wrap}>
-          <H2 id="ai-prompts">Pick a project. Copy the prompt.</H2>
+          <H2 id="ai-prompts">2. Paste the prompt for your project.</H2>
           <div className="mt-8"><AiKitPicker /></div>
         </div>
       </section>
@@ -61,9 +104,9 @@ export default function BuildWithAiPage() {
         <ul className="mt-8 divide-y divide-line rounded-card border border-line bg-raised">
           {KIT.map((k) => (
             <li key={k.name} className="flex items-center gap-4 px-5 py-4">
-              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-sunk text-ink-3">{k.status === "ok" ? <Check className="size-3.5 text-signal-ink" strokeWidth={3} aria-hidden /> : <span aria-hidden className="size-1.5 rounded-full bg-ink-4" />}</span>
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-sunk text-ink-3">{k.ok ? <Check className="size-3.5 text-signal-ink" strokeWidth={3} aria-hidden /> : <span aria-hidden className="size-1.5 rounded-full bg-ink-4" />}</span>
               <div className="min-w-0 flex-1"><p className="font-medium text-ink">{k.name}</p><p className="text-sm text-ink-3">{k.text}</p></div>
-              <Chip tone={k.status}>{k.status === "ok" ? "Available" : "Planned"}</Chip>
+              <Chip tone={k.ok ? "ok" : "neutral"}>{k.ok ? "Available" : "Planned"}</Chip>
             </li>
           ))}
         </ul>

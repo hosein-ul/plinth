@@ -27,17 +27,18 @@ function VCreate() {
   return (
     <div className="space-y-3">
       <div className="card-flat p-5">
-        <p className="text-xs text-ink-3">New payment</p>
-        <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-3">
-          <div><p className="text-xs text-ink-3">Amount</p><p className="tnum mt-1 text-[1.75rem] font-medium leading-none tracking-[-0.04em]">25<span className="text-ink-4">.00</span> <span className="text-sm font-medium text-ink-3">USDC</span></p></div>
-          <div className="text-right"><p className="text-xs text-ink-3">Reference</p><p className="mt-1 font-mono text-sm text-ink">order-1042</p></div>
+        <p className="text-xs text-ink-3">In your app, at checkout</p>
+        <div className="mt-3 space-y-1.5 text-sm text-ink">
+          <p className="flex justify-between"><span>2 × Studio mug</span><span className="tnum">18.00</span></p>
+          <p className="flex justify-between"><span>Shipping</span><span className="tnum">7.00</span></p>
+          <p className="flex justify-between border-t border-line pt-2 font-medium"><span>Total</span><span className="tnum">25.00 USDC</span></p>
         </div>
-        <div className="mt-4 grid h-10 place-items-center rounded-ctl bg-ink text-sm font-medium text-on-ink">Create payment link</div>
+        <div className="mt-4 grid h-10 place-items-center rounded-ctl bg-ink text-sm font-medium text-on-ink">Pay with USDC</div>
       </div>
       <div className="card-flat p-4" style={stagger(1)}>
-        <div className="flex items-center justify-between"><p className="text-xs text-ink-3">Ready to share</p><StatusBadge status="AWAITING_PAYMENT" /></div>
-        <p className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-sunk px-3 py-2.5 font-mono text-[0.8125rem] text-ink"><span className="truncate">pay.plinth.app/pi_9c1e…</span><span className="flex shrink-0 items-center gap-1 text-xs font-medium text-ink-2"><Copy className="size-3.5" aria-hidden />Copy</span></p>
-        <p className="mt-3 text-xs text-ink-3">Send it by chat or email, or show the QR code. Each payment gets its own address.</p>
+        <div className="flex items-center justify-between"><p className="text-xs text-ink-3">Your server asked Plinth for this order</p><StatusBadge status="AWAITING_PAYMENT" /></div>
+        <p className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-sunk px-3 py-2.5 font-mono text-[0.8125rem] text-ink"><span className="truncate">order-1042 · 25.00 USDC</span><span className="flex shrink-0 items-center gap-1 text-xs font-medium text-ink-2">checkout opens</span></p>
+        <p className="mt-3 text-xs text-ink-3">The amount comes from your cart, not from a link someone made by hand. Each order gets its own address.</p>
       </div>
     </div>
   );
@@ -104,7 +105,7 @@ function VWebhook() {
 }
 
 const STEPS: StickyStep[] = [
-  { id: "create", title: "You create a payment", body: "Make a payment link or an invoice in the dashboard, or ask for one from your code or your AI assistant. You get a link to share and a unique address for this one payment. Nothing is deployed yet, so nothing was spent.", tag: "dashboard · API · AI", visual: <VCreate /> },
+  { id: "create", title: "Your app asks for a payment", body: "When a customer checks out, your app tells Plinth the order total. You get a checkout page and a unique address for that one payment. Nothing is set up per product, and nothing is deployed yet, so nothing was spent.", tag: "API · MCP · your AI assistant", visual: <VCreate /> },
   { id: "pay", title: "Your customer pays", body: "They sign one message with their wallet, or send USDC to the address from anywhere, including an exchange. Either way, you build nothing extra.", tag: "wallet or address", visual: <AddressFrame /> },
   { id: "verify", title: "We verify it on-chain", body: "Status never comes from a click or a redirect. Plinth reads the log, checks the token contract and the amount, and waits for the network's finality rule.", tag: "payment.detected", visual: <VVerify /> },
   { id: "sweep", title: "Funds sweep to your vault", body: "A relayer deploys the invoice contract and sweeps in one transaction. The sweep takes no arguments, so the destination is fixed: your vault.", tag: "settlement.completed", visual: <VSweep /> },

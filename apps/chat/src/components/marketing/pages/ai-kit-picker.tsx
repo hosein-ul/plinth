@@ -1,7 +1,7 @@
 "use client";
 import { useId, useState } from "react";
 import { CopyCode } from "@/components/marketing/pages/copy-code";
-import { SCENARIOS } from "@/lib/ai-kit";
+import { SCENARIOS, buildPrompt } from "@/lib/ai-kit";
 import { cn } from "@/lib/cn";
 
 /** Pick what you are building; get a prompt you can paste into any AI coding assistant. */
@@ -29,7 +29,7 @@ export function AiKitPicker() {
       </div>
       <div id={`${base}-panel`} role="tabpanel" aria-labelledby={`${base}-${id}`} className="mt-5">
         <p className="mb-3 text-[0.9375rem] text-ink-2">{current.blurb}</p>
-        <CopyCode label={`prompt · ${current.label.toLowerCase()}`} className="[&_pre]:max-h-[26rem] [&_pre]:whitespace-pre-wrap [&_pre]:overflow-y-auto">{current.prompt}</CopyCode>
+        <CopyCode label={`prompt · ${current.label.toLowerCase()}`} className="[&_pre]:max-h-[26rem] [&_pre]:whitespace-pre-wrap [&_pre]:overflow-y-auto">{buildPrompt(current)}</CopyCode>
       </div>
     </div>
   );

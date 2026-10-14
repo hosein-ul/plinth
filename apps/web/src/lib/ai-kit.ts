@@ -1,152 +1,83 @@
 /**
- * Everything an AI coding assistant needs to integrate Plinth. The same text feeds /llms.txt, /llms-full.txt and the
- * copy-to-clipboard prompts on /build-with-ai, so the three can never disagree. Facts come from docs/api-guide.md and
- * the generated OpenAPI document; nothing here describes a feature that does not exist.
+ * Everything an AI coding assistant needs to add Plinth to a project that already exists. The same text feeds /llms.txt,
+ * /llms-full.txt, the MCP server and the copy-to-clipboard prompts on /build-with-ai, so they cannot disagree. Facts come from
+ * @plinth/shared (the playbook) and the generated OpenAPI document; nothing here describes a feature that does not exist.
  */
+import { API_FACTS, INTEGRATION_PLAYBOOK, WEBHOOK_EVENTS, WEBHOOK_VERIFY_NODE } from "@plinth/shared";
 import { SITE_URL } from "@/lib/site";
 
-export const API_FACTS = [
-  "Base path /v1. Authenticate with `Authorization: Bearer sk_test_...` (test networks only today). Keys are shown once.",
-  "Amounts are decimal strings in USDC (\"25.00\", at most 6 decimals). Never use floating point.",
-  "Send an `Idempotency-Key` header on every create. The same key and body returns the original response.",
-  "Create a payment with `POST /v1/payment-intents` ({\"amount\",\"order_reference\",\"success_url\"}). Redirect the customer to `checkout_url`.",
-  "Never fulfil an order from a redirect. Fulfil from the signed webhook `payment.confirmed` (fast) or `payment.completed` (strict).",
-  "Verify `Plinth-Signature: t=<unix>,v1=<hex>`: v1 = HMAC-SHA256(secret, \"<t>.<rawBody>\"). Reject if |now - t| > 300 s. Deduplicate on event.id.",
-  "Read a payment with `GET /v1/payments/{id}` (timeline, transactions, settlements, refunds).",
-  "The secret API key must stay on the server. Never put it in browser code or a Telegram Mini App bundle.",
-] as const;
+export { API_FACTS };
 
 export const LLMS_TXT = `# Plinth
 
-> Non-custodial USDC payment gateway. Customers pay with a wallet or to a unique per-payment address; funds settle into a vault only the merchant can withdraw from. Test networks only today; contracts are not yet independently audited.
+> Non-custodial USDC payment gateway. Your app asks for a payment with each order's real total; the customer pays with a wallet or to a unique address; funds settle into a vault only the merchant can withdraw from. Test networks only today; contracts are not yet independently audited.
 
-## Docs
-- [API guide](${SITE_URL}/llms-full.txt): authentication, creating payments, webhooks, refunds, in plain text
-- OpenAPI 3.1 document: served by a running Plinth API at /v1/openapi.json (every endpoint and schema)
-- [Build with AI](${SITE_URL}/build-with-ai): ready-made prompts for common projects
+## For AI coding assistants
+- [Integration playbook and API guide](${SITE_URL}/llms-full.txt): how to add Plinth checkout to an existing project
+- [Build with AI](${SITE_URL}/build-with-ai): connect an assistant, or paste one prompt
+- OpenAPI 3.1 document: served by a running Plinth API at /v1/openapi.json
+- MCP server (stdio): tools create_payment, get_payment, list_payments, create_payment_link, list_networks, get_integration_playbook
 
 ## Key facts
 ${API_FACTS.map((f) => `- ${f}`).join("\n")}
 
+## Two ways to take money
+- Payments in an app or site: the app's server creates a payment per order with the real total. Automatic, no links to make by hand.
+- Payment links and invoices: one fixed price, shared as a link. No code.
+
 ## Status
-- Available: REST API, signed webhooks, payment links, invoices, hosted checkout, dashboard, sandbox on test networks.
-- Planned, not built: MCP server, published SDKs, starter templates.
+- Available: REST API, signed webhooks, payment links, invoices, hosted checkout, dashboard, sandbox on test networks, MCP server (run from the repository).
+- Planned, not built: a published npm package for the MCP server, published SDKs, starter templates beyond the chat bot.
 `;
 
-export const LLMS_FULL = `# Plinth API guide (plain text for AI assistants)
+export const LLMS_FULL = `# Plinth: add USDC payments to a project (plain text for AI assistants)
 
+${INTEGRATION_PLAYBOOK}
+
+## Facts
 ${API_FACTS.map((f) => `- ${f}`).join("\n")}
 
-## Take a payment
+## Create a payment for one order
 POST /v1/payment-intents
-Headers: Authorization: Bearer sk_test_..., Idempotency-Key: order-1042, Content-Type: application/json
-Body: {"amount":"25.00","order_reference":"order-1042","checkout_methods":["WALLET","ADDRESS"],"expires_in_seconds":3600,"success_url":"https://shop.example/thanks"}
-Response includes: id, status, checkout_url, networks[].deposit_address.
-
-Checkout offers two methods: pay with a connected wallet (one signature, no gas for the customer where the network supports it) or send USDC to a unique address (QR / copy). Partial payments add up.
+Headers: Authorization: Bearer sk_test_..., Idempotency-Key: order-1042-1, Content-Type: application/json
+Body: {"amount":"25.00","order_reference":"order-1042","success_url":"https://shop.example/thanks","cancel_url":"https://shop.example/cart"}
+Response includes: id, status, checkout_url, networks[].deposit_address. Redirect the customer to checkout_url.
 
 ## Webhook events
-- payment.detected: transfer seen and verified, not final. Do not fulfil.
-- payment.confirmed: final funds satisfy the amount. Fulfil (fast).
-- payment.completed: funds confirmed inside the merchant vault. Fulfil (strict).
-- payment.underpaid / payment.expired / payment.late: do not fulfil.
-- payment.overpaid: excess received (excess_amount). Fulfil; the excess is refundable.
-- payment.invalid_asset: a non-USDC token was sent and is ignored.
-- settlement.submitted / completed / failed: sweep lifecycle, informational.
-- refund.requested / refund.completed: refund lifecycle.
+${WEBHOOK_EVENTS.map(([e, m, f]) => `- ${e}: ${m}. Fulfil: ${f}.`).join("\n")}
+- settlement.submitted / completed / failed and refund.requested / completed are informational.
+The event body is JSON: {"id","type","data":{"object":{"id","status","order_reference","amount",...}}}.
 
 ## Verify a webhook (Node.js)
-import { createHmac, timingSafeEqual } from "node:crypto";
-export function verify(rawBody: string, header: string, secret: string): boolean {
-  const parts = Object.fromEntries(header.split(",").map((p) => p.split("=") as [string, string]));
-  const t = Number(parts.t);
-  if (!t || Math.abs(Date.now() / 1000 - t) > 300) return false;
-  const expected = createHmac("sha256", secret).update(t + "." + rawBody).digest("hex");
-  const given = Buffer.from(parts.v1 ?? "", "hex");
-  const want = Buffer.from(expected, "hex");
-  return given.length === want.length && timingSafeEqual(given, want);
-}
+${WEBHOOK_VERIFY_NODE}
 
-## Other useful endpoints
+## Other endpoints
 GET /v1/payments, GET /v1/payments/{id}, POST /v1/payment-links, POST /v1/invoices, GET /v1/networks, POST /v1/refund-requests, POST /v1/webhook-endpoints.
 Errors: {"error":{"type","code","message","request_id"}}. 400 validation, 401/403 auth, 404, 409 conflict, 422 semantic, 429 rate limited.
 `;
 
-export interface Scenario { id: string; label: string; blurb: string; prompt: string }
+export interface Scenario { id: string; label: string; blurb: string; extra: string }
 
-const COMMON_RULES = `Rules you must follow:
-- Use only test credentials (sk_test_...). Read the key and the webhook secret from environment variables, never hard-code them, never expose them to the browser.
-- Amounts are decimal strings, never floats. Send an Idempotency-Key on every create.
-- Fulfil orders only from the verified webhook, never from a redirect or a client message.
-- Verify the Plinth-Signature header on the RAW body before parsing, reject stale timestamps, and deduplicate by event id.
-- Read the API reference first: ${SITE_URL}/llms-full.txt`;
-
-const DONE = `Definition of done (test each item and show me the result):
-1. A payment is created and I get a working checkout link.
-2. I pay it on a test network and the order flips to paid, driven only by the webhook.
-3. A webhook with a bad signature is rejected, and a replayed event is ignored.
-4. A short README explains the environment variables and how to run it.`;
-
+/** One master prompt, specialised by what the existing project is. Nothing here asks an assistant to build a project from scratch. */
 export const SCENARIOS: Scenario[] = [
-  {
-    id: "store",
-    label: "Online store",
-    blurb: "Checkout, order status and fulfilment for a shop.",
-    prompt: `Build a minimal online store checkout that accepts USDC through Plinth.
-
-Stack: use the framework already in this project (or Next.js with TypeScript if the folder is empty).
-What to build:
-- A cart page that, on "Pay", calls my server, which creates a payment with POST /v1/payment-intents (amount = cart total, order_reference = my order id, success_url = my thank-you page) and redirects the customer to checkout_url.
-- A webhook route that verifies the signature, then marks the order paid on payment.confirmed.
-- An order page that shows the live status from my own database.
-
-${COMMON_RULES}
-
-${DONE}`,
-  },
-  {
-    id: "chat-bot",
-    label: "Chat bot",
-    blurb: "Take payments inside a Telegram or Discord bot.",
-    prompt: `Build a chat bot that sells something for USDC through Plinth. Use the bot library already in this project, or grammY with TypeScript for Telegram if there is none.
-What to build:
-- A /buy command that shows the item and a "Pay 25 USDC" button. The button opens the Plinth checkout_url created for this user (order_reference = chat id + item id).
-- A webhook route that verifies the signature and, on payment.confirmed, messages the buyer "Payment received" and delivers the item or grants access (for example an invite link to a private channel).
-- A /status command that reads GET /v1/payments/{id}.
-Do not put the Plinth secret key anywhere a user or a client bundle could read it.
-
-${COMMON_RULES}
-
-${DONE}`,
-  },
-  {
-    id: "subscription",
-    label: "Paid access",
-    blurb: "Charge for a membership, channel or course.",
-    prompt: `Build paid access (a membership or course) that is paid in USDC through Plinth.
-What to build:
-- A page with the price and a "Join" button that creates a payment (order_reference = user id + plan) and redirects to checkout_url.
-- A webhook route that, on payment.confirmed, grants access for 30 days and stores the expiry.
-- A daily job that revokes expired access and sends the member a renewal link (a new payment).
-- An admin view listing members, their expiry and their last payment id.
-
-${COMMON_RULES}
-
-${DONE}`,
-  },
-  {
-    id: "invoices",
-    label: "Invoices",
-    blurb: "Send numbered invoices and track who has paid.",
-    prompt: `Build a small invoicing tool that collects USDC through Plinth.
-What to build:
-- A form to create an invoice (client, line items, due date). On save, call POST /v1/invoices or POST /v1/payment-intents with the total, and store the returned id and checkout link.
-- A shareable invoice page with a "Pay now" button that goes to the checkout link.
-- A webhook route that marks the invoice paid on payment.confirmed, and shows partial payments from payment.underpaid.
-- A list of invoices with status: draft, sent, partially paid, paid, overdue.
-
-${COMMON_RULES}
-
-${DONE}`,
-  },
+  { id: "store", label: "Online store", blurb: "An existing shop with a cart or checkout.", extra: "This is an online store. The payment is created when the customer clicks the final pay or place-order button, with the cart total computed from the product prices stored on the server." },
+  { id: "saas", label: "SaaS or membership", blurb: "Plans, upgrades or paid access.", extra: "This is a SaaS or membership product. The payment is created when someone buys or renews a plan; after payment.confirmed, activate the plan and store its expiry." },
+  { id: "bot", label: "Chat bot or Mini App", blurb: "A bot or Mini App that sells something.", extra: "This is a chat bot or Mini App. When a user taps buy, the bot's SERVER creates the payment (order_reference = chat or user id + item) and replies with a button that opens checkout_url. On payment.confirmed, deliver the item or grant access and message the buyer." },
+  { id: "booking", label: "Bookings", blurb: "Appointments, tickets, classes.", extra: "This is a booking product. Hold the slot as pending when the payment is created; confirm it on payment.confirmed, and release it if the payment expires." },
 ];
+
+export function buildPrompt(s: Scenario): string {
+  return `Add Plinth USDC payments to THIS project. Do not create a new project and do not make payment links by hand.
+
+${s.extra}
+
+If a Plinth MCP server is connected, call get_integration_playbook first and follow it, and use create_payment / get_payment to test.
+Otherwise read ${SITE_URL}/llms-full.txt and follow the playbook there.
+
+Work in this order and tell me what you found before you change anything:
+1. Find where an order, cart, booking or plan is created and where prices come from.
+2. Add the server-side payment creation, the redirect to checkout_url, and the webhook route with signature verification.
+3. Add PLINTH_API_URL, PLINTH_SECRET_KEY and PLINTH_WEBHOOK_SECRET to .env.example. Use test keys only.
+4. Test it on a test network: a real order total is charged, the order flips to paid from the webhook only, a bad signature is rejected, a replayed event is ignored.
+5. Finish with a short list: files changed, env vars to set, how to run the test.`;
+}
