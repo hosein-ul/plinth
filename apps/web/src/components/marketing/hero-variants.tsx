@@ -2,8 +2,7 @@ import Link from "next/link";
 import { ArrowRight, FlaskConical, Lock, ShieldAlert } from "lucide-react";
 import { buttonStyles } from "@/components/ui/button";
 import { CollageScene } from "@/components/marketing/hero-visuals";
-import { ShaderField } from "@/components/marketing/shader-field";
-import { SHADER_COLORS } from "@/components/marketing/shader-colors";
+import HeroCrystalGlassShader from "@/components/HeroCrystalGlassShader";
 import { DEMO_HREF } from "@/lib/routes";
 import { wrap } from "@/components/marketing/parts";
 
@@ -17,10 +16,9 @@ const TRUST = [[Lock, "Non-custodial by construction"], [FlaskConical, "Testnet 
 export function Hero() {
   const second = "Straight to your own vault.".split(" ");
   return (
-    <section className="relative isolate overflow-clip bg-ground">
-      <div aria-hidden className="absolute inset-y-0 right-0 z-0 w-[min(70rem,80vw)] [mask-image:radial-gradient(80%_80%_at_62%_46%,#000,transparent_82%)]">
-        <ShaderField preset="dither" colors={SHADER_COLORS["dither-light"]!} pixel={5} speed={1} className="opacity-[0.36]" />
-      </div>
+    <section className="relative isolate overflow-clip bg-white">
+      <HeroCrystalGlassShader />
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-28 bg-gradient-to-b from-transparent to-ground" />
       <div className={`${wrap} relative z-[1] grid items-center gap-x-8 gap-y-12 pb-20 pt-14 xl:grid-cols-[minmax(0,31rem)_minmax(0,1fr)] xl:pb-28 xl:pt-20`}>
         <div className="relative z-10">
           <h1 className="t-display text-[clamp(2.75rem,4.5vw,4.25rem)] text-ink">
