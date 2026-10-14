@@ -34,7 +34,7 @@ export function TransactionsView() {
             cell: (t) => (
               <div className="min-w-0">
                 <p className="font-medium text-ink">{KIND[t.kind] ?? t.kind}</p>
-                {!t.official_asset ? <p className="text-xs font-medium text-bad-ink">Not official USDC</p> : <p className="text-xs text-ink-3 lg:hidden">{t.network}</p>}
+                {!t.official_asset ? <p className="text-xs font-medium text-bad-ink">Not the official token</p> : <p className="text-xs text-ink-3 lg:hidden">{t.network}</p>}
               </div>
             ),
           },
@@ -43,7 +43,7 @@ export function TransactionsView() {
           { key: "st", header: "Status", cell: (t) => <TxStatusBadge status={t.status} /> },
           { key: "tx", header: "Transaction", cell: (t) => <span className="inline-flex items-center gap-1.5"><Hash value={t.tx_hash} href={t.explorer_url} lead={8} tail={4} /><span className="tnum font-mono text-2xs text-ink-4">#{t.log_index}</span></span> },
           { key: "when", header: "Seen", hideBelow: "lg", cell: (t) => <span className="text-ink-3" title={formatDateTime(t.seen_at)}>{relativeTime(t.seen_at)}</span> },
-          { key: "amt", header: "Amount", align: "right", cell: (t) => <Amount value={t.amount} size="sm" unit={false} /> },
+          { key: "amt", header: "Amount", align: "right", cell: (t) => <Amount value={t.amount} size="sm" symbol={t.currency ?? "USDC"} unit={(t.currency ?? "USDC") !== "USDC"} /> },
         ]}
       />
     </>
@@ -79,8 +79,8 @@ export function SettlementsView() {
             cell: (s) => (s.relayer_fee ? <span className="tnum font-mono text-xs text-ink-3">{s.relayer_fee.usdc ? `${s.relayer_fee.usdc} USDC` : `${(Number(s.relayer_fee.native_wei) / 1e18).toFixed(6)} ${s.relayer_fee.native_symbol}`}</span> : <span className="text-ink-4">—</span>),
           },
           { key: "to", header: "Paid to", hideBelow: "lg", cell: (s) => <span className="text-ink-2">{s.destination_kind === "DIRECT" ? "Your wallet" : "Your vault"}</span> },
-          { key: "pfee", header: "Platform fee", hideBelow: "md", align: "right", cell: (s) => (s.fee != null ? <Amount value={s.fee} size="sm" unit={false} /> : <span className="text-ink-4">—</span>) },
-          { key: "amt", header: "Swept", align: "right", cell: (s) => <Amount value={s.swept_amount ?? s.expected_amount} size="sm" unit={false} /> },
+          { key: "pfee", header: "Platform fee", hideBelow: "md", align: "right", cell: (s) => (s.fee != null ? <Amount value={s.fee} size="sm" symbol={s.currency ?? "USDC"} unit={(s.currency ?? "USDC") !== "USDC"} /> : <span className="text-ink-4">—</span>) },
+          { key: "amt", header: "Swept", align: "right", cell: (s) => <Amount value={s.swept_amount ?? s.expected_amount} size="sm" symbol={s.currency ?? "USDC"} unit={(s.currency ?? "USDC") !== "USDC"} /> },
         ]}
       />
     </>
@@ -101,7 +101,7 @@ export function RefundsView() {
       <Ledger<any>
         caption="Refund requests" rows={q.data?.data} loading={q.isLoading} error={q.error} retry={() => q.refetch()} rowKey={(r) => r.id}
         filter={{ status: (r) => r.status, text: (r) => `${r.id} ${r.payment_intent_id} ${r.recipient}`, placeholder: "Search refund, payment or recipient" }}
-        empty={{ title: "No refund requests", body: "Request one from a payment's detail page. You then send the USDC from the account that received the payment and paste the transaction hash here as proof.", action: <Button variant="primary" asChild><Link href={href("/dashboard/payments")}>Open a payment</Link></Button> }}
+        empty={{ title: "No refund requests", body: "Request one from a payment's detail page. You then send the funds from the account that received the payment and paste the transaction hash here as proof.", action: <Button variant="primary" asChild><Link href={href("/dashboard/payments")}>Open a payment</Link></Button> }}
         columns={[
           {
             key: "id", header: "Refund",
@@ -114,7 +114,7 @@ export function RefundsView() {
           },
           { key: "st", header: "Status", cell: (r) => <Chip tone={r.status === "COMPLETED" ? "ok" : r.status === "REQUESTED" ? "warn" : "neutral"}>{cap(r.status)}</Chip> },
           { key: "to", header: "Recipient", hideBelow: "md", cell: (r) => <Hash value={r.recipient} /> },
-          { key: "amt", header: "Amount", align: "right", cell: (r) => <Amount value={r.amount} size="sm" unit={false} /> },
+          { key: "amt", header: "Amount", align: "right", cell: (r) => <Amount value={r.amount} size="sm" symbol={r.currency ?? "USDC"} unit={(r.currency ?? "USDC") !== "USDC"} /> },
           {
             key: "act", header: "", align: "right",
             cell: (r) =>
@@ -134,11 +134,11 @@ export function RefundsView() {
           {proofFor && (
             <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (hashValid) proof.mutate(proofFor.id); }}>
               <dl className="divide-y divide-line rounded-ctl border border-line px-4">
-                <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Send</dt><dd><Amount value={proofFor.amount} size="md" /></dd></div>
+                <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Send</dt><dd><Amount value={proofFor.amount} size="md" symbol={proofFor.currency ?? "USDC"} /></dd></div>
                 <div className="grid gap-1.5 py-3 text-sm"><dt className="text-ink-3">To</dt><dd><CopyField value={proofFor.recipient} /></dd></div>
                 {proofFor.pay_from && <div className="grid gap-1.5 py-3 text-sm"><dt className="text-ink-3">{proofFor.pay_from.kind === "DIRECT" ? "From your payout wallet" : "From your vault"}</dt><dd><CopyField value={proofFor.pay_from.address} /></dd></div>}
               </dl>
-              <Field label="Transaction hash" htmlFor="proof-hash" error={hash && !hashValid ? "A transaction hash is 0x followed by 64 hexadecimal characters." : null} hint={`We check the receipt for a USDC transfer from your ${proofFor?.pay_from?.kind === "DIRECT" ? "payout wallet" : "vault"} to the recipient for exactly this amount.`}>
+              <Field label="Transaction hash" htmlFor="proof-hash" error={hash && !hashValid ? "A transaction hash is 0x followed by 64 hexadecimal characters." : null} hint={`We check the receipt for a ${proofFor?.currency ?? "USDC"} transfer from your ${proofFor?.pay_from?.kind === "DIRECT" ? "payout wallet" : "vault"} to the recipient for exactly this amount.`}>
                 <Input id="proof-hash" className="font-mono" value={hash} onChange={(e) => setHash(e.target.value.trim())} placeholder="0x…" aria-invalid={!!hash && !hashValid} autoFocus />
               </Field>
               <Button type="submit" variant="primary" loading={proof.isPending} disabled={!hashValid}>Verify on-chain</Button>

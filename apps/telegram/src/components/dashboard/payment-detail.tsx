@@ -22,7 +22,7 @@ import { QuietEmpty, TableHeading } from "./parts-payments";
 const EVENT_LABEL: Record<string, string> = {
   created: "Payment created",
   "status.changed": "Status changed",
-  "transfer.detected": "USDC transfer detected and verified",
+  "transfer.detected": "Token transfer detected and verified",
   "transfer.finalized": "Transfer reached finality",
   "transfer.invalid_asset": "Unsupported token received (ignored)",
   "settlement.queued": "Settlement queued",
@@ -75,7 +75,7 @@ export function PaymentDetail({ id }: { id: string }) {
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3 px-6 pt-6 sm:px-8 sm:pt-8">
           <div>
             <p className="label">Amount</p>
-            <Amount value={p.amount} size="display" className="mt-2 block max-sm:text-[2.25rem]" />
+            <Amount value={p.amount} size="display" symbol={p.currency ?? "USDC"} className="mt-2 block max-sm:text-[2.25rem]" />
           </div>
           <p className="max-w-sm pb-1 text-sm text-ink-3">{STATUS_META[p.status]?.hint}</p>
         </div>
@@ -83,18 +83,18 @@ export function PaymentDetail({ id }: { id: string }) {
           <SettlementRail stations={stations} />
         </div>
         <dl className="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-4">
-          <Figure label="Received (final)" value={p.amount_received} />
-          <Figure label="Settled" value={p.amount_settled} />
-          <Figure label="Pending" value={p.amount_pending} />
-          <Figure label="Refunded" value={p.amount_refunded} />
+          <Figure symbol={p.currency ?? "USDC"} label="Received (final)" value={p.amount_received} />
+          <Figure symbol={p.currency ?? "USDC"} label="Settled" value={p.amount_settled} />
+          <Figure symbol={p.currency ?? "USDC"} label="Pending" value={p.amount_pending} />
+          <Figure symbol={p.currency ?? "USDC"} label="Refunded" value={p.amount_refunded} />
         </dl>
       </section>
       {Number(p.fee_amount_units) > 0 && (
         <p className="mt-4 rounded-ctl bg-sunk px-3.5 py-2.5 text-sm text-ink-2">
-          Platform fee <span className="tnum font-medium text-ink">{p.fee_amount} USDC</span> was taken in the same transaction, so you received <span className="tnum font-medium text-ink">{p.net_amount} USDC</span>. The fee is not refunded.
+          Platform fee <span className="tnum font-medium text-ink">{p.fee_amount} {p.currency ?? "USDC"}</span> was taken in the same transaction, so you received <span className="tnum font-medium text-ink">{p.net_amount} {p.currency ?? "USDC"}</span>. The fee is not refunded.
         </p>
       )}
-      {p.excess_amount !== "0.00" && <p className="mt-4 rounded-ctl bg-warn-quiet px-3.5 py-2.5 text-sm text-warn-ink">Overpaid by {p.excess_amount} USDC — consider a refund.</p>}
+      {p.excess_amount !== "0.00" && <p className="mt-4 rounded-ctl bg-warn-quiet px-3.5 py-2.5 text-sm text-warn-ink">Overpaid by {p.excess_amount} {p.currency ?? "USDC"} — consider a refund.</p>}
 
       <div className="mt-8 grid gap-x-8 gap-y-8 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-8">
@@ -125,12 +125,12 @@ export function PaymentDetail({ id }: { id: string }) {
               caption="On-chain movements" rows={p.transactions} rowKey={(t: any) => t.id}
               empty={<QuietEmpty>Nothing seen on-chain yet. This page refreshes automatically.</QuietEmpty>}
               columns={[
-                { key: "kind", header: "Type", cell: (t: any) => <div><p className="font-medium text-ink">{MOVEMENT_LABEL[t.kind] ?? t.kind}</p>{!t.official_asset && <p className="text-xs text-bad-ink">Not official USDC — ignored</p>}</div> },
+                { key: "kind", header: "Type", cell: (t: any) => <div><p className="font-medium text-ink">{MOVEMENT_LABEL[t.kind] ?? t.kind}</p>{!t.official_asset && <p className="text-xs text-bad-ink">Not the official token — ignored</p>}</div> },
                 { key: "net", header: "Network", hideBelow: "md", cell: (t: any) => <span className="text-ink-3">{t.network}</span> },
                 { key: "st", header: "Status", cell: (t: any) => <TxStatusBadge status={t.status} /> },
                 { key: "conf", header: "Conf.", hideBelow: "md", align: "right", cell: (t: any) => <span className="tnum text-ink-3">{t.confirmations}</span> },
                 { key: "tx", header: "Tx", cell: (t: any) => <Hash value={t.tx_hash} href={t.explorer_url} lead={8} tail={4} /> },
-                { key: "amt", header: "Amount", align: "right", cell: (t: any) => <Amount value={t.amount} size="sm" unit={false} /> },
+                { key: "amt", header: "Amount", align: "right", cell: (t: any) => <Amount value={t.amount} size="sm" symbol={p.currency ?? "USDC"} unit={(p.currency ?? "USDC") !== "USDC"} /> },
               ]}
             />
           </section>
@@ -145,8 +145,8 @@ export function PaymentDetail({ id }: { id: string }) {
                 { key: "st", header: "Status", cell: (s: any) => <div><span className="text-sm font-medium capitalize text-ink">{s.status.toLowerCase()}</span>{s.failure_reason && <p className="max-w-56 text-xs text-bad-ink">{s.failure_reason}</p>}</div> },
                 { key: "tx", header: "Tx", cell: (s: any) => (s.tx_hash ? <Hash value={s.tx_hash} href={s.explorer_url} lead={8} tail={4} /> : <span className="text-ink-3">—</span>) },
                 { key: "to", header: "Paid to", hideBelow: "md", cell: (s: any) => <span className="text-sm text-ink-2">{s.destination_kind === "DIRECT" ? "Your wallet" : "Your vault"}</span> },
-                { key: "fee", header: "Fee", align: "right", hideBelow: "md", cell: (s: any) => (s.fee_units != null ? <Amount value={(Number(s.fee_units) / 1e6).toFixed(2)} size="sm" unit={false} /> : <span className="text-ink-4">—</span>) },
-                { key: "amt", header: "Swept", align: "right", cell: (s: any) => <Amount value={(Number(s.swept_units ?? s.expected_units) / 1e6).toFixed(2)} size="sm" unit={false} /> },
+                { key: "fee", header: "Fee", align: "right", hideBelow: "md", cell: (s: any) => (s.fee_units != null ? <Amount value={(Number(s.fee_units) / 1e6).toFixed(2)} size="sm" symbol={p.currency ?? "USDC"} unit={(p.currency ?? "USDC") !== "USDC"} /> : <span className="text-ink-4">—</span>) },
+                { key: "amt", header: "Swept", align: "right", cell: (s: any) => <Amount value={(Number(s.swept_units ?? s.expected_units) / 1e6).toFixed(2)} size="sm" symbol={p.currency ?? "USDC"} unit={(p.currency ?? "USDC") !== "USDC"} /> },
               ]}
             />
           </section>
@@ -207,11 +207,11 @@ function BackLink() {
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
+function Figure({ label, value, symbol }: { label: string; value: string; symbol: string }) {
   return (
     <div className="bg-raised px-6 py-4 sm:px-8">
       <dt className="label">{label}</dt>
-      <dd className="mt-1"><Amount value={value} size="md" unit={false} /></dd>
+      <dd className="mt-1"><Amount value={value} size="md" symbol={symbol} unit={symbol !== "USDC"} /></dd>
     </div>
   );
 }
@@ -253,7 +253,7 @@ function RefundDialog({ payment }: { payment: any }) {
       <DialogTrigger asChild><Button disabled={!can}>Request refund</Button></DialogTrigger>
       <DialogContent title="Request a refund" description="A refund is a new transfer out of your vault or payout wallet, whichever received the payment. You send it yourself; it is marked complete only after the transfer is verified on-chain. The platform fee is not refunded.">
         <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (ok) m.mutate(undefined); }}>
-          <Field label="Amount (USDC)" htmlFor="rf-amount" hint={`${payment.amount_received} USDC received so far.`} error={amount !== "" && !/^\d+(\.\d{1,6})?$/.test(amount) ? "Use digits with up to 6 decimals." : null}>
+          <Field label={`Amount (${payment.currency ?? "USDC"})`} htmlFor="rf-amount" hint={`${payment.amount_received} ${payment.currency ?? "USDC"} received so far.`} error={amount !== "" && !/^\d+(\.\d{1,6})?$/.test(amount) ? "Use digits with up to 6 decimals." : null}>
             <Input id="rf-amount" value={amount} onChange={(e) => setAmount(e.target.value)} className="font-mono" inputMode="decimal" />
           </Field>
           <Field label="Send to" htmlFor="rf-to" hint="The customer's address on the same network." error={to !== "" && !/^0x[0-9a-fA-F]{40}$/.test(to) ? "Enter a full 0x address (42 characters)." : null}>

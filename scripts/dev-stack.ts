@@ -18,7 +18,7 @@ const API_PORT = Number(process.env.API_PORT ?? 4000);
 const RPC_PORT = Number(process.env.DEV_RPC_PORT ?? 8545);
 const WEB_URL = process.env.PUBLIC_WEB_URL ?? "http://localhost:3000";
 
-const chain = await startDevChain({ port: RPC_PORT, blockTimeSeconds: 1, confirmations: 2, vaultConfigDelaySeconds: 60 });
+const chain = await startDevChain({ port: RPC_PORT, blockTimeSeconds: 1, confirmations: 2, vaultConfigDelaySeconds: 60, tokens: ["EURC"] });
 const handle = connect(process.env.DATABASE_URL ?? "pglite://memory");
 await handle.migrate();
 
@@ -37,6 +37,8 @@ const { merchantId } = await signup(engine, { business_name: "Demo Roasters", em
 const session = await login(engine, demo.email, demo.password, { type: "SYSTEM" });
 const ctx = { merchantId, environment: "test" as const, actor: { type: "SYSTEM" as const }, role: "OWNER" as const, via: "session" as const };
 await enableNetwork(engine, ctx, { network: chain.network.id, owner_address: chain.accounts[2]!.address });
+// The local chain also has a EURC test double (like Arc), so the two-token flows can be tried by hand.
+await enableNetwork(engine, ctx, { network: chain.network.id, owner_address: chain.accounts[2]!.address, token: "EURC" });
 for (let i = 0; i < 4; i++) {
   await relayerTick(engine, chain.network.id);
   await watcherTick(engine, chain.network.id);
@@ -45,6 +47,7 @@ for (let i = 0; i < 4; i++) {
 const key = await createApiKey(engine, ctx, { name: "Demo server key", environment: "test" });
 const hook = await createEndpoint(engine, merchantId, "test", { url: `${WEB_URL}/api/demo-webhook`, events: ["*"] });
 await chain.mintUsdc(chain.accounts[3]!.address, parseUsdc("1000"));
+await chain.mintToken("EURC", chain.accounts[3]!.address, parseUsdc("1000"));
 
 // ---- serve
 const { app, routes } = await buildServer(engine, { adminToken: "dev-operator-token", rateLimitDisabled: true });
@@ -79,7 +82,8 @@ console.log(`
   Dashboard      ${demo.email}  /  ${demo.password}
   Test API key   ${key.key}
   Mock USDC      ${chain.usdc}
-  Customer       ${chain.accounts[3]!.address}  (1000 test USDC; anvil key #3)
+  Mock EURC      ${chain.tokens.EURC}
+  Customer       ${chain.accounts[3]!.address}  (1000 test USDC and 1000 test EURC; anvil key #3)
   Vault owner    ${chain.accounts[2]!.address}  (anvil key #2)
 
   Try it:

@@ -55,6 +55,7 @@ export function WalletPanel({
   const { signTypedDataAsync } = useSignTypedData();
 
   const wrongChain = isConnected && !!net && chainId !== net.chain_id;
+  const sym: string = net?.token?.symbol ?? "USDC";
   const balance = useReadContract({
     abi: erc20Abi,
     address: net?.usdc_address as `0x${string}` | undefined,
@@ -173,7 +174,7 @@ export function WalletPanel({
   if (!net.wallet_checkout_supported) {
     return (
       <div className="space-y-4">
-        <Notice tone="warn"><span role="status">Wallet payment is not available on {net.name}{net.wallet_unavailable_reason ? `: ${net.wallet_unavailable_reason}` : "."} You can still pay by sending USDC to the address.</span></Notice>
+        <Notice tone="warn"><span role="status">Wallet payment is not available on {net.name}{net.wallet_unavailable_reason ? `: ${net.wallet_unavailable_reason}` : "."} You can still pay by sending {sym} to the address.</span></Notice>
         <Button variant="primary" size="lg" className="w-full" onClick={onUseAddress}>Send to address instead</Button>
       </div>
     );
@@ -189,7 +190,7 @@ export function WalletPanel({
           <div className="rounded-ctl border border-line bg-wash p-4">
             <span className="grid size-10 place-items-center rounded-ctl bg-raised text-ink shadow-ctl"><Wallet className="size-5" aria-hidden /></span>
             <p className="mt-3 text-[0.9375rem] font-medium text-ink">Connect the wallet you will pay from</p>
-            <p className="mt-1 text-sm text-ink-3">You sign one USDC authorisation for {remaining} USDC. No gas token is needed and nothing is sent until you confirm.</p>
+            <p className="mt-1 text-sm text-ink-3">You sign one {sym} authorisation for {remaining} {sym}. No gas token is needed and nothing is sent until you confirm.</p>
           </div>
           <ActionBar className="mt-4">
             <Button variant="primary" size="lg" className="h-12 w-full" disabled={disabled} onClick={() => setDialog(true)}>
@@ -234,22 +235,22 @@ export function WalletPanel({
             <>
               <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 rounded-ctl border border-line px-3.5 py-3 text-sm">
                 <dt className="text-ink-3">To pay</dt>
-                <dd className="text-right"><Amount value={remaining} size="md" /></dd>
-                <dt className="text-ink-3">Your USDC on {net.name}</dt>
-                <dd className="text-right tnum text-ink-2" aria-live="polite">{balance.isLoading ? <span className="skeleton inline-block h-4 w-16 align-middle" aria-label="Loading balance" /> : have === undefined ? "Could not read" : `${fmt(have)} USDC`}</dd>
+                <dd className="text-right"><Amount value={remaining} size="md" symbol={sym} /></dd>
+                <dt className="text-ink-3">Your {sym} on {net.name}</dt>
+                <dd className="text-right tnum text-ink-2" aria-live="polite">{balance.isLoading ? <span className="skeleton inline-block h-4 w-16 align-middle" aria-label="Loading balance" /> : have === undefined ? "Could not read" : `${fmt(have)} ${sym}`}</dd>
               </dl>
               {insufficient && (
                 <div role="alert" className="rounded-ctl border border-bad/25 bg-bad-quiet px-3.5 py-3 text-sm text-bad-ink">
-                  <p className="font-medium">Insufficient USDC</p>
-                  <p className="mt-0.5">This wallet holds {fmt(have!)} USDC on {net.name}. {remaining} USDC is needed.</p>
+                  <p className="font-medium">Insufficient {sym}</p>
+                  <p className="mt-0.5">This wallet holds {fmt(have!)} {sym} on {net.name}. {remaining} {sym} is needed.</p>
                   <button type="button" onClick={onUseAddress} className="mt-1.5 font-medium underline underline-offset-4">Pay from another wallet or exchange by address</button>
                 </div>
               )}
               <ActionBar>
                 <Button variant="primary" size="lg" className="h-12 w-full" loading={phase === "preparing"} disabled={disabled || insufficient || busy} onClick={review}>
-                  Review {remaining} USDC payment <ArrowRight className="size-4" aria-hidden />
+                  Review {remaining} {sym} payment <ArrowRight className="size-4" aria-hidden />
                 </Button>
-                {(insufficient || wrongChain) && <p className="mt-2 text-xs text-ink-3">{insufficient ? "Not enough USDC to continue." : "Switch network to continue."}</p>}
+                {(insufficient || wrongChain) && <p className="mt-2 text-xs text-ink-3">{insufficient ? `Not enough ${sym} to continue.` : "Switch network to continue."}</p>}
               </ActionBar>
             </>
           )}
@@ -259,7 +260,7 @@ export function WalletPanel({
               <div>
                 <p className="text-sm font-medium text-ink">You are about to sign</p>
                 <dl className="mt-2 divide-y divide-line rounded-ctl border border-line text-sm">
-                  <EchoRow k="Amount" v={<Amount value={prep.amount} size="md" />} />
+                  <EchoRow k="Amount" v={<Amount value={prep.amount} size="md" symbol={sym} />} />
                   <EchoRow k="Network" v={<span className="inline-flex items-center gap-2"><ChainBadge id={net.network} size={18} /></span>} />
                   <EchoRow k="To" v={<span className="text-right"><Hash value={prep.typed_data.message.to} lead={8} tail={6} href={`${net.explorer_url}/address/${prep.typed_data.message.to}`} className="text-ink" /><span className="block text-xs text-ink-3">Plinth payment router, forwards to the merchant&apos;s vault</span></span>} />
                   <EchoRow k="Network fee" v={<span className="text-ink-2">None for you</span>} />
@@ -285,7 +286,7 @@ export function WalletPanel({
                 <WalletIcon id={connector?.id ?? "injected"} icon={connector?.icon} size={32} />
                 <div>
                   <p className="font-medium text-ink">{phase === "signing" ? `Confirm in ${walletName}` : phase === "submitting" ? "Sending your signature" : "Waiting for the network"}</p>
-                  <p className="text-sm text-ink-3">{phase === "signing" ? `Approve the signature request for ${prep?.amount ?? remaining} USDC.` : phase === "submitting" ? "Handing it to the relayer." : "The relayer is submitting it. This page moves on by itself."}</p>
+                  <p className="text-sm text-ink-3">{phase === "signing" ? `Approve the signature request for ${prep?.amount ?? remaining} ${sym}.` : phase === "submitting" ? "Handing it to the relayer." : "The relayer is submitting it. This page moves on by itself."}</p>
                 </div>
                 <LoaderCircle className="ml-auto size-5 shrink-0 animate-spin text-ink-3" aria-hidden />
               </div>

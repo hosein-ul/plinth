@@ -39,6 +39,7 @@ export function CheckoutView({ id, initial }: { id: string; initial: any }) {
   }, [refetch]);
 
   const networks = data.networks as Net[];
+  const sym: string = data.currency ?? "USDC";
   const left = useCountdown(data.seconds_remaining);
   const walletOn = data.checkout_methods.includes("WALLET");
   const addressOn = data.checkout_methods.includes("ADDRESS");
@@ -111,11 +112,11 @@ export function CheckoutView({ id, initial }: { id: string; initial: any }) {
                   <div className="[--color-ink:#fff] [--color-ink-2:rgb(255_255_255/0.8)] [--color-ink-3:rgb(255_255_255/0.62)] [--color-ink-4:rgb(255_255_255/0.5)] [--color-sunk:rgb(255_255_255/0.14)] [--color-signal-quiet:rgb(14_166_107/0.25)]">
               <div className="mt-8">
                 <p className="label">{view === "closed" ? (final + pending > 0n ? "Not received" : "Amount requested") : partial ? "Remaining to pay" : paid ? "Amount paid" : "Amount due"}</p>
-                <Amount value={view === "closed" && partial ? data.remaining : partial ? data.remaining : paid ? data.amount_received : data.amount} size="display" className="mt-2 block max-w-full text-[2.75rem] sm:text-[3.5rem]" />
+                <Amount value={view === "closed" && partial ? data.remaining : partial ? data.remaining : paid ? data.amount_received : data.amount} size="display" symbol={sym} className="mt-2 block max-w-full text-[2.75rem] sm:text-[3.5rem]" />
                 {partial && (
                   <div className="mt-3 max-w-xs">
-                    <Meter label={`${receivedSoFar} of ${data.amount} USDC received`} parts={[{ pct: stationsTotal.pct, tone: "signal" }, { pct: stationsTotal.pend, tone: "info" }]} />
-                    <p className="mt-2 text-sm text-ink-3" aria-live="polite">of <Amount value={data.amount} size="sm" /> total · <span className="tnum">{receivedSoFar}</span> USDC seen so far</p>
+                    <Meter label={`${receivedSoFar} of ${data.amount} ${sym} received`} parts={[{ pct: stationsTotal.pct, tone: "signal" }, { pct: stationsTotal.pend, tone: "info" }]} />
+                    <p className="mt-2 text-sm text-ink-3" aria-live="polite">of <Amount value={data.amount} size="sm" symbol={sym} /> total · <span className="tnum">{receivedSoFar}</span> {sym} seen so far</p>
                   </div>
                 )}
               </div>
@@ -175,22 +176,22 @@ export function CheckoutView({ id, initial }: { id: string; initial: any }) {
               {view === "closed" && <ClosedPanel data={data} kind={closedKind} onRecheck={() => refetch()} />}
               {view === "pay" && (
                 <div className="space-y-5">
-                  <div className="flex items-center justify-between gap-3"><h2 className="text-[1.1875rem] font-medium tracking-[-0.025em] text-ink">Pay with USDC</h2><span className="inline-flex items-center gap-1.5 text-xs text-ink-3"><Lock className="size-3" aria-hidden />Encrypted and non-custodial</span></div>
+                  <div className="flex items-center justify-between gap-3"><h2 className="text-[1.1875rem] font-medium tracking-[-0.025em] text-ink">Pay with {sym}</h2><span className="inline-flex items-center gap-1.5 text-xs text-ink-3"><Lock className="size-3" aria-hidden />Encrypted and non-custodial</span></div>
                   {inFlight && partial && (
                     <div role="status" className="flex items-start gap-2.5 rounded-ctl bg-info-quiet px-3.5 py-3 text-sm text-info-ink">
                       <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-info animate-[live-pulse_1.4s_ease-in-out_infinite]" aria-hidden />
-                      <p><strong className="font-medium">Part of the payment is on its way.</strong> {receivedSoFar} USDC seen so far. Send the remaining <span className="tnum font-medium">{data.remaining}</span> USDC to complete it.</p>
+                      <p><strong className="font-medium">Part of the payment is on its way.</strong> {receivedSoFar} {sym} seen so far. Send the remaining <span className="tnum font-medium">{data.remaining}</span> {sym} to complete it.</p>
                     </div>
                   )}
                   {partial && !inFlight && (
                     <div role="status" className="rounded-ctl bg-info-quiet px-3.5 py-3 text-sm text-info-ink">
-                      <strong className="font-medium">Partly paid.</strong> <span className="tnum">{receivedSoFar}</span> USDC is final. Send the remaining <span className="tnum font-medium">{data.remaining}</span> USDC to complete it.
+                      <strong className="font-medium">Partly paid.</strong> <span className="tnum">{receivedSoFar}</span> {sym} is final. Send the remaining <span className="tnum font-medium">{data.remaining}</span> {sym} to complete it.
                     </div>
                   )}
                   {wrongToken && (
                     <div role="alert" className="flex gap-2.5 rounded-ctl border border-bad/25 bg-bad-quiet px-3.5 py-3 text-sm text-bad-ink">
                       <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-                      <p><strong className="font-medium">A token that is not official USDC was sent to this address.</strong> It is ignored and was not credited. You can still pay the full amount in official USDC below. Keep that transaction hash and ask the merchant about it.</p>
+                      <p><strong className="font-medium">A token that is not official {sym} was sent to this address.</strong> It is ignored and was not credited. You can still pay the full amount in official {sym} below. Keep that transaction hash and ask the merchant about it.</p>
                     </div>
                   )}
 
@@ -218,14 +219,14 @@ export function CheckoutView({ id, initial }: { id: string; initial: any }) {
               )}
 
               <div className="mt-6 -mb-3.5">
-                <HowItWorks />
+                <HowItWorks symbol={sym} />
                 <HelpPanel data={data} />
               </div>
             </div>
 
             {view === "pay" && (
               <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-xs text-ink-3">
-                <li className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5 text-signal-ink" aria-hidden />Official USDC only</li>
+                <li className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5 text-signal-ink" aria-hidden />Official {sym} only</li>
                 <li className="inline-flex items-center gap-1.5"><Lock className="size-3.5" aria-hidden />Funds go to the merchant&apos;s vault</li>
                 <li className="inline-flex items-center gap-1.5"><Zap className="size-3.5" aria-hidden />One signature, no gas on supported networks</li>
               </ul>
@@ -237,8 +238,8 @@ export function CheckoutView({ id, initial }: { id: string; initial: any }) {
                   {payments.map((p) => (
                     <li key={p.tx_hash + p.amount} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                       <span className="flex items-center gap-2">
-                        <Amount value={p.amount} size="sm" />
-                        {!p.official_asset && <span className="rounded-full bg-bad-quiet px-2 py-0.5 text-xs text-bad-ink">not USDC, ignored</span>}
+                        <Amount value={p.amount} size="sm" symbol={sym} />
+                        {!p.official_asset && <span className="rounded-full bg-bad-quiet px-2 py-0.5 text-xs text-bad-ink">not {sym}, ignored</span>}
                       </span>
                       <span className="flex items-center gap-3 text-ink-3">
                         <span className="tnum text-xs">{p.status === "FINAL" ? "Final" : `${p.confirmations} conf.`}</span>

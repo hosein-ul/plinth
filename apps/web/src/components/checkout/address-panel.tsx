@@ -39,6 +39,7 @@ export function AddressPanel({
   disabled: boolean;
 }) {
   const [qrKind, setQrKind] = useState<"address" | "uri">("address");
+  const sym: string = net?.token?.symbol ?? "USDC";
 
   if (!net || !net.deposit_address) return <Notice tone="warn">No deposit address is available on this network for this payment. Choose another network or pay with a wallet.</Notice>;
   const addr = net.deposit_address;
@@ -55,9 +56,9 @@ export function AddressPanel({
               <span key={c} aria-hidden className={cn("absolute size-3.5 border-ink", c)} />
             ))}
             <div className="relative">
-              <QRCodeSVG value={qrValue} size={168} level="H" marginSize={0} fgColor="var(--color-ink)" bgColor="var(--color-raised)" title={`${net.name} ${qrKind === "address" ? "deposit address" : "USDC payment request"}: ${qrValue}`} />
+              <QRCodeSVG value={qrValue} size={168} level="H" marginSize={0} fgColor="var(--color-ink)" bgColor="var(--color-raised)" title={`${net.name} ${qrKind === "address" ? "deposit address" : `${sym} payment request`}: ${qrValue}`} />
               <span aria-hidden className="absolute left-1/2 top-1/2 grid size-[34px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white shadow-[0_0_0_3px_#fff]">
-                <TokenIcon symbol="USDC" size={28} />
+                <TokenIcon symbol={sym as never} size={28} />
               </span>
             </div>
           </div>
@@ -77,13 +78,13 @@ export function AddressPanel({
           <div>
             <p className="label">{partial ? "Still to send" : "Send exactly"}</p>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <Amount value={remaining} size="xl" />
+              <Amount value={remaining} size="xl" symbol={sym} />
               <CopyButton value={remaining} label="Copy amount" className="h-9 px-3" />
             </div>
             {partial && (
               <div className="mt-2.5">
-                <Meter label={`${receivedSoFar} of ${amount} USDC received`} parts={[{ pct: (Number(receivedSoFar) / Number(amount)) * 100, tone: "signal" }]} />
-                <p className="mt-1.5 text-xs text-ink-3" aria-live="polite">Received so far {receivedSoFar} of {amount} USDC. This updates by itself.</p>
+                <Meter label={`${receivedSoFar} of ${amount} ${sym} received`} parts={[{ pct: (Number(receivedSoFar) / Number(amount)) * 100, tone: "signal" }]} />
+                <p className="mt-1.5 text-xs text-ink-3" aria-live="polite">Received so far {receivedSoFar} of {amount} {sym}. This updates by itself.</p>
               </div>
             )}
           </div>
@@ -111,8 +112,8 @@ export function AddressPanel({
       <div className="flex gap-3 rounded-ctl border border-warn/30 bg-warn-quiet px-3.5 py-3 text-sm text-warn-ink">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
         <div>
-          <p className="font-medium">Send exactly {remaining} USDC on {net.name} only.</p>
-          <p className="mt-0.5">Send only official USDC. Other tokens, and USDC on other networks, will not be credited to this payment. Your wallet or exchange may take its network fee out of the amount, so send the fee on top.</p>
+          <p className="font-medium">Send exactly {remaining} {sym} on {net.name} only.</p>
+          <p className="mt-0.5">Send only official {sym}. Other tokens, and {sym} on other networks, will not be credited to this payment. Your wallet or exchange may take its network fee out of the amount, so send the fee on top.</p>
         </div>
       </div>
 
@@ -124,7 +125,7 @@ export function AddressPanel({
         <ul className="mt-2.5 space-y-2 text-ink-3">
           <li><strong className="font-medium text-ink-2">Sent less.</strong> Send the rest to the same address before the timer ends. Transfers add up and this page shows what is still missing.</li>
           <li><strong className="font-medium text-ink-2">Sent more.</strong> The payment completes and the extra amount is shown on your receipt. Plinth does not hold it. The merchant decides about returning it.</li>
-          <li><strong className="font-medium text-ink-2">Sent a different token.</strong> A token that is not the official USDC above cannot be matched to this payment. It will show here as ignored. Keep the transaction hash and contact the merchant.</li>
+          <li><strong className="font-medium text-ink-2">Sent a different token.</strong> A token that is not the official {sym} above cannot be matched to this payment. It will show here as ignored. Keep the transaction hash and contact the merchant.</li>
           <li><strong className="font-medium text-ink-2">Sent on another network.</strong> Plinth only watches {net.name} for this address. Keep the transaction hash and contact the merchant.</li>
           <li>Your payment is confirmed after {net.finality_confirmations} confirmation{net.finality_confirmations === 1 ? "" : "s"} on {net.name}. You do not need to keep this page open.</li>
         </ul>

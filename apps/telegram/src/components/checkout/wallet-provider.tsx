@@ -15,6 +15,8 @@ export interface NetInfo {
   environment: string;
   explorer_url: string;
   native_currency: { symbol: string; decimals: number };
+  /** Which payment token a vault card is about (USDC when absent). */
+  vaultToken?: string;
   public_rpc_urls: string[];
 }
 

@@ -83,9 +83,9 @@ export function PaymentsView() {
           { key: "status", header: "Status", cell: (r: any) => <span title={STATUS_META[r.status]?.hint}><StatusBadge status={r.status} /></span> },
           { key: "prog", header: "Progress", hideBelow: "md", cell: (r: any) => <Progress5 status={r.status} /> },
           { key: "net", header: "Networks", hideBelow: "lg", cell: (r: any) => <span className="text-ink-3">{r.networks.map((n: any) => n.name).join(", ")}</span> },
-          { key: "recv", header: "Received", hideBelow: "lg", align: "right", cell: (r: any) => <Amount value={r.amount_received} size="sm" unit={false} className="text-ink-2" /> },
+          { key: "recv", header: "Received", hideBelow: "lg", align: "right", cell: (r: any) => <Amount value={r.amount_received} size="sm" symbol={r.currency ?? "USDC"} unit={(r.currency ?? "USDC") !== "USDC"} className="text-ink-2" /> },
           { key: "when", header: "Created", hideBelow: "sm", cell: (r: any) => <span className="text-ink-3">{relativeTime(r.created_at)}</span> },
-          { key: "amt", header: "Amount", align: "right", cell: (r: any) => <Amount value={r.amount} size="sm" /> },
+          { key: "amt", header: "Amount", align: "right", cell: (r: any) => <Amount value={r.amount} size="sm" symbol={r.currency ?? "USDC"} /> },
         ]}
       />
       )}

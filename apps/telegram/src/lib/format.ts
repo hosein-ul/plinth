@@ -45,7 +45,7 @@ export const STATUS_META: Record<string, { label: string; tone: "ok" | "warn" | 
   EXPIRED: { label: "Expired", tone: "neutral", hint: "Expired without payment." },
   UNDERPAID: { label: "Underpaid", tone: "warn", hint: "Expired with only part of the amount received." },
   LATE_PAYMENT: { label: "Late payment", tone: "warn", hint: "Funds arrived after expiry." },
-  INVALID_ASSET: { label: "Wrong token", tone: "bad", hint: "A token other than official USDC was sent." },
+  INVALID_ASSET: { label: "Wrong token", tone: "bad", hint: "A token other than the official payment token was sent." },
   SETTLEMENT_FAILED: { label: "Settlement failed", tone: "bad", hint: "Funds are final but the sweep failed. Retrying." },
   REFUND_REQUESTED: { label: "Refund requested", tone: "warn", hint: "A refund is waiting for the merchant to send it." },
   PARTIALLY_REFUNDED: { label: "Partly refunded", tone: "neutral", hint: "Part of the payment was returned." },

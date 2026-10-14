@@ -257,7 +257,7 @@ export async function listInvoices(e: Engine, ctx: AuthContext) {
   const views = await loadIntentViews(e, e.db, intents);
   return rows.map((r) => {
     const v = views.find((x) => x.id === r.paymentIntentId)!;
-    return { id: r.id, object: "invoice", number: r.number, customer_name: r.customerName, customer_email: r.customerEmail, memo: r.memo, total: v.amount, due_at: r.dueAt.toISOString(), issued_at: r.issuedAt.toISOString(), status: v.status, payment_id: v.id, checkout_url: v.checkout_url, line_items: r.lineItems };
+    return { id: r.id, object: "invoice", number: r.number, customer_name: r.customerName, customer_email: r.customerEmail, memo: r.memo, total: v.amount, due_at: r.dueAt.toISOString(), issued_at: r.issuedAt.toISOString(), status: v.status, currency: v.currency, payment_id: v.id, checkout_url: v.checkout_url, line_items: r.lineItems };
   });
 }
 
@@ -265,5 +265,5 @@ export async function getInvoice(e: Engine, ctx: AuthContext, id: string) {
   const [r] = await e.db.select().from(schema.invoices).where(and(eq(schema.invoices.id, id), eq(schema.invoices.merchantId, ctx.merchantId)));
   if (!r) throw new EngineError("NOT_FOUND", "Invoice not found", 404);
   const payment = await getPaymentIntent(e, ctx, r.paymentIntentId);
-  return { id: r.id, object: "invoice", number: r.number, customer_name: r.customerName, customer_email: r.customerEmail, memo: r.memo, total: payment.amount, due_at: r.dueAt.toISOString(), line_items: r.lineItems, payment };
+  return { id: r.id, object: "invoice", number: r.number, customer_name: r.customerName, customer_email: r.customerEmail, memo: r.memo, total: payment.amount, currency: payment.currency, due_at: r.dueAt.toISOString(), line_items: r.lineItems, payment };
 }

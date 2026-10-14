@@ -26,7 +26,7 @@ function Step({ n, title, done, locked, children }: { n: number; title: string; 
  * Create a vault. The owner is the only address that can ever withdraw, so the person creating it signs a message
  * with that wallet first: a mistyped address can never end up owning a vault.
  */
-export function VaultCreateForm({ network, onDone }: { network: { id: string; name: string }; onDone: () => void }) {
+export function VaultCreateForm({ network, token = "USDC", onDone }: { network: { id: string; name: string }; token?: string; onDone: () => void }) {
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const [manual, setManual] = useState(false);
@@ -53,7 +53,7 @@ export function VaultCreateForm({ network, onDone }: { network: { id: string; na
     }
   }
   const create = useAction(
-    () => apiFetch("/v1/vaults", { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: { network: network.id, owner_address: owner, ...(!manual && proof ? { proof: { nonce: proof.nonce, signature: proof.signature } } : {}) } }),
+    () => apiFetch("/v1/vaults", { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: { network: network.id, token, owner_address: owner, ...(!manual && proof ? { proof: { nonce: proof.nonce, signature: proof.signature } } : {}) } }),
     { invalidate: ["/v1/networks", "/v1/vaults", "/v1/payout-methods"], success: "Vault requested — deploying", onSuccess: onDone },
   );
   return (

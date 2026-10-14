@@ -10,7 +10,7 @@ import { Notice } from "@/components/page";
 import { MerchantMark } from "@/components/checkout/checkout-parts";
 import { apiFetch } from "@/lib/client-api";
 
-export function LinkStart({ slug, info }: { slug: string; info: { name: string; description: string | null; amount: string; merchant_name: string } }) {
+export function LinkStart({ slug, info }: { slug: string; info: { name: string; description: string | null; amount: string; currency?: string; merchant_name: string } }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function LinkStart({ slug, info }: { slug: string; info: { name: string; 
           <p className="mt-6 break-words text-[0.9375rem] text-ink-2 lg:mt-9">{info.name}</p>
           <div className="mt-3">
             <p className="label">Amount due</p>
-            <Amount value={info.amount} size="display" className="mt-2 block max-w-full text-[2.75rem] sm:text-[3.5rem]" />
+            <Amount value={info.amount} size="display" symbol={info.currency ?? "USDC"} className="mt-2 block max-w-full text-[2.75rem] sm:text-[3.5rem]" />
           </div>
           {info.description && <p className="mt-4 max-w-sm break-words text-[0.9375rem] text-ink-3">{info.description}</p>}
           <p className="mt-8 hidden max-w-sm items-start gap-2 text-xs text-ink-3 lg:flex"><Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />Non-custodial. Funds settle into a vault controlled only by the merchant. Plinth cannot move them.</p>
@@ -58,11 +58,11 @@ export function LinkStart({ slug, info }: { slug: string; info: { name: string; 
             <dl className="mt-4 divide-y divide-line rounded-ctl border border-line text-sm">
               <Row k="Pay to" v={<span className="break-words">{info.merchant_name}</span>} />
               <Row k="For" v={<span className="break-words">{info.name}</span>} />
-              <Row k="Currency" v="USDC" />
-              <Row k="Total" v={<Amount value={info.amount} size="md" />} strong />
+              <Row k="Currency" v={info.currency ?? "USDC"} />
+              <Row k="Total" v={<Amount value={info.amount} size="md" symbol={info.currency ?? "USDC"} />} strong />
             </dl>
             <ul className="mt-4 space-y-2 text-sm text-ink-3">
-              <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden />Next you choose a network and how to pay: from a wallet, or by sending USDC to an address.</li>
+              <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden />Next you choose a network and how to pay: from a wallet, or by sending {info.currency ?? "USDC"} to an address.</li>
               <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden />Nothing is sent until you confirm there. Network fees are not part of this total.</li>
             </ul>
             <Button variant="primary" size="lg" className="mt-6 h-12 w-full" loading={busy} onClick={start}>

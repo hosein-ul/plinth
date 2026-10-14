@@ -71,3 +71,9 @@ clickable (now inert); step 1 said "confirmed" while unconfirmed; the connected 
 Not checked: Web3Auth re-authentication in a browser (needs a live Web3Auth project), tablet width, the vault owner dialog with a real wallet,
 dark appearance (the product has none). slop-check ran on the new component files; its page-level findings (font, focus, reduced motion)
 do not apply to fragments and the global stylesheet already carries reduced-motion handling.
+
+## 2026-10-15 — payment token (USDC / EURC) in checkout and dashboard
+Mode: inherit (Daylight). New parts: `TokenPicker` (the existing segmented Tabs control with the token mark from `@web3icons/react`), per-token rows in Networks & assets, currency-aware Amount unit. No new colours, type or motion.
+- Checked in the browser against the local stack with a real EURC payment: checkout (desktop and 375 px, wallet and address tabs), receipt, overview with the picker, Networks & assets, new-invoice dialog.
+- The picker only renders when the merchant can take two or more tokens; a USDC-only merchant sees exactly what they saw before.
+- Not checked: Telegram fork visually (files are identical copies, typechecked), dark mode, real wallet signing for EURC (engine tests cover EIP-3009 for EURC).

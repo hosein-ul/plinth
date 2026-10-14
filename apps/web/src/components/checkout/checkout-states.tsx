@@ -45,6 +45,7 @@ function netOf(data: any, p?: PaymentRow): Net | undefined {
 }
 
 function Transfers({ data, only }: { data: any; only?: "wrong" }) {
+  const sym: string = data.currency ?? "USDC";
   const rows = (data.payments as PaymentRow[]).filter((p) => (only === "wrong" ? !p.official_asset : true));
   if (rows.length === 0) return null;
   return (
@@ -52,8 +53,8 @@ function Transfers({ data, only }: { data: any; only?: "wrong" }) {
       {rows.map((p) => (
         <li key={p.tx_hash + p.amount} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <Amount value={p.amount} size="sm" />
-            {!p.official_asset && <span className="rounded-full bg-bad-quiet px-2 py-0.5 text-xs font-medium text-bad-ink">not official USDC, ignored</span>}
+            <Amount value={p.amount} size="sm" symbol={sym} />
+            {!p.official_asset && <span className="rounded-full bg-bad-quiet px-2 py-0.5 text-xs font-medium text-bad-ink">not official {sym}, ignored</span>}
             {p.status === "REORGED" && <span className="rounded-full bg-bad-quiet px-2 py-0.5 text-xs font-medium text-bad-ink">reversed on-chain</span>}
           </span>
           <span className="flex shrink-0 items-center gap-3 text-ink-3">
@@ -71,6 +72,7 @@ function Transfers({ data, only }: { data: any; only?: "wrong" }) {
 /* ── funds seen, not final: single-payment confirming panel ──────────────────── */
 
 export function ConfirmingPanel({ data }: { data: any }) {
+  const sym: string = data.currency ?? "USDC";
   const pay = (data.payments as PaymentRow[]).filter((p) => p.official_asset && p.status !== "REORGED");
   const cur = pay.find((p) => p.status !== "FINAL") ?? pay[0];
   const net = netOf(data, cur);
@@ -82,7 +84,7 @@ export function ConfirmingPanel({ data }: { data: any }) {
         <p>Your transfer is on {net?.name ?? "the network"}. It is not final yet; this page updates by itself and you can close it.</p>
       </Head>
       <Rows>
-        <R k="Amount" v={<Amount value={cur?.amount ?? data.amount} size="md" />} />
+        <R k="Amount" v={<Amount value={cur?.amount ?? data.amount} size="md" symbol={sym} />} />
         <R k="Network" v={net ? <ChainBadge id={net.network} size={18} /> : "-"} />
         <R
           k="Confirmations"
@@ -102,6 +104,7 @@ export function ConfirmingPanel({ data }: { data: any }) {
 /* ── paid / settling / settled / overpaid: the receipt ───────────────────────── */
 
 export function ReceiptPanel({ data }: { data: any }) {
+  const sym: string = data.currency ?? "USDC";
   const status = data.status as string;
   const settled = status === "SETTLED";
   const failedSweep = status === "SETTLEMENT_FAILED";
@@ -130,7 +133,7 @@ export function ReceiptPanel({ data }: { data: any }) {
       </Head>
 
       <Rows>
-        <R k="Amount received" v={<Amount value={data.amount_received} size="md" />} strong />
+        <R k="Amount received" v={<Amount value={data.amount_received} size="md" symbol={sym} />} strong />
         <R k="Network" v={net ? <ChainBadge id={net.network} size={18} /> : "-"} />
         {data.order_reference && <R k="Reference" v={<span className="font-mono text-xs">{data.order_reference}</span>} />}
         <R k="Paid to" v={data.merchant_name} />
@@ -145,7 +148,7 @@ export function ReceiptPanel({ data }: { data: any }) {
       {excess && (
         <div className="mt-4 flex gap-3 rounded-ctl border border-warn/30 bg-warn-quiet px-3.5 py-3 text-sm text-warn-ink">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <p>You sent {data.excess_amount} USDC more than requested. The payment is complete. Plinth does not hold the extra amount; it sits with the merchant, who has been notified and decides about returning it. Keep your transaction hash.</p>
+          <p>You sent {data.excess_amount} {sym} more than requested. The payment is complete. Plinth does not hold the extra amount; it sits with the merchant, who has been notified and decides about returning it. Keep your transaction hash.</p>
         </div>
       )}
 
@@ -167,6 +170,7 @@ export function ReceiptPanel({ data }: { data: any }) {
 /* ── closed: nothing more can be paid ────────────────────────────────────────── */
 
 export function ClosedPanel({ data, kind, onRecheck }: { data: any; kind: string; onRecheck: () => void }) {
+  const sym: string = data.currency ?? "USDC";
   const net = netOf(data);
   const sent = (data.payments as PaymentRow[]).length > 0;
   const received = data.amount_received;
@@ -191,9 +195,9 @@ export function ClosedPanel({ data, kind, onRecheck }: { data: any; kind: string
             <p>This payment expired before the full amount was received. No more payments are accepted.</p>
           </Head>
           <Rows>
-            <R k="Requested" v={<Amount value={data.amount} size="sm" />} />
-            <R k="Received" v={<Amount value={received} size="sm" />} strong />
-            <R k="Still missing" v={<Amount value={data.remaining} size="sm" />} />
+            <R k="Requested" v={<Amount value={data.amount} size="sm" symbol={sym} />} />
+            <R k="Received" v={<Amount value={received} size="sm" symbol={sym} />} strong />
+            <R k="Still missing" v={<Amount value={data.remaining} size="sm" symbol={sym} />} />
           </Rows>
           <Transfers data={data} />
           <p className="mt-4 text-sm text-ink-3">{merchant} has been notified. Plinth does not hold these funds, so whether to refund them or ask you to pay again is the merchant&apos;s decision. Contact them with the payment ID.</p>
@@ -214,7 +218,7 @@ export function ClosedPanel({ data, kind, onRecheck }: { data: any; kind: string
       return (
         <div>
           <Head tone="bad" icon={<Ban className="size-5" aria-hidden />} title="Wrong token received">
-            <p>A token other than the official USDC for {net?.name ?? "this network"} was sent to this payment. It cannot be credited and nothing was converted.</p>
+            <p>A token other than the official {sym} for {net?.name ?? "this network"} was sent to this payment. It cannot be credited and nothing was converted.</p>
           </Head>
           <Transfers data={data} only="wrong" />
           <p className="mt-4 text-sm text-ink-3">Keep the transaction hash and contact {merchant}. This payment is no longer accepting funds.</p>
@@ -229,8 +233,8 @@ export function ClosedPanel({ data, kind, onRecheck }: { data: any; kind: string
             <p>{kind === "REFUNDED" ? "The merchant returned this payment." : kind === "PARTIALLY_REFUNDED" ? "The merchant returned part of this payment." : "A refund has been requested. It is waiting for the merchant to send it."}</p>
           </Head>
           <Rows>
-            <R k="Paid" v={<Amount value={data.amount_received} size="sm" />} />
-            <R k="Refunded" v={<Amount value={data.amount_refunded} size="sm" />} strong />
+            <R k="Paid" v={<Amount value={data.amount_received} size="sm" symbol={sym} />} />
+            <R k="Refunded" v={<Amount value={data.amount_refunded} size="sm" symbol={sym} />} strong />
           </Rows>
           <Transfers data={data} />
         </div>

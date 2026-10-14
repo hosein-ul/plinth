@@ -34,7 +34,7 @@ export function NetworksView() {
   const nets: any[] = q.data?.data ?? [];
   return (
     <>
-      <PageHeader title="Networks & assets" description="Official native USDC only. Each network is enabled only after its token behaviour was probed and its contracts deployed and verified." />
+      <PageHeader title="Networks & assets" description="Official tokens only: USDC, and EURC where the network lists it. Each network and token is enabled only after its behaviour was probed and its contracts deployed and verified." />
       {welcome && <Notice tone="info" className="mb-6">Welcome. Pick a testnet below and create your vault. You choose the owner address that alone can withdraw.</Notice>}
       {q.error && <ErrorState error={q.error} retry={() => q.refetch()} />}
       <div className="space-y-5">
@@ -45,8 +45,8 @@ export function NetworksView() {
           </div>
         ))}
         {nets.map((n) => {
-          const hasVault = !!n.vault;
-          const canEnable = !hasVault && n.operational;
+          // One row per payment token (older responses carry only USDC). Each token has its own contracts and its own vault.
+          const toks: any[] = n.tokens ?? [{ symbol: "USDC", address: n.usdc.address, operational: n.operational, vault: n.vault, not_operational_reasons: n.not_operational_reasons }];
           const reasons: string[] = n.not_operational_reasons ?? [];
           return (
             <article key={n.id} className="card-flat overflow-hidden">
@@ -72,32 +72,42 @@ export function NetworksView() {
                 <div className="p-5 sm:p-6">
                   <KeyValue
                     items={[
-                      { k: "USDC contract", v: <Hash value={n.usdc.address} lead={10} tail={6} href={n.explorer_url ? `${n.explorer_url}/address/${n.usdc.address}` : undefined} /> },
+                      ...toks.map((t) => ({ k: `${t.symbol} contract`, v: <Hash value={t.address} lead={10} tail={6} href={n.explorer_url ? `${n.explorer_url}/address/${t.address}` : undefined} /> })),
                       { k: "EIP-3009 receive", v: n.authorization.receive_with_authorization ? <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-4 text-signal-ink" aria-hidden />Verified {n.authorization.verified_at}</span> : <span className="text-ink-3">Not verified. Wallet checkout is off.</span> },
                       { k: "Finality", v: n.finality.strategy === "finalized-tag" ? "Chain-finalized block" : `${n.finality.confirmations} confirmation${n.finality.confirmations === 1 ? "" : "s"}` },
                       { k: "CCTP domain", v: <span className="font-mono text-xs">{n.circle.cctpDomain ?? "—"}</span> },
                       ...(n.fee ? [{ k: "Platform fee", v: <span><span className="font-medium text-ink">{n.fee.percent}</span> <span className="text-ink-3">of each payment, taken in the same transaction</span></span> }] : []),
                       ...(n.contracts ? [{ k: "Invoice factory", v: <Hash value={n.contracts.invoice_factory} href={n.explorer_url ? `${n.explorer_url}/address/${n.contracts.invoice_factory}` : undefined} /> }, { k: "Payment router", v: <Hash value={n.contracts.payment_router} href={n.explorer_url ? `${n.explorer_url}/address/${n.contracts.payment_router}` : undefined} /> }] : []),
-                      { k: "Your vault", v: hasVault ? <div className="flex flex-wrap items-center gap-3"><Hash value={n.vault.vault_address} lead={10} tail={6} href={n.vault.vault_explorer_url} /><Chip tone={n.vault.status === "ACTIVE" ? "ok" : n.vault.status === "FAILED" ? "bad" : "info"}>{cap(n.vault.status)}</Chip></div> : <span className="text-ink-3">None yet</span> },
+                      ...toks.filter((t) => t.symbol !== "USDC" && t.contracts).map((t) => ({ k: `${t.symbol} invoice factory`, v: <Hash value={t.contracts.invoice_factory} href={n.explorer_url ? `${n.explorer_url}/address/${t.contracts.invoice_factory}` : undefined} /> })),
+                      ...toks.map((t) => ({ k: `Your ${t.symbol} vault`, v: t.vault ? <div className="flex flex-wrap items-center gap-3"><Hash value={t.vault.vault_address} lead={10} tail={6} href={t.vault.vault_explorer_url} /><Chip tone={t.vault.status === "ACTIVE" ? "ok" : t.vault.status === "FAILED" ? "bad" : "info"}>{cap(t.vault.status)}</Chip></div> : <span className="text-ink-3">None yet</span> })),
                     ]}
                   />
                 </div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line bg-wash px-5 py-4 sm:px-6">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">Vault on {n.name}</p>
-                  <p className="text-sm text-ink-3">
-                    {hasVault ? "Enabled. A vault cannot be removed once created." : n.operational ? "Switch on to create your vault and start accepting payments here." : "Unavailable until the network is operational."}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {canEnable && <Button size="sm" variant="primary" onClick={() => setCreating(n)}>Create vault</Button>}
-                  <Tip content={hasVault ? "A vault is permanent once deployed." : n.operational ? "Create your vault on this network." : reasons[0] ?? "This network is not operational."}>
-                    <span className="inline-flex">
-                      <Switch checked={hasVault} disabled={!canEnable} onCheckedChange={(v) => v && setCreating(n)} aria-label={`Vault on ${n.name}`} />
-                    </span>
-                  </Tip>
-                </div>
+              <div className="divide-y divide-line border-t border-line bg-wash">
+                {toks.map((t) => {
+                  const hasVault = !!t.vault;
+                  const canEnable = !hasVault && !!t.operational;
+                  const why: string[] = t.not_operational_reasons ?? [];
+                  return (
+                    <div key={t.symbol} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-6">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-ink">{t.symbol} vault on {n.name}</p>
+                        <p className="text-sm text-ink-3">
+                          {hasVault ? "Enabled. A vault cannot be removed once created." : t.operational ? `Switch on to create your ${t.symbol} vault and start accepting ${t.symbol} here.` : "Unavailable until this token is operational on the network."}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {canEnable && <Button size="sm" variant="primary" onClick={() => setCreating({ ...n, token: t.symbol })}>Create {t.symbol} vault</Button>}
+                        <Tip content={hasVault ? "A vault is permanent once deployed." : t.operational ? `Create your ${t.symbol} vault on this network.` : why[0] ?? "This token is not operational here."}>
+                          <span className="inline-flex">
+                            <Switch checked={hasVault} disabled={!canEnable} onCheckedChange={(v) => v && setCreating({ ...n, token: t.symbol })} aria-label={`${t.symbol} vault on ${n.name}`} />
+                          </span>
+                        </Tip>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </article>
           );
@@ -105,9 +115,9 @@ export function NetworksView() {
       </div>
       <Dialog open={!!creating} onOpenChange={(v) => !v && setCreating(null)}>
         {creating && (
-          <DialogContent title={`Create your ${creating.name} vault`} description="A non-upgradeable contract that holds your settled USDC.">
+          <DialogContent title={`Create your ${creating.token ?? "USDC"} vault on ${creating.name}`} description={`A non-upgradeable contract that holds your settled ${creating.token ?? "USDC"}.`}>
             <WalletProvider networks={[{ network: creating.id, chain_id: creating.chain_id, name: creating.name, environment: creating.environment, explorer_url: creating.explorer_url, native_currency: creating.chain_native, public_rpc_urls: creating.public_rpc_urls }]}>
-              <VaultCreateForm network={{ id: creating.id, name: creating.name }} onDone={() => setCreating(null)} />
+              <VaultCreateForm network={{ id: creating.id, name: creating.name }} token={creating.token ?? "USDC"} onDone={() => setCreating(null)} />
             </WalletProvider>
           </DialogContent>
         )}
@@ -125,7 +135,7 @@ export function WalletsView() {
   const nets = useApi<any>("/v1/networks");
   const all: any[] = nets.data?.data ?? [];
   const toInfo = (n: any): NetInfo => ({ network: n.id, chain_id: n.chain_id, name: n.name, environment: n.environment, explorer_url: n.explorer_url, native_currency: n.chain_native, public_rpc_urls: n.public_rpc_urls });
-  const vaultInfos: NetInfo[] = all.filter((n) => n.vault).map(toInfo);
+  const vaultInfos: NetInfo[] = all.flatMap((n) => ((n.tokens ?? [{ symbol: "USDC", vault: n.vault }]) as any[]).filter((t) => t.vault).map((t) => ({ ...toInfo(n), vaultToken: t.symbol as string })));
   // Payout choices exist on every network that can take payments, with or without a vault.
   const payoutInfos: NetInfo[] = all.filter((n) => n.operational || n.vault).map(toInfo);
   const chainIds = Object.fromEntries(payoutInfos.map((i) => [i.network, i.chain_id]));
@@ -141,14 +151,14 @@ export function WalletsView() {
         <>
           <PayoutSection walletReady={false} chainIds={chainIds} />
           {vaultInfos.length > 0 && <h2 className="t-3 mb-4 text-ink">Your vaults</h2>}
-          <div className="space-y-5">{vaultInfos.map((n) => <SampleVaultCard key={n.network} net={n} />)}</div>
+          <div className="space-y-5">{vaultInfos.map((n) => <SampleVaultCard key={`${n.network}:${n.vaultToken}`} net={n} />)}</div>
         </>
       )}
       {payoutInfos.length > 0 && !readOnly && (
         <WalletProvider networks={payoutInfos}>
           <PayoutSection walletReady chainIds={chainIds} />
           {vaultInfos.length > 0 && <h2 className="t-3 mb-4 text-ink">Your vaults</h2>}
-          <div className="space-y-5">{vaultInfos.map((n) => <VaultCard key={n.network} net={n} />)}</div>
+          <div className="space-y-5">{vaultInfos.map((n) => <VaultCard key={`${n.network}:${n.vaultToken}`} net={n} />)}</div>
         </WalletProvider>
       )}
     </>
@@ -160,7 +170,8 @@ export function WalletsView() {
  * present so the page looks like the product, and each one explains that this is sample data.
  */
 function SampleVaultCard({ net }: { net: NetInfo }) {
-  const q = useApi<any>(`/v1/vaults/${net.network}`);
+  const sym = net.vaultToken ?? "USDC";
+  const q = useApi<any>(`/v1/vaults/${net.network}${net.vaultToken && net.vaultToken !== "USDC" ? `?token=${net.vaultToken}` : ""}`);
   const v = q.data;
   if (q.error && !v) return <ErrorState error={q.error} retry={() => q.refetch()} />;
   if (!v) return <VaultSkeleton />;
@@ -170,6 +181,7 @@ function SampleVaultCard({ net }: { net: NetInfo }) {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
         <div className="flex items-center gap-2.5">
           <h2 className="t-3 text-ink">{net.name}</h2>
+          <Chip tone="neutral" dot={false}>{sym}</Chip>
           <Chip tone="ok">{cap(v.status)}</Chip>
         </div>
         <Button size="sm" onClick={notifyDemoReadOnly}>Connect wallet</Button>
@@ -178,7 +190,7 @@ function SampleVaultCard({ net }: { net: NetInfo }) {
         <div className="flex flex-col justify-between gap-6 p-5 sm:p-6 lg:border-r lg:border-line">
           <div>
             <p className="label">Vault balance</p>
-            <Amount value={(Number(on.balance_units) / 1e6).toFixed(2)} size="xl" className="mt-2 block" />
+            <Amount value={(Number(on.balance_units) / 1e6).toFixed(2)} size="xl" symbol={sym} className="mt-2 block" />
           </div>
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -215,7 +227,8 @@ function VaultSkeleton() {
 }
 
 function VaultCard({ net }: { net: NetInfo }) {
-  const q = useApi<any>(`/v1/vaults/${net.network}`, { refetchMs: 10000 });
+  const sym = net.vaultToken ?? "USDC";
+  const q = useApi<any>(`/v1/vaults/${net.network}${net.vaultToken && net.vaultToken !== "USDC" ? `?token=${net.vaultToken}` : ""}`, { refetchMs: 10000 });
   const v = q.data;
   const { address, isConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
@@ -244,7 +257,7 @@ function VaultCard({ net }: { net: NetInfo }) {
     }
   }
   const policy = useAction(
-    () => apiFetch<any>(`/v1/vaults/${net.network}/settlement-tx`, { method: "POST", body: { mode, destination: mode === "BALANCE_IN_VAULT" ? undefined : dest, threshold_units: threshold ? parseUnits(threshold, 6).toString() : undefined, interval_seconds: intervalH ? Math.round(Number(intervalH) * 3600) : undefined } }),
+    () => apiFetch<any>(`/v1/vaults/${net.network}/settlement-tx${net.vaultToken && net.vaultToken !== "USDC" ? `?token=${net.vaultToken}` : ""}`, { method: "POST", body: { mode, destination: mode === "BALANCE_IN_VAULT" ? undefined : dest, threshold_units: threshold ? parseUnits(threshold, 6).toString() : undefined, interval_seconds: intervalH ? Math.round(Number(intervalH) * 3600) : undefined } }),
     { onSuccess: (tx) => send({ to: tx.to, data: tx.data }) },
   );
 
@@ -255,6 +268,7 @@ function VaultCard({ net }: { net: NetInfo }) {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
         <div className="flex items-center gap-2.5">
           <h2 className="t-3 text-ink">{net.name}</h2>
+          <Chip tone="neutral" dot={false}>{sym}</Chip>
           <Chip tone={v.status === "ACTIVE" ? "ok" : "info"}>{cap(v.status)}</Chip>
         </div>
         {on && (
@@ -269,7 +283,7 @@ function VaultCard({ net }: { net: NetInfo }) {
           <div className="flex flex-col justify-between gap-6 p-5 sm:p-6 lg:border-r lg:border-line">
             <div>
               <p className="label">Vault balance</p>
-              <Amount value={(Number(on.balance_units) / 1e6).toFixed(2)} size="xl" className="mt-2 block" />
+              <Amount value={(Number(on.balance_units) / 1e6).toFixed(2)} size="xl" symbol={sym} className="mt-2 block" />
             </div>
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -307,7 +321,7 @@ function VaultCard({ net }: { net: NetInfo }) {
             {mode !== "BALANCE_IN_VAULT" && <Field label="Payout address" htmlFor="sp-dest" hint="The ONLY address automation may ever pay."><Input id="sp-dest" className="font-mono" value={dest} onChange={(e) => setDest(e.target.value.trim())} placeholder="0x…" /></Field>}
             {mode === "THRESHOLD_OR_PERIODIC" && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Forward at balance (USDC)" htmlFor="sp-th"><Input id="sp-th" className="font-mono" value={threshold} onChange={(e) => setThreshold(e.target.value)} placeholder="5000" /></Field>
+                <Field label={`Forward at balance (${sym})`} htmlFor="sp-th"><Input id="sp-th" className="font-mono" value={threshold} onChange={(e) => setThreshold(e.target.value)} placeholder="5000" /></Field>
                 <Field label="…or every (hours)" htmlFor="sp-iv"><Input id="sp-iv" className="font-mono" value={intervalH} onChange={(e) => setIntervalH(e.target.value)} placeholder="24" /></Field>
               </div>
             )}
@@ -316,10 +330,10 @@ function VaultCard({ net }: { net: NetInfo }) {
         </DialogContent>
       </Dialog>
       <Dialog open={dialog === "withdraw"} onOpenChange={(o) => !o && setDialog(null)}>
-        <DialogContent title="Withdraw from vault" description="Sends USDC from the vault to any address you choose. Signed by your wallet.">
+        <DialogContent title="Withdraw from vault" description={`Sends ${sym} from the vault to any address you choose. Signed by your wallet.`}>
           <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); void send({ to: getAddress(v.vault_address), data: encodeFunctionData({ abi: withdrawAbi, functionName: "withdraw", args: [getAddress(wTo), parseUnits(wAmt, 6)] }) }); }}>
             <Field label="To" htmlFor="wd-to"><Input id="wd-to" className="font-mono" value={wTo} onChange={(e) => setWTo(e.target.value.trim())} placeholder="0x…" /></Field>
-            <Field label="Amount (USDC)" htmlFor="wd-amt"><Input id="wd-amt" className="font-mono" value={wAmt} onChange={(e) => setWAmt(e.target.value)} placeholder="100.00" /></Field>
+            <Field label={`Amount (${sym})`} htmlFor="wd-amt"><Input id="wd-amt" className="font-mono" value={wAmt} onChange={(e) => setWAmt(e.target.value)} placeholder="100.00" /></Field>
             <div className="flex justify-end"><Button type="submit" variant="primary" loading={isPending} disabled={!/^0x[0-9a-fA-F]{40}$/.test(wTo) || !/^\d+(\.\d{1,6})?$/.test(wAmt)}>Sign with wallet</Button></div>
           </form>
         </DialogContent>

@@ -14,6 +14,8 @@ export interface Net {
   name: string;
   environment: string;
   usdc_address: string;
+  /** The token this payment is made in (older responses may omit it: USDC). */
+  token?: { symbol: string; address: string; decimals: number };
   deposit_address: string | null;
   deposit_address_explorer_url: string | null;
   wallet_checkout_supported: boolean;
@@ -118,6 +120,7 @@ export function NetworkSelector({ networks, value, onChange, mode }: { networks:
   const reason = (n: Net): string | null =>
     mode === "wallet" ? (n.wallet_checkout_supported ? null : n.wallet_unavailable_reason ?? "Wallet payment is not available here.") : n.deposit_address ? null : "No deposit address was issued on this network.";
   const current = networks.find((n) => n.network === value) ?? networks[0]!;
+  const sym = current.token?.symbol ?? "USDC";
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   function onKey(e: React.KeyboardEvent, i: number) {
@@ -178,8 +181,8 @@ export function NetworkSelector({ networks, value, onChange, mode }: { networks:
 
       <div className="mt-3 rounded-ctl bg-wash px-3.5 py-2.5">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <span className="inline-flex items-center gap-3 text-sm font-medium text-ink"><AssetOnChain symbol="USDC" id={current.network} size={28} className="mr-1" />USDC on {current.name}</span>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-signal-ink"><ShieldCheck className="size-3.5" aria-hidden />Official USDC</span>
+          <span className="inline-flex items-center gap-3 text-sm font-medium text-ink"><AssetOnChain symbol={sym as never} id={current.network} size={28} className="mr-1" />{sym} on {current.name}</span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-signal-ink"><ShieldCheck className="size-3.5" aria-hidden />Official {sym}</span>
         </div>
         <details className="group mt-1.5">
           <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-ink-2 hover:text-ink [&::-webkit-details-marker]:hidden">
@@ -188,8 +191,8 @@ export function NetworkSelector({ networks, value, onChange, mode }: { networks:
           </summary>
           <div className="mt-2 flex flex-wrap items-center gap-1 text-ink-2">
             <code className="break-all font-mono text-xs" title={current.usdc_address}>{current.usdc_address}</code>
-            <CopyButton value={current.usdc_address} compact label="Copy USDC contract" />
-            <a href={`${current.explorer_url}/address/${current.usdc_address}`} target="_blank" rel="noreferrer noopener" className="inline-grid size-6 place-items-center rounded-md text-ink-3 hover:bg-sunk hover:text-ink" aria-label="View USDC contract in explorer">
+            <CopyButton value={current.usdc_address} compact label={`Copy ${sym} contract`} />
+            <a href={`${current.explorer_url}/address/${current.usdc_address}`} target="_blank" rel="noreferrer noopener" className="inline-grid size-6 place-items-center rounded-md text-ink-3 hover:bg-sunk hover:text-ink" aria-label={`View ${sym} contract in explorer`}>
               <ArrowUpRight className="size-3.5" aria-hidden />
             </a>
           </div>
@@ -203,6 +206,7 @@ export function NetworkSelector({ networks, value, onChange, mode }: { networks:
 /* ── status thread ───────────────────────────────────────────────────────────── */
 
 export function StatusThread({ data, className, closed }: { data: any; className?: string; closed?: boolean }) {
+  const sym: string = data.currency ?? "USDC";
   const base = stationsFromPayment({ status: data.status, payments: data.payments });
   // Not fully funded yet: finality of what arrived is not the finish line, and nothing can be swept.
   const incomplete = !["PAID", "OVERPAID", "SETTLEMENT_PENDING", "SETTLED", "SETTLEMENT_FAILED"].includes(data.status) && BigInt(data.remaining_units) > 0n && BigInt(data.amount_received_units) + BigInt(data.amount_pending_units) > 0n;
@@ -230,10 +234,10 @@ export function StatusThread({ data, className, closed }: { data: any; className
           `Watching ${netName} for your transfer`
         );
       case "verified":
-        return state === "done" ? "Official USDC, receipt checked" : "Token contract and receipt are checked";
+        return state === "done" ? `Official ${sym}, receipt checked` : "Token contract and receipt are checked";
       case "final":
         return incomplete ? (
-          <span className="block">{data.amount_received} USDC final. Waiting for the remaining {data.remaining} USDC.</span>
+          <span className="block">{data.amount_received} {sym} final. Waiting for the remaining {data.remaining} {sym}.</span>
         ) : pending && state !== "todo" ? (
           <span className="block">
             {pending.status === "FINAL" ? "Final on-chain" : `${Math.min(pending.confirmations, need)} of ${need} confirmations`}
@@ -297,7 +301,7 @@ export function StatusThread({ data, className, closed }: { data: any; className
 
 /* ── help ────────────────────────────────────────────────────────────────────── */
 
-export function HowItWorks() {
+export function HowItWorks({ symbol: sym = "USDC" }: { symbol?: string }) {
   return (
     <details className="group border-t border-line py-3.5">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-ink [&::-webkit-details-marker]:hidden">
@@ -306,15 +310,16 @@ export function HowItWorks() {
       </summary>
       <ul className="mt-3 space-y-2 text-sm text-ink-2">
         <li><strong className="font-medium text-ink">Non-custodial.</strong> Funds settle into a vault that only the merchant controls. Plinth cannot move them.</li>
-        <li><strong className="font-medium text-ink">One address per payment.</strong> The address shown can only forward USDC to the merchant&apos;s vault.</li>
+        <li><strong className="font-medium text-ink">One address per payment.</strong> The address shown can only forward {sym} to the merchant&apos;s vault.</li>
         <li><strong className="font-medium text-ink">Confirmed means final.</strong> A payment is marked paid only after the network treats your transfer as final. This page updates by itself and you can close it.</li>
-        <li><strong className="font-medium text-ink">USDC only.</strong> Other tokens are not converted and not credited.</li>
+        <li><strong className="font-medium text-ink">{sym} only.</strong> Other tokens are not converted and not credited.</li>
       </ul>
     </details>
   );
 }
 
 export function HelpPanel({ data }: { data: any }) {
+  const sym: string = data.currency ?? "USDC";
   const [hash, setHash] = useState("");
   const [looked, setLooked] = useState<string | null>(null);
   const h = hash.trim().toLowerCase();
@@ -360,7 +365,7 @@ export function HelpPanel({ data }: { data: any }) {
           </div>
           <div role="status" aria-live="polite" className="mt-2 text-sm">
             {looked !== null && valid && found && (
-              <p className="rounded-ctl bg-signal-quiet px-3 py-2 text-signal-ink">This payment has that transfer: {found.amount} USDC, {found.status === "FINAL" ? "final" : `${found.confirmations} confirmation${found.confirmations === 1 ? "" : "s"} so far`}.</p>
+              <p className="rounded-ctl bg-signal-quiet px-3 py-2 text-signal-ink">This payment has that transfer: {found.amount} {sym}, {found.status === "FINAL" ? "final" : `${found.confirmations} confirmation${found.confirmations === 1 ? "" : "s"} so far`}.</p>
             )}
             {looked !== null && valid && !found && (
               <p className="rounded-ctl bg-sunk px-3 py-2 text-ink-2">

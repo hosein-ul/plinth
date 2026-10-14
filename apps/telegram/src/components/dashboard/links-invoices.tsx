@@ -15,16 +15,22 @@ import { formatDateTime, STATUS_META } from "@/lib/format";
 import { useAction, useApi } from "@/lib/hooks";
 import { useHref } from "@/lib/data-source";
 import { cellLink, CheckoutLink, CopyField, Ledger } from "./parts-account";
+import { TokenPicker } from "./token-picker";
+import { activeTokens, netsForToken, type TokenSymbol } from "@/lib/tokens";
 
 export function PaymentLinksView() {
   const q = useApi<any>("/v1/payment-links");
+  const netsQ = useApi<any>("/v1/networks");
+  const tokens = activeTokens(netsQ.data?.data ?? []);
+  const [currency, setCurrency] = useState<TokenSymbol>("USDC");
+  const cur: TokenSymbol = tokens.includes(currency) ? currency : tokens[0] ?? "USDC";
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [desc, setDesc] = useState("");
   const [created, setCreated] = useState<any>(null);
   const reset = () => { setName(""); setAmount(""); setDesc(""); };
-  const create = useAction(() => apiFetch<any>("/v1/payment-links", { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: { name, amount, description: desc || undefined } }), {
+  const create = useAction(() => apiFetch<any>("/v1/payment-links", { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: { name, amount, currency: cur, description: desc || undefined } }), {
     invalidate: ["/v1/payment-links"], success: "Payment link created",
     onSuccess: (out) => { reset(); if (out?.url) setCreated(out); else setOpen(false); },
   });
@@ -37,7 +43,7 @@ export function PaymentLinksView() {
         actions={
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setCreated(null); }}>
             <DialogTrigger asChild><Button variant="primary"><Plus className="size-4" aria-hidden />New link</Button></DialogTrigger>
-            <DialogContent title={created ? "Your link is live" : "New payment link"} description={created ? "Share this URL anywhere. Customers pay from the checkout page." : "A name your customers see, and a fixed amount in USDC."}>
+            <DialogContent title={created ? "Your link is live" : "New payment link"} description={created ? "Share this URL anywhere. Customers pay from the checkout page." : `A name your customers see, and a fixed amount in ${cur}.`}>
               {created ? (
                 <div className="space-y-5">
                   <div>
@@ -52,7 +58,8 @@ export function PaymentLinksView() {
               ) : (
                 <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (ok) create.mutate(undefined); }}>
                   <Field label="Name" htmlFor="pl-name"><Input id="pl-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Coffee beans — 1 kg" autoFocus /></Field>
-                  <Field label="Amount (USDC)" htmlFor="pl-amount" hint="Up to 6 decimal places."><Input id="pl-amount" className="font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="24.00" inputMode="decimal" /></Field>
+                  <TokenPicker tokens={tokens} value={cur} onChange={setCurrency} />
+                  <Field label={`Amount (${cur})`} htmlFor="pl-amount" hint="Up to 6 decimal places."><Input id="pl-amount" className="font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="24.00" inputMode="decimal" /></Field>
                   <Field label="Description" htmlFor="pl-desc" hint="Optional. Shown on the checkout."><Textarea id="pl-desc" value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>
                   <div className="flex justify-end"><Button type="submit" variant="primary" disabled={!ok} loading={create.isPending}>Create link</Button></div>
                 </form>
@@ -92,7 +99,7 @@ export function PaymentLinksView() {
               </span>
             ),
           },
-          { key: "amt", header: "Amount", align: "right", cell: (l) => <Amount value={l.amount} size="sm" /> },
+          { key: "amt", header: "Amount", align: "right", cell: (l) => <Amount value={l.amount} size="sm" symbol={l.currency ?? "USDC"} /> },
         ]}
       />
     </>
@@ -104,13 +111,17 @@ const blankLine = () => ({ description: "", quantity: "1", unit_amount: "" });
 export function InvoicesView() {
   const href = useHref();
   const q = useApi<any>("/v1/invoices", { refetchMs: 10000 });
+  const netsQ = useApi<any>("/v1/networks");
+  const tokens = activeTokens(netsQ.data?.data ?? []);
+  const [currency, setCurrency] = useState<TokenSymbol>("USDC");
+  const cur: TokenSymbol = tokens.includes(currency) ? currency : tokens[0] ?? "USDC";
   const [open, setOpen] = useState(false);
   const [cust, setCust] = useState({ name: "", email: "", memo: "" });
   const [items, setItems] = useState([blankLine()]);
   const valid = cust.name && /^\S+@\S+\.\S+$/.test(cust.email) && items.length > 0 && items.every((i) => i.description && /^\d+$/.test(i.quantity) && /^\d{1,12}(\.\d{1,6})?$/.test(i.unit_amount) && Number(i.unit_amount) > 0);
   const total = items.reduce((a, i) => a + (Number(i.quantity) || 0) * (Number(i.unit_amount) || 0), 0);
   const create = useAction(
-    () => apiFetch<any>("/v1/invoices", { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: { customer_name: cust.name, customer_email: cust.email, memo: cust.memo || undefined, line_items: items.map((i) => ({ description: i.description, quantity: Number(i.quantity), unit_amount: i.unit_amount })) } }),
+    () => apiFetch<any>("/v1/invoices", { method: "POST", headers: { "idempotency-key": crypto.randomUUID() }, body: { customer_name: cust.name, customer_email: cust.email, currency: cur, memo: cust.memo || undefined, line_items: items.map((i) => ({ description: i.description, quantity: Number(i.quantity), unit_amount: i.unit_amount })) } }),
     { invalidate: ["/v1/invoices", "/v1/payments"], success: (o) => `Invoice ${o.number} created`, onSuccess: () => { setOpen(false); setCust({ name: "", email: "", memo: "" }); setItems([blankLine()]); } },
   );
   const setItem = (i: number, patch: Partial<ReturnType<typeof blankLine>>) => setItems(items.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -123,13 +134,14 @@ export function InvoicesView() {
             <DialogTrigger asChild><Button variant="primary"><Plus className="size-4" aria-hidden />New invoice</Button></DialogTrigger>
             <DialogContent title="New invoice" description="Your customer pays the exact total from the checkout page." className="w-[min(94vw,42rem)]">
               <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); if (valid) create.mutate(undefined); }}>
+                <TokenPicker tokens={tokens} value={cur} onChange={setCurrency} />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Customer" htmlFor="iv-name"><Input id="iv-name" value={cust.name} onChange={(e) => setCust({ ...cust, name: e.target.value })} autoFocus /></Field>
                   <Field label="Customer email" htmlFor="iv-email"><Input id="iv-email" type="email" value={cust.email} onChange={(e) => setCust({ ...cust, email: e.target.value })} /></Field>
                 </div>
                 <fieldset>
                   <legend className="mb-2 text-sm font-medium text-ink">Line items</legend>
-                  <div className="hidden grid-cols-[1fr_4rem_7rem_2rem] gap-2 px-0.5 pb-1.5 text-xs font-medium text-ink-3 sm:grid"><span>Description</span><span>Qty</span><span>Unit price</span><span /></div>
+                  <div className="hidden grid-cols-[1fr_4rem_7rem_2rem] gap-2 px-0.5 pb-1.5 text-xs font-medium text-ink-3 sm:grid"><span>Description</span><span>Qty</span><span>Unit price ({cur})</span><span /></div>
                   <div className="divide-y divide-line sm:divide-y-0 sm:space-y-2">
                     {items.map((it, i) => (
                       <div key={i} className="grid grid-cols-[minmax(0,1fr)_5rem_2rem] items-center gap-2 py-3 first:pt-0 sm:grid-cols-[1fr_4rem_7rem_2rem] sm:py-0">
@@ -144,7 +156,7 @@ export function InvoicesView() {
                 </fieldset>
                 <Field label="Memo" htmlFor="iv-memo" hint="Optional. Printed on the invoice."><Textarea id="iv-memo" value={cust.memo} onChange={(e) => setCust({ ...cust, memo: e.target.value })} /></Field>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
-                  <div><p className="label">Total</p><Amount value={total.toFixed(2)} size="lg" /></div>
+                  <div><p className="label">Total</p><Amount value={total.toFixed(2)} size="lg" symbol={cur} /></div>
                   <Button type="submit" variant="primary" disabled={!valid} loading={create.isPending}>Create invoice</Button>
                 </div>
               </form>
@@ -173,7 +185,7 @@ export function InvoicesView() {
               </span>
             ),
           },
-          { key: "amt", header: "Total", align: "right", cell: (i) => <Amount value={i.total} size="sm" /> },
+          { key: "amt", header: "Total", align: "right", cell: (i) => <Amount value={i.total} size="sm" symbol={i.currency ?? "USDC"} /> },
         ]}
       />
     </>

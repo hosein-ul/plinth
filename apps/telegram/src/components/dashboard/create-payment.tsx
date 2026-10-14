@@ -13,6 +13,8 @@ import { useAction, useApi } from "@/lib/hooks";
 import { apiFetch } from "@/lib/client-api";
 import { Switch } from "@/components/ui/switch";
 import { useHref } from "@/lib/data-source";
+import { TokenPicker } from "./token-picker";
+import { activeTokens, netsForToken, type TokenSymbol } from "@/lib/tokens";
 
 export function CreatePaymentDialog({ label = "Create payment" }: { label?: string }) {
   const [open, setOpen] = useState(false);
@@ -23,16 +25,19 @@ export function CreatePaymentDialog({ label = "Create payment" }: { label?: stri
   const [wallet, setWallet] = useState(true);
   const [addr, setAddr] = useState(true);
   const nets = useApi<any>("/v1/networks");
+  const [currency, setCurrency] = useState<TokenSymbol>("USDC");
   const create = useAction(
     () =>
       apiFetch<any>("/v1/payment-intents", {
         method: "POST",
         headers: { "idempotency-key": crypto.randomUUID() },
-        body: { amount, order_reference: ref || undefined, description: desc || undefined, checkout_methods: [wallet && "WALLET", addr && "ADDRESS"].filter(Boolean) },
+        body: { amount, currency: cur, order_reference: ref || undefined, description: desc || undefined, checkout_methods: [wallet && "WALLET", addr && "ADDRESS"].filter(Boolean) },
       }),
     { invalidate: ["/v1/payments", "/v1/overview"], onSuccess: setResult },
   );
-  const activeNets = (nets.data?.data ?? []).filter((n: any) => n.vault?.status === "ACTIVE");
+  const tokens = activeTokens(nets.data?.data ?? []);
+  const cur: TokenSymbol = tokens.includes(currency) ? currency : tokens[0] ?? "USDC";
+  const activeNets = netsForToken<any>(nets.data?.data ?? [], cur);
   const valid = /^\d{1,12}(\.\d{1,6})?$/.test(amount) && Number(amount) > 0 && (wallet || addr);
 
   const amountError =
@@ -78,10 +83,11 @@ export function CreatePaymentDialog({ label = "Create payment" }: { label?: stri
             onSubmit={(e) => { e.preventDefault(); if (valid) create.mutate(undefined); }}
             noValidate
           >
+            <TokenPicker tokens={tokens} value={cur} onChange={setCurrency} />
             <Field label="Amount" htmlFor="cp-amount" hint="Exact, up to 6 decimals." error={amountError}>
               <div className="relative">
                 <Input id="cp-amount" inputMode="decimal" placeholder="25.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="pr-16 font-mono tnum" aria-invalid={amountError ? true : undefined} autoFocus />
-                <span aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-ink-3">USDC</span>
+                <span aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-ink-3">{cur}</span>
               </div>
             </Field>
             <div className="grid gap-5 sm:grid-cols-2">

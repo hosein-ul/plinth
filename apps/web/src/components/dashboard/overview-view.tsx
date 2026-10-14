@@ -1,8 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { useApi } from "@/lib/hooks";
+import { activeTokens, type TokenSymbol } from "@/lib/tokens";
+import { TokenPicker } from "./token-picker";
 import { Amount } from "@/components/amount";
 import { Progress5, StatusBadge } from "@/components/badge";
 import { DataTable } from "@/components/data-table";
@@ -17,8 +20,12 @@ export function OverviewView() {
   const router = useRouter();
   const href = useHref();
   const { readOnly } = useDataSource();
-  const o = useApi<any>("/v1/overview?days=30");
   const nets = useApi<any>("/v1/networks");
+  // Figures are in one token at a time: amounts of different tokens are never added together.
+  const tokens = activeTokens(nets.data?.data ?? []);
+  const [picked, setPicked] = useState<TokenSymbol>("USDC");
+  const cur: TokenSymbol = tokens.includes(picked) ? picked : tokens[0] ?? "USDC";
+  const o = useApi<any>(`/v1/overview?days=30${cur === "USDC" ? "" : `&currency=${cur}`}`);
   const recent = useApi<any>("/v1/payments?limit=6");
   const attention = useApi<any>("/v1/payments?limit=5&status=SETTLEMENT_FAILED,INVALID_ASSET,LATE_PAYMENT,UNDERPAID,REFUND_REQUESTED,OVERPAID");
 
@@ -32,7 +39,7 @@ export function OverviewView() {
       <PageHeader
         title="Overview"
         description="Received means final on-chain. Settled means delivered to your vault or wallet. They are shown separately on purpose."
-        actions={hasVault ? <CreatePaymentDialog /> : undefined}
+        actions={hasVault ? <div className="flex flex-wrap items-center gap-3"><TokenPicker tokens={tokens} value={cur} onChange={setPicked} label="Showing" compact /><CreatePaymentDialog /></div> : undefined}
       />
 
       {!readOnly && <ActivationChecklist />}
@@ -58,15 +65,15 @@ export function OverviewView() {
                 <p className="text-xs text-ink-3">Last 30 days</p>
               </div>
               <div className="mt-4">
-                {d ? <Amount value={(d.net_settled ?? d.settled_to_vault).amount} size="display" className="max-sm:text-[2.25rem]" /> : <Skeleton className="h-[3.25rem] w-72 max-w-full" />}
+                {d ? <Amount value={(d.net_settled ?? d.settled_to_vault).amount} size="display" symbol={cur} className="max-sm:text-[2.25rem]" /> : <Skeleton className="h-[3.25rem] w-72 max-w-full" />}
               </div>
               <p className="mt-3 max-w-sm text-sm text-ink-3">Delivered to your vault or wallet, after the platform fee.</p>
             </div>
             <dl className="divide-y divide-line border-t border-line bg-wash lg:border-l lg:border-t-0">
-              <FigureRow label="Received (final)" note="Final at deposit addresses or paid by wallet" value={d?.received_final.amount} />
-              <FigureRow label="Pending" note="Seen on-chain, not yet final" value={d?.pending.amount} />
-              <FigureRow label="Platform fee" note="Taken from settled payments" value={d?.platform_fees?.amount} />
-              <FigureRow label="Refunded" note="Returned to customers" value={d?.refunded.amount} />
+              <FigureRow symbol={cur} label="Received (final)" note="Final at deposit addresses or paid by wallet" value={d?.received_final.amount} />
+              <FigureRow symbol={cur} label="Pending" note="Seen on-chain, not yet final" value={d?.pending.amount} />
+              <FigureRow symbol={cur} label="Platform fee" note="Taken from settled payments" value={d?.platform_fees?.amount} />
+              <FigureRow symbol={cur} label="Refunded" note="Returned to customers" value={d?.refunded.amount} />
             </dl>
           </div>
           <dl className="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-4">
@@ -92,7 +99,7 @@ export function OverviewView() {
                   const max = Math.max(...d.network_distribution.map((n: any) => Number(n.units)), 1);
                   return d.network_distribution.map((n: any) => (
                     <li key={n.network}>
-                      <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-ink">{n.name}</span><Amount value={n.amount} size="sm" unit={false} /></div>
+                      <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-ink">{n.name}</span><Amount value={n.amount} size="sm" unit={false} symbol={cur} /></div>
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-sunk"><div className="h-full rounded-full bg-ink transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-out)]" style={{ width: `${Math.max(2, (Number(n.units) / max) * 100)}%` }} /></div>
                     </li>
                   ));
@@ -112,7 +119,7 @@ export function OverviewView() {
             columns={[
               { key: "ref", header: "Payment", cell: (r: any) => <PaymentCell title={r.order_reference ?? r.description ?? "Payment"} id={r.id} /> },
               { key: "status", header: "Status", cell: (r: any) => <StatusBadge status={r.status} /> },
-              { key: "amt", header: "Amount", align: "right", cell: (r: any) => <Amount value={r.amount} size="sm" /> },
+              { key: "amt", header: "Amount", align: "right", cell: (r: any) => <Amount value={r.amount} size="sm" symbol={r.currency ?? "USDC"} /> },
             ]}
           />
         </section>
@@ -139,7 +146,7 @@ export function OverviewView() {
               { key: "status", header: "Status", cell: (r: any) => <StatusBadge status={r.status} /> },
               { key: "prog", header: "Progress", hideBelow: "md", cell: (r: any) => <Progress5 status={r.status} /> },
               { key: "when", header: "Created", hideBelow: "sm", cell: (r: any) => <span className="text-ink-3">{relativeTime(r.created_at)}</span> },
-              { key: "amt", header: "Amount", align: "right", cell: (r: any) => <Amount value={r.amount} size="sm" /> },
+              { key: "amt", header: "Amount", align: "right", cell: (r: any) => <Amount value={r.amount} size="sm" symbol={r.currency ?? "USDC"} /> },
             ]}
           />
         )}
@@ -151,14 +158,14 @@ export function OverviewView() {
 }
 
 /** Secondary figure: label and note on the left, amount on the right. */
-function FigureRow({ label, note, value }: { label: string; note: string; value: string | undefined }) {
+function FigureRow({ label, note, value, symbol }: { label: string; note: string; value: string | undefined; symbol: string }) {
   return (
     <div className="flex items-center justify-between gap-4 px-6 py-5 sm:px-7">
       <div className="min-w-0">
         <dt className="text-sm font-medium text-ink">{label}</dt>
         <p className="mt-0.5 text-xs text-ink-3">{note}</p>
       </div>
-      <dd className="shrink-0">{value !== undefined ? <Amount value={value} size="lg" /> : <Skeleton className="h-6 w-28" />}</dd>
+      <dd className="shrink-0">{value !== undefined ? <Amount value={value} size="lg" symbol={symbol} /> : <Skeleton className="h-6 w-28" />}</dd>
     </div>
   );
 }

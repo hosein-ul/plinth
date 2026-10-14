@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function LinkPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   try {
-    const info = await api<{ name: string; description: string | null; amount: string; merchant_name: string }>(`/public/links/${encodeURIComponent(slug)}`, { auth: false });
+    const info = await api<{ name: string; description: string | null; amount: string; currency?: string; merchant_name: string }>(`/public/links/${encodeURIComponent(slug)}`, { auth: false });
     return <LinkStart slug={slug} info={info} />;
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) notFound();
