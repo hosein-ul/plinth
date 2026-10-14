@@ -14,6 +14,7 @@ const targets = [
   ["src/InvoiceFactory.sol", "InvoiceFactory"],
   ["src/PaymentRouter.sol", "PaymentRouter"],
   ["test/mocks/MockFiatToken.sol", "MockFiatToken"], // local development / tests only
+  ["test/mocks/MockFiatToken.sol", "MockEurc"], // a second stablecoin for local multi-token development / tests only
 ];
 
 const artifactsDir = join(root, "packages", "blockchain", "artifacts");

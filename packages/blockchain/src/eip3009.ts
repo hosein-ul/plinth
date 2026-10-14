@@ -64,14 +64,21 @@ export const receiveWithAuthorizationTypes = {
 } as const;
 
 /** Exact EIP-712 payload the customer's wallet signs. `to` is always the PaymentRouter. */
-export function buildReceiveAuthorization(net: NetworkConfig, router: Address, treasury: Address, p: RouterPayment) {
+export function buildReceiveAuthorization(
+  net: NetworkConfig,
+  router: Address,
+  treasury: Address,
+  p: RouterPayment,
+  /** The token being paid in. Defaults to the network's USDC. */
+  token: { address: Address; eip712: { name: string; version: string } } = net.usdc,
+) {
   const nonce = paymentNonce(net.chainId, router, treasury, p);
   return {
     domain: {
-      name: net.usdc.eip712.name,
-      version: net.usdc.eip712.version,
+      name: token.eip712.name,
+      version: token.eip712.version,
       chainId: net.chainId,
-      verifyingContract: net.usdc.address,
+      verifyingContract: token.address,
     },
     types: receiveWithAuthorizationTypes,
     primaryType: "ReceiveWithAuthorization" as const,

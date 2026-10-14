@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TOKEN_SYMBOLS } from "./networks";
 
 export const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/, "Invalid EVM address");
 export const txHashSchema = z.string().regex(/^0x[0-9a-fA-F]{64}$/, "Invalid transaction hash");
@@ -19,7 +20,8 @@ export const DEFAULT_EXPIRY_SECONDS = 20 * 60;
 
 export const createPaymentIntentSchema = z.object({
   amount: usdcAmountSchema,
-  currency: z.literal("USDC").default("USDC"),
+  /** The token the payment is denominated and paid in. Default USDC. */
+  currency: z.enum(TOKEN_SYMBOLS).default("USDC"),
   order_reference: z.string().max(200).optional(),
   description: z.string().max(500).optional(),
   networks: z.array(networkIdSchema).min(1).max(8).optional(),

@@ -135,6 +135,8 @@ export const merchantVaults = pgTable(
     id: text("id").primaryKey(),
     merchantId: text("merchant_id").notNull().references(() => merchants.id),
     networkId: text("network_id").notNull().references(() => networks.id),
+    /** The payment token this vault holds (a vault contract holds exactly one). */
+    tokenSymbol: text("token_symbol").notNull().default("USDC"),
     ownerAddress: text("owner_address").notNull(),
     vaultAddress: text("vault_address").notNull(),
     status: text("status").notNull().default("PENDING"), // PENDING | DEPLOYING | ACTIVE | FAILED
@@ -149,7 +151,7 @@ export const merchantVaults = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex("merchant_vaults_merchant_network_uq").on(t.merchantId, t.networkId),
+    uniqueIndex("merchant_vaults_merchant_network_token_uq").on(t.merchantId, t.networkId, t.tokenSymbol),
     uniqueIndex("merchant_vaults_address_uq").on(t.networkId, t.vaultAddress),
   ],
 );
@@ -252,6 +254,8 @@ export const paymentLinks = pgTable(
     allowedNetworks: text("allowed_networks").array().notNull(),
     checkoutMethods: text("checkout_methods").array().notNull(),
     successUrl: text("success_url"),
+    /** The token the link is priced and paid in. */
+    currency: text("currency").notNull().default("USDC"),
     intentExpirySeconds: integer("intent_expiry_seconds").notNull().default(1200),
     active: boolean("active").notNull().default(true),
     createdAt: createdAt(),
@@ -328,6 +332,8 @@ export const invoiceAddresses = pgTable(
     merchantId: text("merchant_id").notNull().references(() => merchants.id),
     networkId: text("network_id").notNull().references(() => networks.id),
     address: text("address").notNull(),
+    /** The token this deposit address accepts: it is part of what the address commits to. */
+    tokenSymbol: text("token_symbol").notNull().default("USDC"),
     /** Set for VAULT-kind addresses only (it equals destination_address there). Null for DIRECT. */
     vaultAddress: text("vault_address"),
     /** What the address commits to: where the net amount goes, which kind it is, and the fee. All immutable on-chain. */
@@ -357,6 +363,8 @@ export const relayerOperations = pgTable(
     id: text("id").primaryKey(),
     networkId: text("network_id").notNull().references(() => networks.id),
     kind: text("kind").notNull(), // CREATE_VAULT | DEPLOY_AND_SWEEP | WALLET_PAYMENT | FORWARD
+    /** Which token's contracts this operation talks to. */
+    tokenSymbol: text("token_symbol").notNull().default("USDC"),
     status: text("status").notNull().default("QUEUED"), // QUEUED | SUBMITTED | CONFIRMED | REVERTED | FAILED | CANCELLED
     dedupeKey: text("dedupe_key").notNull(),
     toAddress: text("to_address").notNull(),
@@ -502,8 +510,10 @@ export const ledgerEntries = pgTable(
     merchantId: text("merchant_id").notNull().references(() => merchants.id),
     paymentIntentId: text("payment_intent_id").references(() => paymentIntents.id),
     networkId: text("network_id").notNull().references(() => networks.id),
-    /** DETECTED | VERIFIED | FINALIZED | SETTLED_TO_VAULT | FORWARDED | REFUNDED | GAS_COST */
+    /** DETECTED | VERIFIED | FINALIZED | SETTLED_TO_VAULT | SETTLED_TO_WALLET | PLATFORM_FEE | FORWARDED | REFUNDED | GAS_COST */
     account: text("account").notNull(),
+    /** The token the amount is in. Amounts of different tokens are never added together. */
+    asset: text("asset").notNull().default("USDC"),
     direction: text("direction").notNull(), // CREDIT | DEBIT (debit = reversal / outflow)
     amount: money("amount").notNull(),
     refType: text("ref_type").notNull(),

@@ -26,6 +26,26 @@ export interface FinalityPolicy {
   note: string;
 }
 
+/**
+ * Payment tokens the gateway can accept. USDC is on every network; others are listed per network only when the
+ * network's own official documentation lists them (see `extraTokens`). Every supported token has 6 decimals: the
+ * code checks it rather than assuming it.
+ */
+export const TOKEN_SYMBOLS = ["USDC", "EURC"] as const;
+export type TokenSymbol = (typeof TOKEN_SYMBOLS)[number];
+export const isTokenSymbol = (s: string): s is TokenSymbol => (TOKEN_SYMBOLS as readonly string[]).includes(s);
+
+export interface TokenConfig {
+  symbol: TokenSymbol;
+  address: Address;
+  decimals: 6;
+  eip712: { name: string; version: string };
+  /** What the token's contract was probed to support. Wallet checkout needs receiveWithAuthorization. */
+  authorization: NetworkConfig["authorization"];
+  /** Where the address comes from, so the next person can check it. */
+  source?: string;
+}
+
 export interface NetworkConfig {
   /** Built-in ids are `NetworkId`; local/dev networks may use any slug (e.g. `local-dev`). */
   id: string;
@@ -64,6 +84,20 @@ export interface NetworkConfig {
   };
   /** Max block range per eth_getLogs request on typical public RPCs for this chain. */
   maxLogRange: number;
+  /** Further official payment tokens on this network (USDC is `usdc`). Each needs its own contracts. */
+  extraTokens?: Partial<Record<TokenSymbol, TokenConfig>>;
+}
+
+/** All payment tokens of a network, USDC included, in one shape. */
+export function networkTokens(net: NetworkConfig): Partial<Record<TokenSymbol, TokenConfig>> {
+  return {
+    USDC: { symbol: "USDC", address: net.usdc.address, decimals: 6, eip712: net.usdc.eip712, authorization: net.authorization },
+    ...(net.extraTokens ?? {}),
+  };
+}
+
+export function tokenOf(net: NetworkConfig, symbol: string): TokenConfig | undefined {
+  return isTokenSymbol(symbol) ? networkTokens(net)[symbol] : undefined;
 }
 
 const GWEI = 1_000_000_000n;
@@ -300,6 +334,18 @@ export function tryGetNetwork(id: string): NetworkConfig | undefined {
   return (NETWORKS as Record<string, NetworkConfig | undefined>)[id];
 }
 
+/** The contracts that serve ONE token on ONE chain. The token is an immutable of each, so an address commits to it. */
+export interface TokenContracts {
+  vaultFactory: Address;
+  invoiceImplementation: Address;
+  invoiceFactory: Address;
+  paymentRouter: Address;
+  version: number;
+  deployBlock?: number;
+  /** Set by finalize-deployment after comparing the on-chain bytecode with the build. */
+  bytecodeVerified?: boolean;
+}
+
 /** Contract deployment record written by contracts/script/Deploy.s.sol + scripts/record-deployment.ts. */
 export interface Deployment {
   networkId: string;
@@ -320,6 +366,16 @@ export interface Deployment {
   /** Set by a human after reviewing explorer verification + operational readiness. Required for mainnet. */
   productionApproved: boolean;
   vaultConfigDelaySeconds: number;
+  /** Contract sets for further payment tokens (EURC on Arc). The fields above are the USDC set. */
+  tokens?: Partial<Record<TokenSymbol, TokenContracts>>;
+}
+
+/** The contracts for a token on this deployment: the top-level set for USDC, `tokens[symbol]` for the rest. */
+export function contractsFor(d: Deployment, symbol: TokenSymbol): TokenContracts | undefined {
+  if (symbol === "USDC") {
+    return { vaultFactory: d.vaultFactory, invoiceImplementation: d.invoiceImplementation, invoiceFactory: d.invoiceFactory, paymentRouter: d.paymentRouter, version: d.version, deployBlock: d.deployBlock, bytecodeVerified: d.bytecodeVerified };
+  }
+  return d.tokens?.[symbol];
 }
 
 export interface OperationalGate {

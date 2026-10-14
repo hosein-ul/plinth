@@ -8,7 +8,7 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
-import { destinationKindFromIndex, destinationKindIndex, type Deployment, type DestinationKind, type NetworkConfig } from "@plinth/shared";
+import { contractsFor, destinationKindFromIndex, destinationKindIndex, networkTokens, type Deployment, type DestinationKind, type NetworkConfig, type TokenConfig, type TokenContracts, type TokenSymbol } from "@plinth/shared";
 import { InvoiceDepositAbi, InvoiceFactoryAbi, MerchantVaultAbi, PaymentRouterAbi, VaultFactoryAbi } from "./abi/generated";
 import { computeInvoiceAddress, type InvoiceRoute } from "./invoice-address";
 import type { RouterPayment } from "./eip3009";
@@ -130,15 +130,34 @@ export interface ChainAdapter {
   confirmations(blockNumber: bigint, info: HeadInfo): number;
 }
 
+/**
+ * Everything the gateway does on one chain for ONE payment token: the token's own factory, implementation,
+ * router and vault registry. A chain with two tokens has two adapters; the shared parts (treasury, fee cap,
+ * vault delay) come from the deployment record.
+ */
 export class EvmAdapter implements ChainAdapter {
+  readonly symbol: TokenSymbol;
+  readonly token: TokenConfig;
+  readonly contracts: TokenContracts;
+
   constructor(
     readonly network: NetworkConfig,
     readonly deployment: Deployment,
     readonly client: PublicClient,
-  ) {}
+    symbol: TokenSymbol = "USDC",
+  ) {
+    const token = networkTokens(network)[symbol];
+    const contracts = contractsFor(deployment, symbol);
+    if (!token) throw new Error(`${network.id} has no ${symbol} in the registry`);
+    if (!contracts) throw new Error(`${network.id} has no ${symbol} contracts in its deployment record`);
+    this.symbol = symbol;
+    this.token = token;
+    this.contracts = contracts;
+  }
 
+  /** The payment token's contract address (kept under its old name for existing callers). */
   get usdc(): Address {
-    return this.network.usdc.address;
+    return this.token.address;
   }
 
   // ------------------------------------------------------------------ observation
@@ -212,7 +231,7 @@ export class EvmAdapter implements ChainAdapter {
     if (invoiceIds.length === 0 || to < from) return out;
     for (let i = 0; i < invoiceIds.length; i += 100) {
       const logs = await this.client.getLogs({
-        address: this.deployment.paymentRouter,
+        address: this.contracts.paymentRouter,
         event: invoicePaidEvent,
         args: { invoiceId: invoiceIds.slice(i, i + 100) },
         fromBlock: from,
@@ -248,7 +267,7 @@ export class EvmAdapter implements ChainAdapter {
       if (l.logIndex === null || l.transactionHash === null || l.blockNumber === null || l.blockHash === null) continue;
       const base = { txHash: l.transactionHash, logIndex: l.logIndex, blockNumber: l.blockNumber, blockHash: l.blockHash, emitter: getAddress(l.address) };
       try {
-        if (isAddressEqual(l.address, this.deployment.paymentRouter)) {
+        if (isAddressEqual(l.address, this.contracts.paymentRouter)) {
           const d = decodeEventLog({ abi: [invoicePaidEvent], data: l.data, topics: l.topics as [Hex, ...Hex[]] });
           payments.push({ ...normaliseKind(d.args as object), ...base } as ObservedRouterPayment);
           continue;
@@ -305,6 +324,10 @@ export class EvmAdapter implements ChainAdapter {
 
   // ------------------------------------------------------------------ reads
 
+  async tokenBalanceOf(address: Address): Promise<bigint> {
+    return this.usdcBalanceOf(address);
+  }
+
   async usdcBalanceOf(address: Address): Promise<bigint> {
     return this.client.readContract({ address: this.usdc, abi: erc20Abi, functionName: "balanceOf", args: [address] });
   }
@@ -333,22 +356,22 @@ export class EvmAdapter implements ChainAdapter {
 
   predictInvoiceAddress(route: InvoiceRoute, merchantId: Hex, invoiceId: Hex): Address {
     return computeInvoiceAddress({
-      factory: this.deployment.invoiceFactory,
-      implementation: this.deployment.invoiceImplementation,
+      factory: this.contracts.invoiceFactory,
+      implementation: this.contracts.invoiceImplementation,
       token: this.usdc,
       treasury: this.deployment.treasury,
       ...route,
       merchantId,
       invoiceId,
       chainId: this.network.chainId,
-      version: this.deployment.version,
+      version: this.contracts.version,
     });
   }
 
   /** The factory's own prediction, used to cross-check the offline derivation before showing an address. */
   async predictInvoiceAddressOnChain(route: InvoiceRoute, merchantId: Hex, invoiceId: Hex): Promise<Address> {
     return this.client.readContract({
-      address: this.deployment.invoiceFactory,
+      address: this.contracts.invoiceFactory,
       abi: InvoiceFactoryAbi,
       functionName: "predict",
       args: [merchantId, invoiceId, route.destination, destinationKindIndex(route.kind), route.feeBps],
@@ -360,7 +383,7 @@ export class EvmAdapter implements ChainAdapter {
    * engine and the deploy tooling can compare it with the registry and the deployment record.
    */
   async readDeploymentFacts(): Promise<DeploymentFacts> {
-    const d = this.deployment;
+    const d = { ...this.deployment, ...this.contracts };
     const call = <T,>(address: Address, abi: readonly unknown[], fn: string) =>
       this.client.readContract({ address, abi: abi as never, functionName: fn as never }) as Promise<T>;
     const [iToken, iChain, iVersion, iTreasury, iMax] = await Promise.all([
@@ -395,7 +418,7 @@ export class EvmAdapter implements ChainAdapter {
 
   async predictVault(merchantId: Hex, owner: Address): Promise<Address> {
     return this.client.readContract({
-      address: this.deployment.vaultFactory,
+      address: this.contracts.vaultFactory,
       abi: VaultFactoryAbi,
       functionName: "predictVault",
       args: [merchantId, owner, BigInt(this.deployment.vaultConfigDelaySeconds)],
@@ -403,7 +426,7 @@ export class EvmAdapter implements ChainAdapter {
   }
 
   async isRegisteredVault(vault: Address): Promise<boolean> {
-    return this.client.readContract({ address: this.deployment.vaultFactory, abi: VaultFactoryAbi, functionName: "isVault", args: [vault] });
+    return this.client.readContract({ address: this.contracts.vaultFactory, abi: VaultFactoryAbi, functionName: "isVault", args: [vault] });
   }
 
   async readVault(vault: Address): Promise<VaultState> {
@@ -448,7 +471,7 @@ export class EvmAdapter implements ChainAdapter {
 
   encodeDeployAndSweep(merchantId: Hex, invoiceId: Hex, route: InvoiceRoute): { to: Address; data: Hex } {
     return {
-      to: this.deployment.invoiceFactory,
+      to: this.contracts.invoiceFactory,
       data: encodeFunctionData({
         abi: InvoiceFactoryAbi,
         functionName: "deployAndSweep",
@@ -459,7 +482,7 @@ export class EvmAdapter implements ChainAdapter {
 
   encodeCreateVault(merchantId: Hex, owner: Address): { to: Address; data: Hex } {
     return {
-      to: this.deployment.vaultFactory,
+      to: this.contracts.vaultFactory,
       data: encodeFunctionData({
         abi: VaultFactoryAbi,
         functionName: "createVault",
@@ -478,7 +501,7 @@ export class EvmAdapter implements ChainAdapter {
 
   encodePay(p: RouterPayment, v: number, r: Hex, s: Hex): { to: Address; data: Hex } {
     return {
-      to: this.deployment.paymentRouter,
+      to: this.contracts.paymentRouter,
       data: encodeFunctionData({ abi: PaymentRouterAbi, functionName: "pay", args: [p, v, r, s] }),
     };
   }

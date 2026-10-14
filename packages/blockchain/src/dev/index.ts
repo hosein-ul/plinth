@@ -14,7 +14,7 @@ import {
   type WalletClient,
 } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
-import type { Deployment, NetworkConfig } from "@plinth/shared";
+import type { Deployment, NetworkConfig, TokenConfig, TokenContracts, TokenSymbol } from "@plinth/shared";
 import { loadArtifact } from "../artifacts";
 import { MockFiatTokenAbi } from "../abi/generated";
 
@@ -40,9 +40,13 @@ export interface DevChain {
   /** Platform fee recipient (account 9) baked into the dev implementation and router. */
   treasury: Address;
   usdc: Address;
+  /** Address of every payment token deployed on this chain (USDC always; EURC when requested). */
+  tokens: Partial<Record<TokenSymbol, Address>>;
   mine(blocks?: number): Promise<void>;
   setTime(unixSeconds: number): Promise<void>;
   mintUsdc(to: Address, amount: bigint): Promise<void>;
+  /** Mint any deployed payment token (a test double with a public mint). */
+  mintToken(symbol: TokenSymbol, to: Address, amount: bigint): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -58,6 +62,8 @@ export interface StartOptions {
   vaultConfigDelaySeconds?: number;
   /** Immutable fee cap of the dev deployment (default 100 = 1%). */
   maxFeeBps?: number;
+  /** Payment tokens to deploy contracts for. USDC is always included; add "EURC" for a second stablecoin. */
+  tokens?: TokenSymbol[];
 }
 
 export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> {
@@ -113,6 +119,25 @@ export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> 
   const invoiceImplementation = await deploy("InvoiceDeposit", [usdc, treasury, maxFeeBps, version]);
   const invoiceFactory = await deploy("InvoiceFactory", [invoiceImplementation, vaultFactory]);
   const paymentRouter = await deploy("PaymentRouter", [usdc, vaultFactory, treasury, maxFeeBps]);
+
+  // Further payment tokens each get a complete contract set of their own: the token is an immutable of every contract.
+  const tokenAddresses: Partial<Record<TokenSymbol, Address>> = { USDC: usdc };
+  const extraContracts: Partial<Record<TokenSymbol, TokenContracts>> = {};
+  const extraTokens: Partial<Record<TokenSymbol, TokenConfig>> = {};
+  const mockOf: Record<TokenSymbol, string> = { USDC: "MockFiatToken", EURC: "MockEurc" };
+  for (const symbol of (opts.tokens ?? []).filter((t) => t !== "USDC")) {
+    const token = await deploy(mockOf[symbol]);
+    const vf = await deploy("VaultFactory", [token]);
+    const impl = await deploy("InvoiceDeposit", [token, treasury, maxFeeBps, version]);
+    const factory = await deploy("InvoiceFactory", [impl, vf]);
+    const router = await deploy("PaymentRouter", [token, vf, treasury, maxFeeBps]);
+    tokenAddresses[symbol] = token;
+    extraContracts[symbol] = { vaultFactory: vf, invoiceImplementation: impl, invoiceFactory: factory, paymentRouter: router, version, deployBlock: Number(await publicClient.getBlockNumber()), bytecodeVerified: true };
+    extraTokens[symbol] = {
+      symbol, address: token, decimals: 6, eip712: { name: symbol, version: "2" },
+      authorization: { transferWithAuthorization: true, receiveWithAuthorization: true, permit: false, verified: true, verifiedAt: new Date().toISOString().slice(0, 10) },
+    };
+  }
   const head = await publicClient.getBlockNumber();
 
   const network: NetworkConfig = {
@@ -135,6 +160,7 @@ export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> 
     finality: { strategy: "confirmations", confirmations: opts.confirmations ?? 1, note: "local anvil" },
     circle: { cctpDomain: null, gatewayNanopayments: null, gasStation: null },
     maxLogRange: 10_000,
+    ...(Object.keys(extraTokens).length ? { extraTokens } : {}),
   };
   const deployment: Deployment = {
     networkId: network.id,
@@ -151,6 +177,7 @@ export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> 
     bytecodeVerified: true,
     productionApproved: false,
     vaultConfigDelaySeconds: opts.vaultConfigDelaySeconds ?? 86_400,
+    ...(Object.keys(extraContracts).length ? { tokens: extraContracts } : {}),
   };
 
   const rpc = (method: string, params: unknown[] = []) =>
@@ -174,6 +201,13 @@ export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> 
     },
     mintUsdc: async (to: Address, amount: bigint) => {
       const hash = await deployer.writeContract({ address: usdc, abi: MockFiatTokenAbi, functionName: "mint", args: [to, amount], account: accounts[0]!, chain });
+      await publicClient.waitForTransactionReceipt({ hash });
+    },
+    tokens: tokenAddresses,
+    mintToken: async (symbol: TokenSymbol, to: Address, amount: bigint) => {
+      const address = tokenAddresses[symbol];
+      if (!address) throw new Error(`${symbol} is not deployed on this dev chain`);
+      const hash = await deployer.writeContract({ address, abi: MockFiatTokenAbi, functionName: "mint", args: [to, amount], account: accounts[0]!, chain });
       await publicClient.waitForTransactionReceipt({ hash });
     },
     stop: async () => {

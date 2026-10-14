@@ -15,7 +15,10 @@ interface IDecimals {
 
 /// @notice Deploys the Plinth contract set to ONE network.
 ///
-///   USDC_ADDRESS        official USDC for the target chain (taken from Circle's list, NOT from this repo's cache)
+///   TOKEN_SYMBOL        USDC (default) or another payment token the registry lists for this chain (EURC on Arc). One run
+///                       deploys the whole contract set for ONE token; run it once per token.
+///   TOKEN_ADDRESS       the token's official address on the target chain (from the issuer's or the chain's own docs, NOT
+///                       from this repo's cache). USDC_ADDRESS is accepted for USDC.
 ///   EXPECTED_CHAIN_ID   must equal the RPC's chain id — stops "right key, wrong network" mistakes
 ///   TREASURY            platform fee recipient for this chain (immutable in the implementation). Rotating it later
 ///                       means deploying a new implementation version, which only affects NEW invoices.
@@ -30,15 +33,17 @@ interface IDecimals {
 /// wiring before the network may be enabled. This script never marks a deployment production-approved.
 contract Deploy is Script {
     function run() external {
-        address usdc = vm.envAddress("USDC_ADDRESS");
+        string memory symbol = vm.envOr("TOKEN_SYMBOL", string("USDC"));
+        address usdc = vm.envOr("TOKEN_ADDRESS", vm.envOr("USDC_ADDRESS", address(0)));
+        require(usdc != address(0), "Deploy: set TOKEN_ADDRESS (or USDC_ADDRESS for USDC)");
         uint256 expectedChainId = vm.envUint("EXPECTED_CHAIN_ID");
         address treasury = vm.envAddress("TREASURY");
         uint16 maxFeeBps = uint16(vm.envOr("MAX_FEE_BPS", uint256(100)));
         uint16 version = uint16(vm.envOr("CONTRACT_VERSION", uint256(2)));
 
         require(block.chainid == expectedChainId, "Deploy: RPC chain id != EXPECTED_CHAIN_ID");
-        require(usdc.code.length > 0, "Deploy: USDC_ADDRESS has no code on this chain");
-        require(IDecimals(usdc).decimals() == 6, "Deploy: token is not 6-decimals USDC");
+        require(usdc.code.length > 0, "Deploy: the token address has no code on this chain");
+        require(IDecimals(usdc).decimals() == 6, "Deploy: token is not a 6-decimals token");
         require(treasury != address(0), "Deploy: TREASURY is the zero address");
         require(maxFeeBps <= 1000, "Deploy: MAX_FEE_BPS above 10% is not allowed by this script");
         if (treasury.code.length > 0) {
@@ -57,10 +62,28 @@ contract Deploy is Script {
         PaymentRouter router = new PaymentRouter(IFiatToken(usdc), vaults, treasury, maxFeeBps);
         vm.stopBroadcast();
 
+        _record(symbol, usdc, treasury, maxFeeBps, version, startBlock, vaults, implementation, invoices, router);
+    }
+
+    /// Writes the raw deployment record and prints the addresses. Kept out of `run` to stay within the stack limit.
+    function _record(
+        string memory symbol,
+        address token,
+        address treasury,
+        uint16 maxFeeBps,
+        uint16 version,
+        uint256 startBlock,
+        VaultFactory vaults,
+        InvoiceDeposit implementation,
+        InvoiceFactory invoices,
+        PaymentRouter router
+    ) internal {
         string memory k = "deployment";
         vm.serializeUint(k, "chainId", block.chainid);
         vm.serializeUint(k, "version", version);
-        vm.serializeAddress(k, "usdc", usdc);
+        vm.serializeString(k, "tokenSymbol", symbol);
+        vm.serializeAddress(k, "usdc", token);
+        vm.serializeAddress(k, "token", token);
         vm.serializeAddress(k, "treasury", treasury);
         vm.serializeUint(k, "maxFeeBps", maxFeeBps);
         vm.serializeBool(k, "treasuryHasCode", treasury.code.length > 0);
@@ -70,8 +93,14 @@ contract Deploy is Script {
         vm.serializeAddress(k, "paymentRouter", address(router));
         vm.serializeUint(k, "deployBlock", startBlock);
         string memory out = vm.serializeAddress(k, "deployer", msg.sender);
-        vm.writeJson(out, string.concat("../deployments/raw-", vm.toString(block.chainid), ".json"));
+        // USDC keeps the original file name; every other token gets its own raw file.
+        bool isUsdc = keccak256(bytes(symbol)) == keccak256(bytes("USDC"));
+        string memory file = isUsdc
+            ? string.concat("../deployments/raw-", vm.toString(block.chainid), ".json")
+            : string.concat("../deployments/raw-", vm.toString(block.chainid), "-", symbol, ".json");
+        vm.writeJson(out, file);
 
+        console2.log("Token                ", symbol);
         console2.log("VaultFactory         ", address(vaults));
         console2.log("InvoiceDeposit (impl)", address(implementation));
         console2.log("InvoiceFactory       ", address(invoices));

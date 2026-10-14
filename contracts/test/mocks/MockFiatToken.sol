@@ -5,10 +5,12 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /// @dev Test double reproducing the observable behaviour of Circle FiatTokenV2 that the gateway
-///      relies on: 6 decimals, EIP-712 domain ("USDC", "2"), EIP-3009 typehashes, the
+///      relies on: 6 decimals, EIP-712 domain (the token's own name, "2"), EIP-3009 typehashes, the
 ///      "caller must be the payee" rule of receiveWithAuthorization, validity window and
 ///      single-use nonces. Revert strings match the real contract.
-contract MockFiatToken is ERC20("USDC", "USDC") {
+abstract contract MockFiatTokenBase is ERC20 {
+    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
+
     bytes32 public constant TRANSFER_WITH_AUTHORIZATION_TYPEHASH = keccak256(
         "TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)"
     );
@@ -51,7 +53,7 @@ contract MockFiatToken is ERC20("USDC", "USDC") {
     }
 
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
-        return keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256("USDC"), keccak256("2"), block.chainid, address(this)));
+        return keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), keccak256("2"), block.chainid, address(this)));
     }
 
     function transferWithAuthorization(
@@ -109,3 +111,9 @@ contract MockFiatToken is ERC20("USDC", "USDC") {
         _transfer(from, to, value);
     }
 }
+
+/// @dev The default payment token in tests: "USDC".
+contract MockFiatToken is MockFiatTokenBase("USDC", "USDC") {}
+
+/// @dev A second Circle-style stablecoin ("EURC") for multi-token tests: same behaviour, its own name and domain.
+contract MockEurc is MockFiatTokenBase("EURC", "EURC") {}
