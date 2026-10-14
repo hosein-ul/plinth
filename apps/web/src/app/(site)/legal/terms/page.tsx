@@ -23,7 +23,7 @@ export default function TermsPage() {
       <p>These terms are between you and [Operator name], of [registered address] (&quot;we&quot;, &quot;us&quot;). Plinth is the name of the software and service we run. If you use Plinth on behalf of a business, you confirm that you can bind that business.</p>
 
       <h2>2. What the service is, today</h2>
-      <p>Plinth is a non-custodial USDC payment gateway. It gives each payment a deposit address or a wallet checkout, watches the blockchain, and uses a restricted relayer to move confirmed funds into a vault that you own.</p>
+      <p>Plinth is a non-custodial stablecoin payment gateway (USDC, and EURC on Arc). It gives each payment a deposit address or a wallet checkout, watches the blockchain, and uses a restricted relayer to move confirmed funds, minus the platform fee, into a vault that you own or to a payout wallet that you chose.</p>
       <p>The service currently runs on test networks only. Test tokens have no value. The smart contracts have not been independently audited. Mainnet support is switched off. We give no uptime promise and no service-level agreement.</p>
 
       <h2>3. Your account</h2>
@@ -33,8 +33,9 @@ export default function TermsPage() {
         <li>Roles on your account (owner, admin, developer, viewer) limit what each person can do. You decide who gets which role.</li>
       </ul>
 
-      <h2>4. Your vault and your keys</h2>
+      <h2>4. Your vault, your payout wallet and your keys</h2>
       <p>The vault is owned by the wallet address you name when you create it. We never hold a key that can withdraw from it. This means we cannot recover funds if you lose that key, send funds for you, or reverse a withdrawal. Using a multisig as owner is strongly recommended.</p>
+      <p>You may instead choose direct payouts, where each payment settles straight to a payout wallet you control. Direct payouts need a verified email address, a signature from that wallet and a confirmation link sent to your email, and a change takes effect after a waiting period. A vault can delay changes to its forwarding rules; a payout wallet has no such delay, so treat it as a hot destination. The destination of a payment address is fixed when the address is issued. You are responsible for the wallet you name: funds sent to a wrong or lost address cannot be recovered by us.</p>
       <p>You are responsible for the address you give us. A mistake in it cannot be corrected by us.</p>
 
       <h2>5. Acceptable use</h2>
@@ -46,13 +47,14 @@ export default function TermsPage() {
       </ul>
 
       <h2>6. Fees</h2>
-      <p>Nothing is charged in the sandbox. No production pricing has been published. If we introduce fees, we will publish them before they apply.</p>
+      <p>Plinth takes a platform fee of 0.20% of each payment, rounded down to the token&apos;s smallest unit. The fee is taken by the settlement contract in the same transaction that delivers the payment, and it is paid to the Plinth treasury address. The contract fixes a maximum of 1% that cannot be changed after deployment. We may agree a different rate with you, within that maximum; the rate is written into each payment address when the address is issued, so a later change affects only new payments. If the fee transfer fails, you receive the full amount and no fee is charged for that payment.</p>
+      <p>The fee is not refunded. A refund can return at most the net amount you received. Network fees for deployments and sweeps are paid by the relayer and are not billed today. Plinth currently runs on testnets only, so no real money moves, and the fee applies to test tokens in the same way. If we change the default fee, we will publish the new rate before it applies to new payments.</p>
 
       <h2>7. Your customers and your obligations</h2>
       <p>You are the seller. You are responsible for your products and prices, your refund and consumer-law obligations, your taxes and accounting, and any licence your business needs to accept digital assets. Plinth does not verify your customers&apos; identities or screen them against sanctions lists.</p>
 
       <h2>8. Availability, changes and suspension</h2>
-      <p>We may change, pause or stop any part of the service, including a network, at any time. We may pause the relayer or restrict an account to protect people or the service, or if you break these terms. Doing so does not touch funds that are already in your vault, which only your key can move.</p>
+      <p>We may change, pause or stop any part of the service, including a network, at any time. We may pause the relayer or restrict an account to protect people or the service, or if you break these terms. Doing so does not touch funds that are already in your vault, which only your key can move, or that were already paid out to your payout wallet.</p>
       <p>Payments can be delayed or missed if a network, an RPC provider, the token issuer or our systems fail. Check the status page and rely on signed webhooks and the payment detail, not on a redirect.</p>
 
       <h2>9. No warranty, limited liability</h2>

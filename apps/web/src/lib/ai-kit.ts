@@ -10,7 +10,7 @@ export { API_FACTS };
 
 export const LLMS_TXT = `# Plinth
 
-> Non-custodial USDC payment gateway. Your app asks for a payment with each order's real total; the customer pays with a wallet or to a unique address; funds settle into a vault only the merchant can withdraw from. Test networks only today; contracts are not yet independently audited.
+> Non-custodial stablecoin payment gateway (USDC, and EURC on Arc). Your app asks for a payment with each order's real total; the customer pays with a wallet or to a unique address; funds settle, minus a 0.20% platform fee, into a vault only the merchant can withdraw from or into the merchant's own payout wallet. Test networks only today; contracts are not yet independently audited.
 
 ## For AI coding assistants
 - [Integration playbook and API guide](${SITE_URL}/llms-full.txt): how to add Plinth checkout to an existing project

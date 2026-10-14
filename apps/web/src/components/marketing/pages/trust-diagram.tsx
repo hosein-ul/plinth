@@ -42,7 +42,7 @@ export function TrustDiagram() {
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.15fr)_auto_minmax(0,1fr)] lg:items-stretch lg:gap-3">
         <Zone tone="plain" title="Customer" tag="Holds their own keys">
           <Row icon={Wallet} title="Wallet">Signs one EIP-3009 authorization. Never approves a spender and needs no gas.</Row>
-          <Row icon={Radio} title="Invoice address">Computed before it exists. It commits to the token, vault, merchant, invoice and chain.</Row>
+          <Row icon={Radio} title="Invoice address">Computed before it exists. It commits to the token, destination, fee rate, merchant, invoice and chain.</Row>
         </Zone>
         <Join label="USDC" />
         <Zone tone="risk" title="Plinth gateway" tag="Assumed compromisable">
@@ -50,14 +50,14 @@ export function TrustDiagram() {
           <Row icon={Fuel} title="Relayer">Pays gas and calls <code className="font-mono text-xs">sweep()</code>, which takes no arguments. Holds gas only, never merchant funds.</Row>
           <Row icon={Server} title="API and webhooks">Derives status, signs and retries events. Cannot move money.</Row>
         </Zone>
-        <Join label="Sweep to vault" />
+        <Join label="Sweep, minus fee" />
         <Zone tone="key" title="Merchant vault" tag="You hold the only key">
           <Row icon={Landmark} title="MerchantVault">Non-upgradeable. The owner is the only authority.</Row>
           <Row icon={KeyRound} title="Owner key">Withdraws anywhere. Forwarding rules change only after a delay you set.</Row>
         </Zone>
       </div>
       <figcaption className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-ink-3">
-        <span className="inline-flex items-center gap-2"><TokenIcon symbol="USDC" size={20} />Funds only ever move customer, invoice address, vault.</span>
+        <span className="inline-flex items-center gap-2"><TokenIcon symbol="USDC" size={20} />Funds only ever move customer, invoice address, then your vault or payout wallet (and the fee to the treasury).</span>
         <span className="inline-flex items-center gap-2"><ChainIcon id="arc-testnet" size={20} /><ChainIcon id="base-sepolia" size={20} />Contract tests also run against the real USDC bytecode on these two testnets (read-only forks).</span>
       </figcaption>
     </figure>

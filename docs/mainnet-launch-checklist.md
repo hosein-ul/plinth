@@ -11,10 +11,14 @@ Every item must be checked, with an owner and a date, before `pnpm approve:deplo
 - [ ] Deployment with a **hardware wallet or KMS-backed key**; `ALLOW_MAINNET_DEPLOY=true` set deliberately; deployer key is not the relayer key and holds no leftover funds.
 - [ ] `pnpm finalize:deployment` PASS (bytecode == audited artifacts, wiring, derivation). Source verified on the block explorer.
 - [ ] `CONTRACT_VERSION` and `VAULT_CONFIG_DELAY_SECONDS` final (changing either later changes addresses/vault creation).
-- [ ] A canary run with a trivial amount: invoice → sweep → vault → owner withdraw, using the real token on the real chain.
+- [ ] A canary run with a trivial amount: invoice → sweep → vault → owner withdraw, using the real token on the real chain, for **each token** and **each payout mode** (vault and direct), checking that the treasury received exactly the fee.
+- [ ] **Treasury**: the address in `packages/shared/src/fees.ts` for this network is the one the business controls, was checked by a second person, has **no contract code** on this chain (`finalize-deployment` reports it), and its key is held in a hardware wallet or multisig. Rotating it later means a new contract version (docs/operations.md).
+- [ ] **Fee**: `PLATFORM_FEE_BPS` and every per-merchant override are within the deployed `MAX_FEE_BPS` (1%); public Pricing, FAQ and Terms say the same numbers (they ship in the same release as the contracts).
+- [ ] **Tokens**: every token enabled on the network (USDC; EURC on Arc) has its own contract set finalized (`--token`), `pnpm verify:networks` PASS for it, and its address was re-checked against the network's official documentation.
 
 ## B · Keys and custody
 
+- [ ] Email delivery (`RESEND_API_KEY`, `EMAIL_FROM` on a verified domain) tested end to end for verification and payout-wallet confirmation; `PAYOUT_COOLDOWN_SECONDS` and `REQUIRE_VAULT_OWNER_PROOF` set deliberately; Web3Auth "User details in ID token" enabled if Google sign-in is offered.
 - [ ] Relayer key lives in KMS/HSM via a `SignerProvider`; `ALLOW_ENV_SIGNER_IN_PRODUCTION` is **not** set.
 - [ ] Relayer wallet funded only with a bounded gas budget; refill procedure documented; alert thresholds set.
 - [ ] Merchant vault owners are multisigs (docs and onboarding copy say so); no gateway-controlled key is an owner or can become one.

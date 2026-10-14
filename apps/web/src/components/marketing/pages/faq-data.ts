@@ -9,7 +9,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         q: "What is Plinth?",
-        a: "Plinth is a non-custodial USDC payment gateway. Each payment gets a unique address, or the customer signs a gasless authorization from a wallet. A watcher verifies the transfer on-chain, and a restricted relayer sweeps the funds into a vault that you own. The gateway holds no key that can move merchant funds.",
+        a: "Plinth is a non-custodial stablecoin payment gateway: USDC on every network, and EURC on Arc. Each payment gets a unique address, or the customer signs a gasless authorization from a wallet. A watcher verifies the transfer on-chain, and a restricted relayer sweeps the funds, minus a 0.20% platform fee, to a vault that you own or to a payout wallet you choose. The gateway holds no key that can move merchant funds.",
       },
       {
         q: "Can I accept real money today?",
@@ -23,7 +23,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         q: "What can customers pay with?",
-        a: "USDC only, on the networks in the registry. Customers can pay from a connected browser wallet with one gasless signature, or send USDC to the unique address on the checkout page. Any other token sent to a deposit address is recorded as the wrong asset and is never swept.",
+        a: "The token the payment was created in: USDC on every network, and EURC on Arc, where Arc lists it. Customers can pay from a connected browser wallet with one gasless signature (where the token supports it), or send the token to the unique address on the checkout page. A different token sent to a deposit address is recorded as the wrong asset and is never swept.",
       },
       {
         q: "What happens if a customer pays too little, too much or too late?",
@@ -35,7 +35,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "How do refunds work?",
-        a: "A refund is a new transfer that you send from your own vault, because Plinth cannot move vault funds. You record a refund request, send the transfer, and submit its transaction hash. The refund completes only after the transfer is verified on-chain.",
+        a: "A refund is a new transfer that you send from the account that received the funds: your vault, or your payout wallet if you use direct payouts. Plinth cannot move those funds for you. You record a refund request, send the transfer, and submit its transaction hash. The refund completes only after the transfer is verified on-chain. The platform fee is not refunded, so a refund can return at most the net amount you received.",
       },
     ],
   },
@@ -45,11 +45,11 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         q: "Who holds the money?",
-        a: "You do. Funds go from the customer to a per-invoice address and are swept into a MerchantVault whose only authority is its owner, an address you choose. The gateway and its relayer have no role in the vault, so they cannot withdraw, change the owner or choose a recipient.",
+        a: "You do. Funds go from the customer to a per-invoice address and are swept, minus the platform fee, to the destination committed into that address: either a MerchantVault whose only authority is its owner, or a payout wallet you chose and confirmed by email. The gateway and its relayer have no role in either, so they cannot withdraw, change the owner or choose a recipient for an address that already exists.",
       },
       {
         q: "What if the Plinth backend or relayer key is compromised?",
-        a: "That is the case the design targets. The relayer can call sweep(), which takes no arguments and can only send to the vault baked into the invoice contract. It cannot withdraw from a vault or change its rules. A compromise could still disrupt service, delay payments or spend the relayer's gas budget, which is capped.",
+        a: "A compromised relayer key cannot redirect funds: sweep() takes no arguments and only sends to the destination baked into the invoice contract. It cannot withdraw from a vault or change its rules, and its gas budget is capped. A total compromise of the backend is different: it cannot take funds at addresses that were already issued, but it could hand out new checkout addresses that pay an attacker, and a customer cannot verify an address by looking at it. Mitigations exist (the engine checks your signed payout choice before deriving an address, which stops tampering with the database alone) but they do not stop a compromised API process. Direct payouts also have no vault timelock, so the payout wallet is a hot destination. The contracts are unaudited.",
       },
       {
         q: "Have the contracts been audited?",
@@ -57,7 +57,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "Can my funds be frozen?",
-        a: "Possibly, by the token issuer. USDC can be paused or blocklisted by its issuer, and a blocked vault or invoice address cannot receive or sweep funds. Plinth has no control over this. The risk disclosure covers it in more detail.",
+        a: "Possibly, by the token issuer. USDC and EURC can be paused or blocklisted by their issuer, and a blocked vault, payout wallet or invoice address cannot receive or sweep funds. Plinth has no control over this. The risk disclosure covers it in more detail.",
       },
     ],
   },
@@ -71,7 +71,11 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "What does Plinth cost?",
-        a: "Nothing is charged today and no price list has been published. The relayer's gas cost is recorded per sweep, and a processing fee is a planned component that is not implemented yet. Pricing will be published with mainnet availability.",
+        a: "A platform fee of 0.20% of each payment, rounded down to the token's smallest unit, taken inside the settlement transaction and sent to the Plinth treasury. The contract caps any fee at 1% and that cap cannot change. If the treasury transfer fails, you receive the full amount and the fee is not charged for that payment. The relayer's gas is paid by the gateway and recorded, not billed. Today Plinth runs on testnets, so no real money moves.",
+      },
+      {
+        q: "What are the two payout modes?",
+        a: "Vault mode settles into a MerchantVault that only your owner address controls, with an optional settlement delay. Direct mode settles straight to a payout wallet you choose. Direct has no vault timelock, so that wallet is a hot destination. It needs a verified email, a signature from the wallet, and a confirmation link sent to your email, which also runs a cooldown before it takes effect. New payments use the destination committed when their address was issued.",
       },
     ],
   },
@@ -85,7 +89,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "Is there a sandbox, an OpenAPI document or an SDK?",
-        a: "There is a sandbox: test keys (sk_test_) operate on testnets and nothing is charged. The API publishes an OpenAPI 3.1 document at /v1/openapi.json. There is no official SDK or store plugin yet, so you call the REST API directly.",
+        a: "There is a sandbox: test keys (sk_test_) operate on testnets and no real money moves; the platform fee applies there too. The API publishes an OpenAPI 3.1 document at /v1/openapi.json. There is no official SDK or store plugin yet, so you call the REST API directly.",
       },
     ],
   },

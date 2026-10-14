@@ -63,7 +63,7 @@ export function ActivationChecklist() {
     },
     {
       key: "payment", title: "Create a test payment", done: paymentMade,
-      body: "You get a checkout page link and a deposit address per network. Nothing is charged on a testnet.",
+      body: "You get a checkout page link and a deposit address per network. No real money moves on a testnet; the 0.20% platform fee applies to test tokens too.",
       action: vaultActive ? <CreatePaymentDialog /> : undefined,
     },
     {

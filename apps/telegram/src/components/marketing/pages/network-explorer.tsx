@@ -16,6 +16,8 @@ export interface NetDTO {
   environment: "testnet" | "mainnet";
   nativeSymbol: string;
   usdc: string;
+  /** Further official tokens the network lists (EURC on Arc). */
+  extra: { symbol: string; address: string }[];
   explorer: string;
   finality: string;
   finalityNote: string;
@@ -60,6 +62,18 @@ function NetCard({ n }: { n: NetDTO }) {
           </a>
         </span>
       </div>
+      {n.extra.map((t) => (
+        <div key={t.symbol} className="mt-2 flex items-center justify-between gap-3 rounded-ctl bg-wash px-3 py-2.5">
+          <span className="flex items-center gap-2.5"><AssetOnChain symbol={t.symbol as never} id={n.id} size={28} /><span className="text-sm font-medium text-ink">{t.symbol}</span></span>
+          <span className="flex min-w-0 items-center gap-1">
+            <code className="truncate font-mono text-xs text-ink-2" title={t.address}>{short(t.address)}</code>
+            <CopyButton compact value={t.address} label={`Copy ${t.symbol} address`} />
+            <a href={`${n.explorer}/address/${t.address}`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${n.name} ${t.symbol} in the block explorer`} className="grid size-6 place-items-center rounded-md text-ink-4 hover:bg-sunk hover:text-ink">
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          </span>
+        </div>
+      ))}
 
       <dl className="mt-5 divide-y divide-line text-sm">
         <div className="grid grid-cols-[6.5rem_1fr] gap-3 py-2.5 first:pt-0"><dt className="text-ink-3">Finality</dt><dd className="text-ink">{n.finality}<span className="block text-xs text-ink-3">{n.finalityNote}</span></dd></div>
@@ -122,7 +136,7 @@ export function NetworkExplorer({ nets }: { nets: NetDTO[] }) {
         </div>
       ) : (
         <div className="mt-10">
-          <TableCard caption="Network registry" minWidth="58rem" head={["Network", "Chain ID", "Official USDC", "Token probe", "Finality", "Gas", "CCTP", "Status"]}>
+          <TableCard caption="Network registry" minWidth="58rem" head={["Network", "Chain ID", "Official tokens", "Token probe", "Finality", "Gas", "CCTP", "Status"]}>
             {nets.map((n) => (
               <tr key={n.id} className="transition-colors hover:bg-wash">
                 <th scope="row" className={cn(td, "text-left font-medium text-ink")}>
@@ -130,7 +144,7 @@ export function NetworkExplorer({ nets }: { nets: NetDTO[] }) {
                   <span className="mt-0.5 block pl-[34px] text-xs font-normal text-ink-3">{n.environment}</span>
                 </th>
                 <td className={cn(td, "tnum font-mono text-xs text-ink-2")}>{n.chainId}</td>
-                <td className={cn(td, "break-all font-mono text-xs text-ink-2")}>{n.usdc}</td>
+                <td className={cn(td, "break-all font-mono text-xs text-ink-2")}><span className="block">USDC {n.usdc}</span>{n.extra.map((t) => <span key={t.symbol} className="mt-1 block">{t.symbol} {t.address}</span>)}</td>
                 <td className={td}>{n.verified ? <Chip tone="ok">verified {n.verifiedAt}</Chip> : <Chip>not verified</Chip>}</td>
                 <td className={cn(td, "whitespace-nowrap text-ink-2")}>{n.finality}</td>
                 <td className={cn(td, "whitespace-nowrap text-ink-2")}>{n.gas}</td>

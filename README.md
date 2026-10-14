@@ -1,9 +1,10 @@
 # Plinth
 
-Non-custodial, multi-chain **USDC payment gateway**. Customers pay with a connected wallet (gasless via EIP-3009 where the
-network's USDC supports it) or by sending USDC to a **unique per-invoice address**. A watcher verifies every transfer
-independently; a permission-restricted relayer pays the gas to sweep funds into a **merchant-owned vault**. The gateway holds no key
-that can move merchant funds.
+Non-custodial, multi-chain **stablecoin payment gateway** (USDC on every network, EURC on Arc). Customers pay with a connected
+wallet (gasless via EIP-3009 where the token supports it) or by sending the token to a **unique per-invoice address**. A watcher
+verifies every transfer independently; a permission-restricted relayer pays the gas to sweep funds, minus a **0.20% platform fee**
+(contract-capped at 1%), into a **merchant-owned vault** or straight to the merchant's own **payout wallet**. The gateway holds no
+key that can move merchant funds.
 
 > **Status: pre-audit, testnet-verified.** Mainnet is a first-class, fully-specified configuration but is **disabled by default** and
 > was **not deployed to** from this repository. The contracts have **not** been independently audited.
@@ -15,19 +16,30 @@ that can move merchant funds.
  customer ──USDC──▶ invoice address (counterfactual CREATE2, no code, no gas, no key)
                           │  watcher: log → receipt → official token → finality
                           ▼
-              relayer (pays gas) ── InvoiceFactory.deployAndSweep() ──▶ MerchantVault (owner = merchant multisig)
+              relayer (pays gas) ── InvoiceFactory.deployAndSweep() ──┬──▶ MerchantVault (owner = merchant multisig)   [vault mode]
+                                                                      │    or the merchant's payout wallet            [direct mode]
+                                                                      └──▶ treasury: the platform fee (fail-open)
 ```
 
-* **Invoice contracts** — ERC-1167 clones with immutable args (token, vault, merchant, invoice, chain, version). `sweep()` has no
-  parameters, so nobody — including us — can pick a recipient. The address is computable before deployment and commits to every input.
+* **Invoice contracts** — ERC-1167 clones with immutable args (destination, fee rate, kind, merchant, invoice; the token, chain, version,
+  treasury and fee cap are immutables of the implementation). `sweep()` has no parameters, so nobody — including us — can pick a
+  recipient. The address is computable before deployment and commits to every input.
+* **Fee** — default 20 bps, rounded down, taken in the settlement transaction. The contract caps any fee at 100 bps (1%). If the treasury
+  transfer fails the merchant gets the full amount (`FeeSkipped`). The fee is not refunded.
+* **Payout modes** — vault (owner-only, delayed policy changes) or direct to a payout wallet, which needs a verified email, a wallet
+  signature, an emailed confirmation link and a cooldown. Direct mode has no vault timelock: the payout wallet is a hot destination.
 * **Merchant vault** — non-upgradeable; the only authority is its `owner`. Settlement modes `BALANCE_IN_VAULT` (default),
   `INSTANT_FORWARD`, `THRESHOLD_OR_PERIODIC` pay only an owner-authorised destination, activated after an owner-chosen delay.
 * **Wallet checkout** — customer signs EIP-3009 `receiveWithAuthorization` to a stateless `PaymentRouter`; any relayer submits it. The nonce
-  binds invoice, merchant, vault, payer, amount, chain and router, so a signature can't be re-pointed.
+  binds invoice, merchant, destination, fee, treasury, payer, amount, chain and router, so a signature can't be re-pointed.
 * **Payment engine** — status is *derived* from verified facts (transfers, settlements, refunds); partial / repeated / late /
   over / wrong-token payments are handled and reorgs are reversed. Webhooks are signed, retried and idempotent.
 
 Full design: [docs/architecture.md](docs/architecture.md) · Threats: [docs/threat-model.md](docs/threat-model.md)
+
+**What a compromised backend can and cannot do.** It cannot move funds out of a vault or redirect funds sent to an address that has
+already been issued. It **can** hand out new checkout addresses that pay an attacker, because a customer cannot verify an address. See
+the threat model for the partial mitigation and the Direct-mode trade-off.
 
 ## Repository
 
@@ -80,7 +92,7 @@ pnpm api &  pnpm worker &  pnpm web
 ```bash
 pnpm test:contracts                 # forge: unit, fuzz (512 runs), invariants, real-USDC-bytecode fork tests (opt-in via FORK_URL)
 pnpm typecheck && pnpm test         # all TypeScript suites; they start real anvil chains and deploy the real contracts
-pnpm verify:networks                # READ-ONLY probe of every registry network's live USDC (EIP-712 domain, EIP-3009)
+pnpm verify:networks                # READ-ONLY probe of every registry network's live tokens, USDC and EURC (EIP-712 domain, EIP-3009)
 pnpm e2e:local                      # acceptance run on a throwaway chain
 pnpm e2e:testnet arc-testnet        # the same acceptance run on a real testnet (needs funded keys: docs/deploy-testnet.md)
 ```

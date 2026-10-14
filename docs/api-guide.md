@@ -7,7 +7,11 @@ a test fails if they diverge; also served at `/v1/openapi.json`). Regenerate wit
 
 * Base path `/v1`. Auth: `Authorization: Bearer sk_test_…` (testnets) or `sk_live_…` (mainnets). Keys are hashed at rest and shown once;
   rotate with `POST /v1/api-keys/{id}/rotate`. API keys act with *developer* rights: they cannot manage wallets, vaults, keys or team.
-* Money: decimal strings in USDC (`"12.50"`, ≤ 6 decimals) with exact base-unit twins (`amount_units`). Never floats.
+* Money: decimal strings in the payment's token (`"12.50"`, ≤ 6 decimals) with exact base-unit twins (`amount_units`). Never floats. The token is
+  `currency`, `"USDC"` unless you pass `"EURC"` (Arc only); it is also accepted by payment links and invoices and appears on every payment. A vault
+  holds one token (`POST /v1/vaults {network, token}`, `GET /v1/vaults/{network}?token=EURC`), and `GET /v1/overview?currency=EURC` reports one token at a time.
+* **Platform fee:** 0.20% by default (never above 1%), taken from each settled payment in the same transaction. A payment shows `fee_amount`, `net_amount`
+  (what you received) and `amount` (what the customer paid). The fee is not refunded.
 * Errors: `{"error":{"type","code","message","request_id","details?"}}`. 400 validation, 401/403 auth, 404, 409 conflict, 422 semantic, 429 rate-limited.
 * **Idempotency:** send `Idempotency-Key` on creates. Same key + same body ⇒ the original response (header `Idempotent-Replayed: true`); same key +
   different body ⇒ `422 IDEMPOTENCY_KEY_REUSED`; concurrent duplicate ⇒ `409`.
@@ -32,7 +36,7 @@ A payment stays payable for 20 minutes (1200 seconds) by default. Pass `expires_
 Redirect the customer to `checkout_url`, or build your own UI from `networks[].deposit_address`. The checkout shows two methods:
 
 * **Pay with wallet** — customer signs one EIP-3009 authorization; the relayer submits and pays gas. Offered per network only when that network's
-  USDC was verified to support it **and** a relayer is available; otherwise the UI says why and offers the address.
+  the token was verified to support it **and** a relayer is available; otherwise the UI says why and offers the address.
 * **Pay with address / QR** — unique address per payment per network; partial payments add up; status is live from the backend.
 
 ## 3 · Fulfil from webhooks, not redirects
@@ -44,7 +48,7 @@ Redirect the customer to `checkout_url`, or build your own UI from `networks[].d
 | `payment.completed` | funds confirmed inside the merchant vault | **yes (strict)** |
 | `payment.underpaid` / `payment.expired` / `payment.late` | partial at expiry / nothing / final after expiry | no |
 | `payment.overpaid` | excess received (`excess_amount`); refundable | yes |
-| `payment.invalid_asset` | a non-USDC token was sent (ignored) | no |
+| `payment.invalid_asset` | a token other than the payment's official token was sent (ignored) | no |
 | `settlement.submitted/completed/failed` | sweep lifecycle (informational) | — |
 | `refund.requested/completed` | refund lifecycle | — |
 
@@ -54,12 +58,12 @@ A reference verifier ships in `packages/engine/src/crypto.ts` (`verifyWebhookSig
 ## 4 · Reconcile
 
 `GET /v1/payments/{id}` returns the full picture: `timeline`, `transactions` (chain, tx hash, log index, finality), `settlements` (with the relayer fee),
-`attempts` and `refunds`. `GET /v1/overview` labels *received (final)*, *settled to vault* and *pending* separately.
+`attempts` and `refunds`. `GET /v1/overview` labels *received (final)*, *settled* (net of the fee), *platform fee* and *pending* separately.
 
 ## 5 · Refunds
 
-A refund is a **new transfer you send from your vault** (owner wallet → `withdraw`). `POST /v1/refund-requests` records intent; after sending, call
-`POST /v1/refund-requests/{id}/proof {tx_hash}`. It completes only after the receipt is verified: a final USDC transfer vault → recipient for exactly that amount.
+A refund is a **new transfer you send from the account that received the payment**: your vault (owner wallet → `withdraw`), or your payout wallet if you use direct payouts. It can return at most `net_amount`, because the platform fee is not refunded. `POST /v1/refund-requests` records intent; after sending, call
+`POST /v1/refund-requests/{id}/proof {tx_hash}`. It completes only after the receipt is verified: a final transfer of the payment's token from that account to the recipient for exactly that amount.
 
 ## 6 · Settlement policy
 

@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 
 export const metadata = pageMeta({
   title: "Security",
-  description: "Plinth's custody model, trust boundaries, contract authorities, current limitations and how to report a vulnerability.",
+  description: "Plinth's custody model, trust boundaries, what a compromised backend can and cannot do, contract authorities, current limitations and how to report a vulnerability.",
   path: "/security",
 });
 
@@ -19,13 +19,13 @@ const security = process.env.NEXT_PUBLIC_SECURITY_EMAIL;
 const POWERS: { actor: string; can: string[]; cannot: string[] }[] = [
   {
     actor: "Merchant (vault owner)",
-    can: ["Withdraw from the vault to any address", "Set or change forwarding rules (delayed)", "Transfer ownership (two-step)", "Recover non-USDC tokens sent to their invoice addresses"],
+    can: ["Withdraw from the vault to any address", "Set or change forwarding rules (delayed)", "Transfer ownership (two-step)", "Recover other tokens sent to their invoice addresses", "Choose direct payouts to their own wallet, or go back to the vault"],
     cannot: ["Change an existing invoice address's destination"],
   },
   {
     actor: "Gateway relayer",
     can: ["Deploy invoice contracts and call sweep()", "Submit customer-signed payment authorisations", "Call the vault's permissionless forward() and policy-activation functions"],
-    cannot: ["Withdraw from a vault", "Choose a recipient for any transfer", "Change a vault's owner or settlement rules", "Spend beyond per-network gas budgets"],
+    cannot: ["Withdraw from a vault", "Choose a recipient for any transfer", "Change a vault's owner or settlement rules", "Redirect funds at a payment address that was already issued", "Spend beyond per-network gas budgets"],
   },
   {
     actor: "Anyone",
@@ -37,9 +37,9 @@ const POWERS: { actor: string; can: string[]; cannot: string[] }[] = [
 const CONTRACTS: [string, string, string][] = [
   ["MerchantVault", "owner only", "withdraw, rescueToken, scheduleSettlement, cancelPendingSettlement. forward() and applyPendingSettlement() are permissionless but cannot choose a recipient or amount."],
   ["VaultFactory", "none", "Vault address commits to merchant, owner and delay, so nobody can squat a vault with a different owner."],
-  ["InvoiceDeposit", "none", "Clone with immutable arguments. sweep() moves the full USDC balance to the baked-in vault and reverts on a different chain id."],
-  ["InvoiceFactory", "none", "predict() and deployAndSweep(). Requires a registered vault and the implementation code."],
-  ["PaymentRouter", "none", "Pulls the customer's EIP-3009 authorization and forwards to the vault. Stateless, holds nothing between transactions."],
+  ["InvoiceDeposit", "none", "Clone with immutable arguments (destination, fee rate, kind, merchant, invoice). sweep() splits the balance: the fee to the treasury, the rest to the baked-in destination (a vault or a payout wallet). The fee is capped at 1% in the implementation. A failing treasury transfer is skipped and the destination still receives everything."],
+  ["InvoiceFactory", "none", "predict() and deployAndSweep(). For vault payments it requires a registered vault; the token, treasury and fee cap come from the implementation."],
+  ["PaymentRouter", "none", "Pulls the customer's EIP-3009 authorization and forwards it, split the same way, to the committed destination. Stateless, holds nothing between transactions."],
 ];
 
 export default function SecurityPage() {
@@ -47,7 +47,7 @@ export default function SecurityPage() {
     <>
       <JsonLd data={{ "@context": "https://schema.org", "@type": "WebPage", name: "Plinth security model", description: "Custody model, trust boundaries and current limitations of the Plinth gateway." }} />
       <PageIntro eyebrow="Security model" title="Small, immutable contracts. Honest about what is unproven.">
-        The design goal is simple: a total compromise of the gateway backend must not let an attacker take merchant funds.
+        The design goal: a compromised gateway must not be able to take or redirect funds that are already at issued payment addresses, or touch your vault. It can still hand out new addresses, and the section below says exactly what that means.
       </PageIntro>
       <div className={cn(wrap, "space-y-24 py-14")}>
         <Section id="boundary" title="Where the trust boundary sits" lead="The gateway is in the middle of every payment and is deliberately given no way to keep or redirect money. The key that controls the vault stays with you.">
@@ -84,9 +84,10 @@ export default function SecurityPage() {
               <Dots className="mt-4" items={[
                 <>No proxies you do not control, no upgradeability, no <C>selfdestruct</C>.</>,
                 <>Invoice contracts are minimal clones with immutable arguments. Nothing to initialise, so nothing to front-run.</>,
-                <>Deposit addresses commit to all of those inputs; changing any changes the address.</>,
+                <>Deposit addresses commit to the destination, fee rate, token, treasury, chain and contract version; changing any changes the address.</>,
+                <>The platform fee is 0.20% by default, capped at 1% in the contract. The cap and the treasury address are fixed when the implementation is deployed; a new treasury means a new implementation version that affects only new addresses.</>,
                 <>Payment authorisations use a nonce derived from every payment field, and the customer&apos;s signature covers it.</>,
-                <>Unit, fuzz and invariant suites, plus fork tests against the real USDC bytecode on Arc Testnet and Base Sepolia.</>,
+                <>Unit, fuzz and invariant suites, plus fork tests against the real USDC bytecode on Arc Testnet and Base Sepolia. None of this is an independent audit.</>,
               ]} />
             </div>
             <div>
@@ -96,12 +97,36 @@ export default function SecurityPage() {
                 <>Per-network daily gas budget, per-transaction fee cap, operation cap, minimum balance and an emergency stop for new actions.</>,
                 <>A transaction is simulated before it is signed; reverting calls cost nothing.</>,
                 <>Every observed transfer is re-verified from its receipt against the configured token and chain before it counts.</>,
+                <>Before a payout wallet is used, the engine checks your signed choice, and a network stays closed if the deployed contracts do not read back the expected token, chain, version, treasury and fee cap.</>,
                 <>Signatures, API secrets and passwords are redacted from logs and audit events.</>,
               ]} />
             </div>
           </div>
           <p className="mt-8 max-w-2xl text-sm text-ink-3">
             Longer write-ups ship in the repository: <C>docs/architecture.md</C>, <C>docs/threat-model.md</C> and <C>docs/verification.md</C> (what was tested and what was not). There is no hosted copy of those documents yet.
+          </p>
+        </Section>
+
+        <Section id="compromise" title="If the backend is compromised" lead="The honest version, because a payment address is just a number a customer copies.">
+          <div className="grid gap-x-10 gap-y-8 lg:grid-cols-2">
+            <div>
+              <h3 className="t-3">What it cannot do</h3>
+              <Dots className="mt-4" items={[
+                <>Move funds out of your vault, or change its owner or rules.</>,
+                <>Redirect funds sent to a payment address that has already been issued: the destination is part of the address.</>,
+                <>Reuse a customer&apos;s signed payment for a different amount, payer or recipient.</>,
+              ]} />
+            </div>
+            <div>
+              <h3 className="t-3">What it can do</h3>
+              <Dots className="mt-4" items={[
+                <>Hand out <strong className="font-semibold">new</strong> checkout addresses that pay an attacker instead of you. A customer cannot tell the difference by looking at an address.</>,
+                <>Stop service, delay settlements, or spend the capped relayer gas budget.</>,
+              ]} />
+            </div>
+          </div>
+          <p className="mt-8 max-w-2xl text-sm text-ink-3">
+            Partial mitigation: the engine verifies your signed payout choice before it derives an address, which stops tampering with the database alone. It does not stop an attacker who controls the API process itself. Direct payouts add another trade-off: there is no vault timelock, so the payout wallet is a hot destination and a change to it relies on email confirmation, a cooldown and a fresh sign-in.
           </p>
         </Section>
 
@@ -112,7 +137,8 @@ export default function SecurityPage() {
             <li>Mainnet deployment is deliberately not performed by this repository&apos;s tooling without explicit approval per network.</li>
             <li>Wallet checkout supports ordinary accounts; smart-contract wallets need an EIP-1271 path that is not built yet.</li>
             <li>Native-currency transfers to a deposit address on Arc are not event-detected; they surface through balance reconciliation only.</li>
-            <li>Stablecoin issuers can block addresses; a blocked vault or invoice cannot receive or sweep funds.</li>
+            <li>Stablecoin issuers can block addresses; a blocked vault, payout wallet or invoice address cannot receive or sweep funds.</li>
+            <li>Payout wallets must be ordinary accounts (no contract code), and the Plinth treasury is assumed to be an ordinary account too.</li>
             <li>No live public-testnet acceptance run has been recorded yet, and no SOC 2, ISO or similar certification exists.</li>
           </ul>
         </section>
@@ -132,7 +158,7 @@ export default function SecurityPage() {
             </div>
             <Dots items={[
               <>In scope: the contracts, the API, the checkout page and the dashboard.</>,
-              <>Out of scope: social engineering, denial-of-service load tests, and issues in third-party services such as RPC providers or the USDC token itself.</>,
+              <>Out of scope: social engineering, denial-of-service load tests, and issues in third-party services such as RPC providers or the token contracts themselves.</>,
               <>There is no bug bounty programme today. A formal safe-harbour statement will be published after legal review.</>,
             ]} />
           </div>

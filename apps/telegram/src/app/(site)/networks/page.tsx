@@ -11,7 +11,7 @@ import { cn } from "@/lib/cn";
 
 export const metadata = pageMeta({
   title: "Networks",
-  description: "Every network in the Plinth registry: official USDC contract, finality policy, gas model, verified capabilities and enablement status.",
+  description: "Every network in the Plinth registry: official USDC contract (and EURC on Arc), finality policy, gas model, verified capabilities and enablement status.",
   path: "/networks",
 });
 
@@ -23,6 +23,7 @@ function toDTO(n: NetworkConfig): NetDTO {
     environment: n.environment,
     nativeSymbol: n.nativeCurrency.symbol,
     usdc: n.usdc.address,
+    extra: Object.values(n.extraTokens ?? {}).map((t) => ({ symbol: t!.symbol, address: t!.address })),
     explorer: n.explorerUrl,
     finality: n.finality.strategy === "finalized-tag" ? "Finalized block" : n.finality.confirmations === 1 ? "1 confirmation" : `${n.finality.confirmations} confirmations`,
     finalityNote: n.finality.note,
@@ -50,9 +51,9 @@ export default function NetworksPage() {
 
   return (
     <>
-      <JsonLd data={{ "@context": "https://schema.org", "@type": "WebPage", name: "Plinth supported networks", description: "Networks in the Plinth registry with official USDC contracts." }} />
-      <PageIntro eyebrow="Network registry" title="One token. Official addresses only.">
-        Plinth accepts USDC and nothing else. Each address comes from Circle&apos;s published list, and before a network can be enabled its token is probed on-chain and the Plinth contracts are deployed and byte-verified.
+      <JsonLd data={{ "@context": "https://schema.org", "@type": "WebPage", name: "Plinth supported networks", description: "Networks in the Plinth registry with official USDC contracts, and EURC on Arc." }} />
+      <PageIntro eyebrow="Network registry" title="Two tokens. Official addresses only.">
+        Plinth accepts USDC on every network, and EURC on Arc, and nothing else. USDC addresses come from Circle&apos;s published list and EURC addresses from Arc&apos;s contract reference. Before a network can be enabled its tokens are probed on-chain and the Plinth contracts for each token are deployed and byte-verified.
       </PageIntro>
       <div className={cn(wrap, "space-y-20 py-14")}>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-3" aria-label="Chains in the registry">
@@ -60,7 +61,8 @@ export default function NetworksPage() {
             {all.map((n) => <li key={n.id} className="rounded-full ring-2 ring-ground"><ChainIcon id={n.id} size={32} testnet={n.environment === "testnet"} /></li>)}
           </ul>
           <span className="inline-flex items-center gap-2 text-sm font-medium text-ink"><TokenIcon symbol="USDC" size={32} />USDC</span>
-          <p className="text-sm text-ink-3">USDC only. No other token is counted as a payment; a different token sent to a deposit address is recorded as the wrong asset and never swept.</p>
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-ink"><TokenIcon symbol="EURC" size={32} />EURC on Arc</span>
+          <p className="text-sm text-ink-3">Each payment is made in one token. No other token is counted; a different token sent to a deposit address is recorded as the wrong asset and never swept.</p>
         </div>
 
         <dl className="grid grid-cols-2 gap-y-8 border-y border-line py-8 lg:grid-cols-4">

@@ -5,7 +5,8 @@
 
 export const API_FACTS = [
   "Base path /v1. Authenticate with `Authorization: Bearer sk_test_...` (test networks only today). Keys are shown once.",
-  "Amounts are decimal strings in USDC (\"25.00\", at most 6 decimals). Never use floating point.",
+  "Amounts are decimal strings in the payment's token (\"25.00\", at most 6 decimals). The token is USDC unless `currency` says otherwise (EURC is available on Arc). Never use floating point.",
+  "The platform fee (0.20% by default, never above 1%) is taken from each settled payment in the same transaction. A payment shows `fee_amount` and `net_amount`; `amount` is what the customer pays.",
   "Send an `Idempotency-Key` header on every create. The same key and body returns the original response.",
   "Create a payment with `POST /v1/payment-intents` ({\"amount\",\"order_reference\",\"success_url\",\"cancel_url\"}). Redirect the customer to `checkout_url`.",
   "Never fulfil an order from a redirect. Fulfil from the signed webhook `payment.confirmed` (fast) or `payment.completed` (strict).",
@@ -60,8 +61,8 @@ export function verifyPlinthSignature(rawBody: string, header: string | undefine
 export const WEBHOOK_EVENTS = [
   ["payment.detected", "transfer seen and verified, not final", "no"],
   ["payment.confirmed", "final funds satisfy the amount", "yes (fast)"],
-  ["payment.completed", "funds confirmed inside the merchant vault", "yes (strict)"],
+  ["payment.completed", "funds settled to the merchant (vault or payout wallet), net of the platform fee", "yes (strict)"],
   ["payment.underpaid / payment.expired / payment.late", "partial at expiry / nothing / final after expiry", "no"],
   ["payment.overpaid", "excess received (excess_amount); refundable", "yes"],
-  ["payment.invalid_asset", "a non-USDC token was sent and is ignored", "no"],
+  ["payment.invalid_asset", "a token other than the payment's official token was sent and is ignored", "no"],
 ] as const;

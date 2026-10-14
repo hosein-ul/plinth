@@ -10,13 +10,13 @@ import { cn } from "@/lib/cn";
 
 const QA: [string, string][] = [
   ["Who holds the money?", "Nobody in between. Each invoice has its own address, and funds are swept from it into a vault that only your wallet can withdraw from. Plinth runs the relayer that pays the network fee for the sweep, and that relayer cannot choose a destination or withdraw."],
-  ["Does my customer need gas?", "Not with Pay with wallet, where the network's USDC supports signed authorisations: they sign once and our relayer pays. With Send to address they pay the normal network fee for the transfer themselves; on Arc that fee is paid in USDC."],
+  ["Does my customer need gas?", "Not with Pay with wallet, where the network's token supports signed authorisations: they sign once and our relayer pays. With Send to address they pay the normal network fee for the transfer themselves; on Arc that fee is paid in USDC."],
   ["When is it safe to fulfil an order?", "When you receive the signed payment.confirmed webhook. It fires only after the transfer meets the network's finality rule, which differs per network. Never fulfil from a redirect or a client-side callback."],
   ["What if a customer underpays, overpays or pays late?", "Each case has its own state and its own webhook: underpaid, overpaid and late payment. Nothing is silently rounded or guessed. Several transfers to the same invoice are added up."],
-  ["What happens if they send the wrong token?", "Only each network's official USDC counts. Anything else sent to the address is recorded as an invalid asset and is not credited."],
+  ["What happens if they send the wrong token?", "Only the official token the payment was created in counts: USDC, or EURC on Arc. Anything else sent to the address is recorded as an invalid asset and is not credited."],
   ["Are the contracts audited? Is this live on mainnet?", "No and no. The contracts have not been independently audited, and Plinth runs on testnets only. Mainnet is off by default and needs an operator to enable it for each network."],
-  ["What does it cost?", "Nothing is charged in the sandbox, and no production pricing has been published. The pricing page explains the structure and what is not decided yet."],
-  ["How do refunds work?", "A refund is a transfer out of your own vault, signed by you. It is marked complete only when that transfer is verified on-chain. Plinth cannot move the funds for you."],
+  ["What does it cost?", "0.20% of each payment, taken inside the settlement transaction, with a 1% cap fixed in the contract. Plinth runs on testnets today, so no real money moves. The pricing page has the details."],
+  ["How do refunds work?", "A refund is a transfer you sign from the account that received the funds, your vault or your payout wallet. It is marked complete only when that transfer is verified on-chain. The fee is not refunded."],
 ];
 
 export function Faq() {

@@ -9,12 +9,13 @@ import { wrap } from "@/components/marketing/parts";
 import { cn } from "@/lib/cn";
 
 const QA: [string, string][] = [
-  ["Do I need TON or a Telegram-specific coin?", "No. Customers pay in USDC on whichever network they already use, from any wallet. Plinth does not depend on Telegram's own payment system or on TON."],
+  ["Do I need TON or a Telegram-specific coin?", "No. Customers pay in USDC (or EURC on Arc) on whichever network they already use, from any wallet. Plinth does not depend on Telegram's own payment system or on TON."],
   ["Who holds the money?", "Nobody in between. Each payment has its own address, and funds are swept from it into a vault that only your wallet can withdraw from. Plinth runs the relayer that pays the network fee for the sweep, and that relayer cannot choose a destination or withdraw."],
   ["Does my customer need gas?", "Not with Pay with wallet, where the network's USDC supports signed authorisations: they sign once and our relayer pays. With Send to address they pay the normal network fee from their own wallet."],
   ["Can I use it inside a Mini App?", "The checkout is a normal web page, so a Mini App can open it, and your server is told by a signed message when it is paid. It has not been tuned for Mini App themes yet, and there is no dedicated Mini App component today."],
   ["Does Telegram allow this?", "Telegram sets its own rules for what may be sold inside Mini Apps, especially digital goods on phone app stores. Check the current rules for your case. Plinth links also work in plain chat messages and in an ordinary browser."],
   ["When is it safe to deliver?", "When your server receives the signed payment.confirmed message. It fires only after the transfer meets the network's finality rule, never from a tap or a screenshot."],
+  ["What does it cost?", "0.20% of each payment, taken inside the settlement transaction, with a 1% cap fixed in the contract. Plinth runs on test networks today, so no real money moves. The pricing page has the details."],
   ["Are the contracts audited? Is this live on mainnet?", "No and no. The contracts have not been independently audited, and Plinth runs on test networks only. Mainnet is off by default and needs explicit approval."],
   ["Is this a Telegram product?", "No. Plinth is independent and is not affiliated with or endorsed by Telegram. The Telegram name and mark belong to their owner and are used here only to say where it can be used."],
 ];

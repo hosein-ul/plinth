@@ -32,9 +32,9 @@ export default function RiskPage() {
 
       <h2>4. Stablecoin issuer risk</h2>
       <ul>
-        <li><strong>Blocklisting and pausing.</strong> The issuer of USDC can block specific addresses and pause transfers. A blocked vault or invoice address cannot receive or sweep funds, and Plinth cannot change that.</li>
-        <li><strong>Value and redemption.</strong> USDC is a claim on a third party. It can lose its peg, and redemption depends on the issuer and on the law where you are.</li>
-        <li><strong>Wrong token.</strong> Only the official USDC contract on each network counts as a payment. Other tokens sent to a deposit address are not swept and may be recoverable only by the vault owner using a rescue function.</li>
+        <li><strong>Blocklisting and pausing.</strong> The issuer of USDC or EURC can block specific addresses and pause transfers. A blocked vault, payout wallet or invoice address cannot receive or sweep funds, and Plinth cannot change that.</li>
+        <li><strong>Value and redemption.</strong> USDC and EURC are claims on a third party. It can lose its peg, and redemption depends on the issuer and on the law where you are.</li>
+        <li><strong>Wrong token.</strong> Only the official contract of the token a payment was created in counts as a payment on each network. Other tokens sent to a deposit address are not swept and may be recoverable only by the vault owner using a rescue function.</li>
       </ul>
 
       <h2>5. Wallet and key security</h2>
@@ -44,6 +44,8 @@ export default function RiskPage() {
         <li>Customers can lose funds by sending to the wrong network, the wrong address or a lookalike site. Funds sent to an address on a chain where it does not exist can be unrecoverable.</li>
         <li>Signing a message you do not understand can authorise a payment. Read what your wallet displays before you sign.</li>
         <li>Smart-contract wallets are not supported on the gasless path.</li>
+        <li><strong>Payout wallet (direct payouts).</strong> A payout wallet has no vault timelock. Anyone who controls its key, or who tricks the account into confirming a change, can take what arrives there. Changes need a verified email, a signature from the new wallet and a confirmation link, and they wait out a cooldown, but treat the wallet as a hot destination.</li>
+        <li><strong>Compromised Plinth backend.</strong> An attacker who controls the backend cannot move funds already sitting in your vault or redirect funds sent to a payment address that has already been issued. They could, however, give customers new checkout addresses that pay the attacker, and a customer cannot check an address by looking at it. Verify what you fulfil against your own records and signed webhooks, and keep the unaudited status of this software in mind.</li>
       </ul>
 
       <h2>6. Operational and infrastructure risk</h2>
