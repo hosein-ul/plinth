@@ -3,147 +3,169 @@
 import { useEffect, useRef } from "react";
 
 /**
- * The hero background, live: a few large sheets of thin, iridescent glass sweeping across a near-white canvas.
+ * The hero background, live: one continuous sheet of thin, iridescent liquid glass, drawn by a fragment shader.
  *
- * Construction. An orthographic camera maps the scene one-to-one onto the canvas, so every sheet is art-directed in normalized
- * canvas coordinates (0,0 top-left, 1,1 bottom-right). Each sheet is a ribbon around a smooth centreline with a varying width, a
- * slow twist about its own axis and a gentle cross-section, so where it turns edge-on it narrows into a bright, coloured edge.
- * Phones get their own composition, not a stretched desktop one.
+ * How it is built. There is no mesh. A height field is folded around two hand-placed curves (a boundary curve that gives the sheet its
+ * silhouette and the main folds, and a second family that crosses it), bent by smooth noise, then lit per pixel: the surface normal
+ * comes from the height field, the reflection looks up a small procedural studio (white softboxes, steel-grey floor, pale pink, cyan and
+ * lavender panels), thin-film colour appears at grazing angles, and a few thin specular lines and sparse sparkles finish it. The
+ * top-left (the top, on phones) stays white for the headline. Phones get their own composition, not a stretched desktop one.
  *
- * Material. A small custom shader, not a PBR stack: a pearl body lit by one broad soft light, Fresnel-weighted reflection of a
- * procedural studio environment (softbox, a white strip, pale cyan, lavender and pink panels), silver-blue in the valleys, and a
- * thin-film tint from the brand palette that only appears at grazing angles. Interiors are partly transparent, so the white page
- * shows through and overlapping sheets read as layers. The left side (top on phones) is kept quiet for the headline.
- *
- * Motion. Only uniforms change per frame: reflections drift along the ridges and the sheets sway by a few pixels. Reduced motion
- * renders a single still frame. Drawing stops off screen and in background tabs. The baked poster underneath is the fallback for
- * no WebGL; the canvas fades in over it after its first frame.
+ * Cost. Everything is per-pixel math, so the canvas resolution is the lever: it starts modest and a small controller lowers it if
+ * frames run long. Drawing stops off screen and in background tabs. Reduced motion draws a single still frame. The two WebP posters
+ * next to this file are frames of this same shader: they paint first and are the fallback when WebGL is missing.
  */
 
 type Pt = [number, number];
-type Sheet = {
-  pts: Pt[]; // centreline, normalized canvas coordinates
-  w: [number, number, number]; // width (fraction of canvas height) at start, middle, end
-  roll: [number, number, number]; // twist: amplitude (rad), turns along the sheet, phase
-  fold: number; // cross-section depth, relative to width
-  alpha: number;
-  tint: number; // strength of the thin-film colour
-  seed: number;
+type Layout = { c: Pt[]; c2: Pt[]; notch: number; width: number };
+
+// Curves in normalized canvas coordinates (0,0 top-left, 1,1 bottom-right). `width` 0 means: scale x by the canvas aspect ratio.
+const LAYOUTS: { desktop: Layout; mobile: Layout } = {
+  desktop: { c: [[1.29, -1.27], [0.66, -0.1], [0.59, 0.03], [0.49, 0.13], [0.425, 0.24], [0.405, 0.36], [0.41, 0.48], [0.35, 0.6], [0.19, 0.68], [-1.53, 0.88]], c2: [[2.3, -0.65], [1.1, 0.1], [0.9, 0.25], [0.72, 0.45], [0.6, 0.62], [0.42, 0.8], [-1.5, 1.1]], notch: 1, width: 0 },
+  mobile: { c: [[2.2, 0.05], [1.6, 0.2], [1.1, 0.33], [0.75, 0.41], [0.4, 0.47], [0.12, 0.53], [-0.15, 0.6], [-0.5, 0.66], [-1.0, 0.7], [-1.6, 0.74]], c2: [[2.5, 0.3], [1.6, 0.45], [1.0, 0.58], [0.6, 0.7], [0.2, 0.8], [-0.2, 0.9], [-1.5, 1.1]], notch: 0, width: 0.85 },
 };
 
-const DESKTOP: Sheet[] = [
-  // C2: the broad lower sheet that fills the bottom edge with soft silver.
-  { pts: [[-0.08, 0.82], [0.12, 0.93], [0.34, 0.97], [0.55, 0.9], [0.76, 0.95], [1.1, 1.04]], w: [0.2, 0.28, 0.24], roll: [0.7, 1.1, 0.4], fold: 0.70, alpha: 0.85, tint: 0.6, seed: 1.3 },
-  // B1: the right curtain, descending from the top-right and turning back out to the right.
-  { pts: [[1.1, -0.06], [0.9, 0.1], [0.76, 0.29], [0.67, 0.47], [0.71, 0.64], [0.87, 0.72], [1.12, 0.68]], w: [0.34, 0.42, 0.26], roll: [0.95, 1.3, 1.9], fold: 0.96, alpha: 0.9, tint: 0.9, seed: 2.7 },
-  // C: the lower fold entering from the left edge.
-  { pts: [[-0.06, 0.5], [0.0, 0.51], [0.18, 0.69], [0.38, 0.68], [0.6, 0.78], [0.8, 0.82], [1.08, 0.85]], w: [0.07, 0.14, 0.18], roll: [1.1, 1.7, 0.2], fold: 0.80, alpha: 0.9, tint: 1.0, seed: 4.1 },
-  // B2: the lighter fold sweeping back up to the right edge.
-  { pts: [[0.52, 0.66], [0.66, 0.52], [0.8, 0.32], [0.91, 0.14], [1.06, -0.06]], w: [0.1, 0.18, 0.16], roll: [1.2, 1.2, 2.6], fold: 0.64, alpha: 0.8, tint: 1.0, seed: 5.6 },
-  // A: the dominant upper sheet, entering at the top, bending to the centre and folding back to the right.
-  { pts: [[0.74, -0.08], [0.7, 0.06], [0.63, 0.13], [0.55, 0.19], [0.48, 0.27], [0.44, 0.36], [0.49, 0.46], [0.64, 0.52], [0.84, 0.5], [1.1, 0.42]], w: [0.24, 0.27, 0.18], roll: [1.2, 1.5, 0.9], fold: 0.90, alpha: 0.92, tint: 1.0, seed: 7.2 },
-];
+const T0 = 3; // the posters are frames at this time, so the live canvas fades in over an identical picture
 
-const PHONE: Sheet[] = [
-  { pts: [[-0.15, 0.86], [0.2, 0.93], [0.55, 0.9], [0.85, 0.97], [1.2, 1.04]], w: [0.1, 0.13, 0.11], roll: [0.7, 1.1, 0.4], fold: 0.70, alpha: 0.85, tint: 0.6, seed: 1.3 },
-  { pts: [[1.2, 0.36], [0.92, 0.5], [0.74, 0.62], [0.78, 0.76], [1.0, 0.82], [1.25, 0.8]], w: [0.09, 0.12, 0.09], roll: [1.0, 1.4, 1.9], fold: 0.96, alpha: 0.9, tint: 0.9, seed: 2.7 },
-  { pts: [[-0.2, 0.6], [0.05, 0.68], [0.35, 0.76], [0.65, 0.8], [1.2, 0.9]], w: [0.04, 0.07, 0.08], roll: [1.1, 1.7, 0.2], fold: 0.80, alpha: 0.9, tint: 1.0, seed: 4.1 },
-  { pts: [[1.15, 0.3], [0.8, 0.4], [0.46, 0.5], [0.4, 0.6], [0.62, 0.68], [1.2, 0.66]], w: [0.06, 0.09, 0.07], roll: [1.25, 1.6, 0.9], fold: 0.90, alpha: 0.92, tint: 1.0, seed: 7.2 },
-];
+const VERT = "attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}";
 
-const PALETTE = {
-  cBg: "#FCFCFD", cPearl: "#F7F7FA", cPale: "#E4E7ED", cSilver: "#CDD4DF", cSB: "#B5C2D2", cSteel: "#97A9BF",
-  cCyan: "#C8EEF2", cAqua: "#B5E6E8", cTurq: "#D0F0ED", cPeri: "#C7CEF2", cLav: "#DCCCF0", cPink: "#F1CDE2",
-  cBlush: "#F6E1E5", cChamp: "#F2EEDC", cPeach: "#F2D8CF",
-} as const;
-
-const VERT = /* glsl */ `
-attribute vec2 aUS;
+const FRAG = /* glsl */ `precision highp float;
+uniform vec2 uRes;
 uniform float uTime;
-uniform float uSeed;
-varying vec3 vN;
-varying vec2 vUS;
-varying vec2 vScreen;
-void main() {
-  vec3 p = position;
-  p.xy += vec2(sin(uTime * 0.11 + aUS.x * 3.0 + uSeed), cos(uTime * 0.083 + aUS.x * 2.4 + uSeed)) * 0.005;
-  vN = normal;
-  vUS = aUS;
-  vec4 cp = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-  vScreen = cp.xy * 0.5 + 0.5;
-  gl_Position = cp;
-}
-`;
-
-const FRAG = /* glsl */ `
-precision highp float;
-uniform vec3 cBg, cPearl, cPale, cSilver, cSB, cSteel, cCyan, cAqua, cTurq, cPeri, cLav, cPink, cBlush, cChamp, cPeach;
-uniform float uTime, uAlpha, uTint, uSeed;
 uniform vec2 uLook;
-uniform vec4 uQuiet; // x: axis (0 = x, 1 = y), y..z: quiet-to-full ramp, w: opacity left in the quiet zone
-varying vec3 vN;
-varying vec2 vUS;
-varying vec2 vScreen;
+uniform vec2 uSize;   // canvas extent in shader units
+uniform float uNotch; // 1: the lower right falls back to white (desktop)
+uniform vec2 uC[10];   // boundary curve of the glass, canvas units (x scaled by aspect), y down; glass is on its right/lower side
+uniform vec2 uC2[7];  // a second, crossing fold family
 
-// Thin film, approximated with the palette: a slow, uneven cycle aqua > periwinkle > lavender > pink > blush/champagne > cyan.
-vec3 film(float t) {
-  t = fract(t) * 6.0;
-  vec3 c = mix(cAqua, cPeri, smoothstep(0.0, 0.8, t));
-  c = mix(c, cLav, smoothstep(0.8, 1.6, t));
-  c = mix(c, cPink, smoothstep(1.6, 2.4, t));
-  c = mix(c, mix(cBlush, cChamp, 0.5), smoothstep(2.8, 3.8, t));
-  c = mix(c, cTurq, smoothstep(3.8, 4.8, t));
-  c = mix(c, cAqua, smoothstep(4.8, 6.0, t));
-  return c;
+#define PI 3.14159265
+
+float hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
-// A procedural studio: bright overhead softbox, a vertical white strip, cool floor, coloured side panels.
-vec3 env(vec3 R) {
-  float up = smoothstep(-0.75, 0.85, R.y);
-  vec3 c = mix(cSteel, cPale, up);
-  c = mix(c, cSilver, exp(-pow(R.y * 2.4, 2.0)) * 0.55);
-  c = mix(c, cPearl, smoothstep(0.2, 0.9, R.y));
-  float box = exp(-pow((R.x + 0.22) * 2.0, 2.0) - pow((R.y - 0.5) * 2.6, 2.0));
-  c = mix(c, vec3(1.0), clamp(box * 1.25, 0.0, 1.0));
-  float strip = exp(-pow((R.x - 0.52) * 6.5, 2.0)) * smoothstep(-0.3, 0.5, R.y);
-  c = mix(c, vec3(1.0), strip * 0.85);
-  c = mix(c, cAqua, smoothstep(-0.5, -0.92, R.x) * 0.8);
-  c = mix(c, cLav, smoothstep(0.62, 0.95, R.x) * smoothstep(-0.4, 0.2, R.y) * 0.7);
-  c = mix(c, cPink, exp(-pow((R.y + 0.5) * 4.5, 2.0)) * smoothstep(-0.1, 0.6, R.x) * 0.55);
-  c = mix(c, cSteel, smoothstep(-0.6, -0.95, R.y) * 0.45);
+// 1.0 if a ray from p toward +x crosses segment a-b.
+float cross2(vec2 p, vec2 a, vec2 b) {
+  return ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) ? 1.0 : 0.0;
+}
+// Signed distance to a polyline, the distance blended smoothly across segments so the folds have no kinks; positive on the glass side.
+float sdCurve9(vec2 p) {
+  float wsum = 0.0;
+  float inside = 0.0;
+  for (int i = 0; i < 9; i++) {
+    vec2 a = uC[i], b = uC[i + 1];
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    wsum += exp(-length(pa - ba * h) * 16.0);
+    inside += cross2(p, a, b);
+  }
+  // close the curve into a polygon around the glass side, so the sign is an exact inside/outside test
+  vec2 e0 = uC[9], s0 = uC[0];
+  inside += cross2(p, e0, vec2(e0.x, 8.0)) + cross2(p, vec2(e0.x, 8.0), vec2(8.0, 8.0)) + cross2(p, vec2(8.0, 8.0), vec2(8.0, s0.y)) + cross2(p, vec2(8.0, s0.y), s0);
+  float sgn = mod(inside, 2.0) > 0.5 ? 1.0 : -1.0;
+  return max(-log(max(wsum, 1e-30)) / 16.0, 0.0) * sgn;
+}
+float sdCurve7(vec2 p) {
+  float wsum = 0.0;
+  float inside = 0.0;
+  for (int i = 0; i < 6; i++) {
+    vec2 a = uC2[i], b = uC2[i + 1];
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    wsum += exp(-length(pa - ba * h) * 16.0);
+    inside += cross2(p, a, b);
+  }
+  // close the curve into a polygon around the glass side, so the sign is an exact inside/outside test
+  vec2 e0 = uC2[6], s0 = uC2[0];
+  inside += cross2(p, e0, vec2(e0.x, 8.0)) + cross2(p, vec2(e0.x, 8.0), vec2(8.0, 8.0)) + cross2(p, vec2(8.0, 8.0), vec2(8.0, s0.y)) + cross2(p, vec2(8.0, s0.y), s0);
+  float sgn = mod(inside, 2.0) > 0.5 ? 1.0 : -1.0;
+  return max(-log(max(wsum, 1e-30)) / 16.0, 0.0) * sgn;
+}
+
+// Height of the glass; q is in canvas units, y down.
+float height(vec2 q, float t) {
+  vec2 w = q + (vec2(vnoise(q * 1.3 + vec2(1.7, 9.2) + t * 0.010), vnoise(q * 1.3 + vec2(8.3, 2.8) - t * 0.008)) - 0.5) * 0.46
+             + (vec2(vnoise(q * 4.3 + vec2(4.1, 1.3)), vnoise(q * 4.3 + vec2(7.7, 5.5))) - 0.5) * 0.05;
+  float d1 = sdCurve9(w), d2 = sdCurve7(w);
+  float ph = vnoise(w * 1.7 + 3.0) * 2.2;
+  float h = 0.0;
+  // broad folds that follow the boundary
+  h += 0.85 * sin(d1 * 11.0 + ph + t * 0.04);
+  // creases: narrow, pinched ridges
+  float c = 1.0 - abs(sin(d1 * 21.0 + ph * 1.6 + 1.3));
+  h += 0.42 * c * c * c * (0.3 + vnoise(w * 2.4 + 9.0));
+  // a crossing family
+  h += 0.55 * sin(d2 * 9.5 + ph * 0.7 + 2.0 - t * 0.03) * (0.2 + vnoise(w * 1.8 + 5.0));
+  h += 0.05 * sin(d1 * 33.0 + d2 * 14.0 + ph * 2.0);
+  return h * 0.03;
+}
+
+vec3 film(float t) {
+  vec3 c = 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.33, 0.67)));
+  return mix(vec3(0.84), c, 0.42);
+}
+
+vec3 env(vec2 r) {
+  float g = smoothstep(-1.1, 1.0, r.y * 0.8 + r.x * 0.4);
+  vec3 c = mix(vec3(0.30, 0.33, 0.42), vec3(0.88, 0.89, 0.94), g);
+  float bandA = exp(-pow((r.x * 0.9 + r.y * 0.5 - 0.10) * 4.2, 2.0));
+  float bandB = exp(-pow((r.x * 0.5 - r.y * 0.9 + 0.30) * 4.5, 2.0));
+  c = mix(c, vec3(1.0), bandA * 0.95);
+  c = mix(c, vec3(0.34, 0.40, 0.52), bandB * 0.55);
+  c = mix(c, vec3(1.0, 0.74, 0.90), smoothstep(0.05, 0.6, -r.x - r.y * 0.4) * 0.36);
+  c = mix(c, vec3(0.58, 0.92, 0.96), smoothstep(0.1, 0.7, r.x * 0.7 + r.y * 0.3) * 0.5);
+  c = mix(c, vec3(0.78, 0.70, 0.99), smoothstep(0.2, 0.8, r.y - r.x * 0.2) * 0.42);
   return c;
 }
 
 void main() {
-  vec3 N = normalize(vN);
-  N *= sign(N.z + 1e-4); // light both faces as the side facing the viewer
-  // Reflections drift along the ridges: a slow, small rotation of the normal.
-  N = normalize(N + 0.05 * vec3(sin(uTime * 0.07 + vUS.x * 6.0 + uSeed), cos(uTime * 0.053 + vUS.x * 4.0 - uSeed), 0.0));
-  float ndv = clamp(N.z, 0.0, 1.0);
-  vec3 R = normalize(vec3(2.0 * ndv * N.xy + uLook * 0.14, 2.0 * ndv * N.z - 1.0));
-  float F = 0.04 + 0.96 * pow(1.0 - ndv, 2.4);
+  vec2 frag = gl_FragCoord.xy / uRes;
+  vec2 q = vec2(frag.x, 1.0 - frag.y) * uSize;
+  float t = uTime;
 
-  vec3 L = normalize(vec3(-0.35, 0.62, 0.7));
-  float ndl = dot(N, L) * 0.5 + 0.5;
-  vec3 body = mix(cSB, cPearl, smoothstep(0.45, 0.98, ndl));
-  body = mix(body, cSteel, (1.0 - smoothstep(0.1, 0.55, ndl)) * 0.55);
+  float e = 0.0022;
+  float h0 = height(q, t);
+  vec2 g = vec2(height(q + vec2(e, 0.0), t) - h0, height(q + vec2(0.0, e), t) - h0) / e;
+  g.y = -g.y; // reflect in y-up space
+  vec3 N = normalize(vec3(-g * 2.9, 1.0));
 
-  vec3 col = mix(body, env(R), 0.42 + 0.5 * F);
+  float ndv = N.z;
+  vec2 r = N.xy * 2.0 * ndv + uLook * 0.1;
+  vec3 col = env(r);
 
-  float thick = 0.3 + 0.22 * sin(vUS.x * 3.1 + uSeed * 1.7) + 0.1 * sin(vUS.y * 4.0 + vUS.x * 7.0 + uSeed) + uTime * 0.008;
-  float graze = smoothstep(0.06, 0.62, 1.0 - ndv);
-  col = mix(col, film(thick + ndv * 0.85), graze * 0.8 * uTint);
+  float graze = 1.0 - ndv;
+  float hue = graze * 1.4 + h0 * 2.5 + dot(q, vec2(0.9, -0.5)) * 0.8 + t * 0.004;
+  col = mix(col, film(hue), smoothstep(0.0, 0.3, graze) * 0.22);
+  vec3 Hh = normalize(vec3(-0.3, 0.5, 1.0));
+  col = mix(col, vec3(1.0), pow(max(dot(N, Hh), 0.0), 140.0) * 0.8);
+  col *= mix(0.90, 1.03, smoothstep(-0.035, 0.03, h0));
 
-  float spec = pow(max(dot(R, L), 0.0), 90.0);
-  col = mix(col, vec3(1.0), spec * 0.7 + pow(max(dot(R, L), 0.0), 400.0) * 0.5);
+  // Silhouette: the glass lies beyond the boundary curve, with soft, uneven edges.
+  float dd = sdCurve9(q + (vec2(vnoise(q * 3.0 + 2.0), vnoise(q * 3.0 + 7.0)) - 0.5) * 0.05);
+  float m = smoothstep(0.0, 0.09, dd);
+  // The far right, below the upper sheet, falls back to white.
+  float notch = smoothstep(0.86, 0.95, frag.x) * smoothstep(0.40, 0.55, 1.0 - frag.y);
+  m *= 1.0 - notch * 0.95 * uNotch;
+  // Pale at the edges, full strength inside.
+  col = mix(col, vec3(0.97, 0.97, 0.99), 0.12);
+  float depth = smoothstep(0.0, 0.18, dd);
+  col = mix(mix(vec3(0.96, 0.96, 0.98), col, 0.55), col, depth);
 
-  vec2 sc = vec2(vScreen.x, 1.0 - vScreen.y);
-  float loud = smoothstep(uQuiet.y, uQuiet.z, uQuiet.x < 0.5 ? sc.x : sc.y);
-  col = mix(mix(cPearl, col, 0.35), col, loud);
+  // Sparkle.
+  vec2 sp = frag * uSize * 200.0;
+  float hs = hash(floor(sp));
+  float spark = step(0.9965, hs) * smoothstep(0.5, 0.0, length(fract(sp) - 0.5)) * (0.6 + 0.4 * sin(t * 0.8 + hs * 60.0));
+  col += spark * 0.8 * m;
 
-  float edge = smoothstep(0.5, 0.43, abs(vUS.y)) * smoothstep(0.0, 0.16, vUS.x) * smoothstep(1.0, 0.9, vUS.x);
-  float a = uAlpha * mix(0.88, 1.0, F) * edge * mix(uQuiet.w, 1.0, loud);
-  gl_FragColor = vec4(col, a);
+  col = mix(vec3(0.988, 0.988, 0.992), col, m);
+  gl_FragColor = vec4(col, 1.0);
 }
 `;
 
@@ -155,163 +177,127 @@ export function HeroGlassLive() {
     if (!el) return;
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const coarse = window.matchMedia("(pointer: coarse)").matches;
-    let disposed = false;
-    let cleanup = () => {};
 
-    (async () => {
-      const THREE = await import("three");
-      if (disposed) return;
+    const canvas = document.createElement("canvas");
+    canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity 800ms cubic-bezier(0.16,1,0.3,1)";
+    const gl = canvas.getContext("webgl", { antialias: false, alpha: false, powerPreference: "high-performance" });
+    if (!gl) return; // no WebGL: the poster stays
+    const hp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+    if (!hp || hp.precision === 0) return;
 
-      let renderer: import("three").WebGLRenderer;
-      try {
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: coarse ? "low-power" : "high-performance" });
-      } catch {
-        return; // no WebGL: the poster stays
+    const compile = (type: number, src: string) => {
+      const sh = gl.createShader(type);
+      if (!sh) return null;
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      return gl.getShaderParameter(sh, gl.COMPILE_STATUS) ? sh : null;
+    };
+    const vs = compile(gl.VERTEX_SHADER, VERT), fs = compile(gl.FRAGMENT_SHADER, FRAG);
+    const prog = gl.createProgram();
+    if (!vs || !fs || !prog) return;
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+    gl.useProgram(prog);
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "a");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+    const U = (n: string) => gl.getUniformLocation(prog, n);
+    const uRes = U("uRes"), uTime = U("uTime"), uLook = U("uLook"), uSize = U("uSize"), uNotch = U("uNotch"), uC = U("uC"), uC2 = U("uC2");
+    el.appendChild(canvas);
+
+    let scale = coarse ? 0.7 : 1; // resolution controller output, multiplies the device pixel ratio
+    let lastLayout = "";
+    const resize = () => {
+      const w = el.clientWidth, h = el.clientHeight;
+      if (!w || !h) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5) * scale;
+      const cw = Math.max(2, Math.round(w * dpr)), ch = Math.max(2, Math.round(h * dpr));
+      if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+      gl.viewport(0, 0, cw, ch);
+      gl.uniform2f(uRes, cw, ch);
+      const aspect = w / h;
+      const key = aspect < 1.1 ? "mobile" : "desktop";
+      const L = LAYOUTS[key];
+      const sx = L.width || aspect, sy = L.width ? L.width / aspect : 1;
+      const sig = key + sx.toFixed(3) + sy.toFixed(3);
+      if (sig !== lastLayout) {
+        lastLayout = sig;
+        gl.uniform2f(uSize, sx, sy);
+        gl.uniform1f(uNotch, L.notch);
+        gl.uniform2fv(uC, new Float32Array(L.c.flatMap(([x, y]) => [x * sx, y * sy])));
+        gl.uniform2fv(uC2, new Float32Array(L.c2.flatMap(([x, y]) => [x * sx, y * sy])));
       }
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarse ? 1.5 : 2));
-      renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // the shader works directly in sRGB palette values
-      renderer.setClearColor(PALETTE.cBg, 1);
-      const canvas = renderer.domElement;
-      canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity 700ms cubic-bezier(0.16,1,0.3,1)";
-      el.appendChild(canvas);
+    };
 
-      const scene = new THREE.Scene();
-      const camera = new THREE.OrthographicCamera(0, 1, 0, -1, -10, 10);
+    const look = [0, 0], lookTarget = [0, 0];
+    const onMove = (e: PointerEvent) => {
+      lookTarget[0] = (e.clientX / window.innerWidth) * 2 - 1;
+      lookTarget[1] = -((e.clientY / window.innerHeight) * 2 - 1);
+    };
+    if (!coarse && !still) window.addEventListener("pointermove", onMove, { passive: true });
 
-      const srgb = (hex: string) => new THREE.Color().setStyle(hex, THREE.LinearSRGBColorSpace);
-      const shared = {
-        uTime: { value: 0 },
-        uLook: { value: new THREE.Vector2() },
-        uQuiet: { value: new THREE.Vector4(0, 0.1, 0.46, 0.45) },
-        ...Object.fromEntries(Object.entries(PALETTE).map(([k, v]) => [k, { value: srgb(v) }])),
-      };
+    let shown = false, visible = true, raf = 0, last = performance.now(), t = T0, frames = 0, slow = 0, lost = false;
+    const draw = () => {
+      gl.uniform1f(uTime, t);
+      gl.uniform2f(uLook, look[0] ?? 0, look[1] ?? 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (!shown) { shown = true; canvas.style.opacity = "1"; }
+    };
+    const frame = (now: number) => {
+      raf = 0;
+      if (!visible || document.hidden || lost) return;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      t += dt;
+      const k = 1 - Math.exp(-dt * 2.5);
+      look[0] = (look[0] ?? 0) + ((lookTarget[0] ?? 0) - (look[0] ?? 0)) * k;
+      look[1] = (look[1] ?? 0) + ((lookTarget[1] ?? 0) - (look[1] ?? 0)) * k;
+      draw();
+      // Resolution controller: if frames keep running long, trade pixels for time (and never go below half).
+      frames++;
+      if (dt > (coarse ? 0.045 : 0.026)) slow++;
+      if (frames === 40) {
+        if (slow > 14 && scale > 0.5) { scale = Math.max(0.5, scale * 0.8); resize(); }
+        frames = 0;
+        slow = 0;
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    const start = () => {
+      if (!still && visible && !document.hidden && !raf && !lost) { last = performance.now(); raf = requestAnimationFrame(frame); }
+    };
 
-      const meshes: import("three").Mesh[] = [];
-      const clear = () => {
-        for (const m of meshes) { scene.remove(m); m.geometry.dispose(); (m.material as import("three").Material).dispose(); }
-        meshes.length = 0;
-      };
+    const ro = new ResizeObserver(() => { resize(); if (still) draw(); });
+    ro.observe(el);
+    resize();
+    const io = new IntersectionObserver(([entry]) => { visible = entry?.isIntersecting ?? true; start(); });
+    io.observe(el);
+    document.addEventListener("visibilitychange", start);
+    const onLost = (e: Event) => { e.preventDefault(); lost = true; canvas.style.opacity = "0"; };
+    canvas.addEventListener("webglcontextlost", onLost);
+    if (still) draw(); else start();
 
-      const smooth = (x: number) => x * x * (3 - 2 * x);
-      const build = (aspect: number) => {
-        clear();
-        const phone = aspect < 1.1;
-        shared.uQuiet.value.set(phone ? 1 : 0, phone ? 0.3 : 0.1, phone ? 0.5 : 0.46, phone ? 0.5 : 0.45);
-        (phone ? PHONE : DESKTOP).forEach((sh, order) => {
-          const curve = new THREE.CatmullRomCurve3(sh.pts.map(([x, y]) => new THREE.Vector3(x * aspect, -y, 0)), false, "centripetal");
-          const U = 280, S = 44;
-          const pos = new Float32Array((U + 1) * (S + 1) * 3);
-          const us = new Float32Array((U + 1) * (S + 1) * 2);
-          const side0 = new THREE.Vector3(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), z = new THREE.Vector3(0, 0, 1);
-          for (let i = 0; i <= U; i++) {
-            const u = i / U;
-            const c = curve.getPointAt(u);
-            const t = curve.getTangentAt(u);
-            side0.set(-t.y, t.x, 0).normalize();
-            const roll = sh.roll[0] * Math.sin(u * sh.roll[1] * Math.PI * 2 + sh.roll[2]);
-            side.copy(side0).multiplyScalar(Math.cos(roll)).addScaledVector(z, Math.sin(roll));
-            nrm.crossVectors(t, side).normalize();
-            const w = u < 0.5 ? sh.w[0] + (sh.w[1] - sh.w[0]) * smooth(u * 2) : sh.w[1] + (sh.w[2] - sh.w[1]) * smooth(u * 2 - 1);
-            for (let j = 0; j <= S; j++) {
-              const s = j / S - 0.5, a = s * 2;
-              const lift = sh.fold * w * (0.42 * (1 - a * a) + 0.3 * Math.sin(a * 2.4 + u * 7 + sh.seed) + 0.14 * Math.sin(a * 4.6 - u * 4 + sh.seed * 2));
-              const k = (i * (S + 1) + j) * 3;
-              pos[k] = c.x + side.x * s * w + nrm.x * lift;
-              pos[k + 1] = c.y + side.y * s * w + nrm.y * lift;
-              pos[k + 2] = c.z + side.z * s * w + nrm.z * lift;
-              us[(i * (S + 1) + j) * 2] = u;
-              us[(i * (S + 1) + j) * 2 + 1] = s;
-            }
-          }
-          const index: number[] = [];
-          for (let i = 0; i < U; i++) for (let j = 0; j < S; j++) {
-            const a = i * (S + 1) + j, b = a + 1, c = a + S + 1, d = c + 1;
-            index.push(a, b, c, b, d, c);
-          }
-          const geo = new THREE.BufferGeometry();
-          geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-          geo.setAttribute("aUS", new THREE.BufferAttribute(us, 2));
-          geo.setIndex(index);
-          geo.computeVertexNormals();
-          const mat = new THREE.ShaderMaterial({
-            vertexShader: VERT,
-            fragmentShader: FRAG,
-            uniforms: { ...shared, uAlpha: { value: sh.alpha }, uTint: { value: sh.tint }, uSeed: { value: sh.seed } },
-            transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
-          });
-          const mesh = new THREE.Mesh(geo, mat);
-          mesh.renderOrder = order;
-          mesh.frustumCulled = false;
-          scene.add(mesh);
-          meshes.push(mesh);
-        });
-      };
-
-      let shown = false;
-      const draw = () => {
-        renderer.render(scene, camera);
-        if (!shown) { shown = true; canvas.style.opacity = "1"; }
-      };
-
-      let builtFor = 0;
-      const resize = () => {
-        const w = el.clientWidth, h = el.clientHeight;
-        if (!w || !h) return;
-        renderer.setSize(w, h, false);
-        const aspect = w / h;
-        camera.right = aspect;
-        camera.updateProjectionMatrix();
-        if (Math.abs(aspect - builtFor) > 0.01) { build(aspect); builtFor = aspect; }
-        if (still) draw();
-      };
-
-      const look = new THREE.Vector2(), lookTarget = new THREE.Vector2();
-      const onMove = (e: PointerEvent) => {
-        lookTarget.set((e.clientX / window.innerWidth) * 2 - 1, -((e.clientY / window.innerHeight) * 2 - 1));
-      };
-      if (!coarse && !still) window.addEventListener("pointermove", onMove, { passive: true });
-
-      const ro = new ResizeObserver(resize);
-      ro.observe(el);
-      resize();
-
-      let visible = true, raf = 0, last = performance.now(), t = 0, acc = 0;
-      const minStep = coarse ? 1 / 30 : 0; // phones: 30 fps is plenty for motion this slow
-      const frame = (now: number) => {
-        raf = 0;
-        if (!visible || document.hidden) return;
-        const dt = Math.min(0.05, (now - last) / 1000);
-        last = now;
-        acc += dt;
-        if (acc >= minStep) {
-          t += acc;
-          acc = 0;
-          look.lerp(lookTarget, 1 - Math.exp(-dt * 2.5));
-          shared.uTime.value = t;
-          shared.uLook.value.copy(look);
-          draw();
-        }
-        raf = requestAnimationFrame(frame);
-      };
-      const start = () => { if (!still && visible && !document.hidden && !raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
-      const io = new IntersectionObserver(([entry]) => { visible = entry?.isIntersecting ?? true; start(); });
-      io.observe(el);
-      document.addEventListener("visibilitychange", start);
-      if (still) draw(); else start();
-
-      cleanup = () => {
-        cancelAnimationFrame(raf);
-        io.disconnect();
-        ro.disconnect();
-        window.removeEventListener("pointermove", onMove);
-        document.removeEventListener("visibilitychange", start);
-        clear();
-        renderer.dispose();
-        canvas.remove();
-      };
-    })();
-
-    return () => { disposed = true; cleanup(); };
+    return () => {
+      cancelAnimationFrame(raf);
+      io.disconnect();
+      ro.disconnect();
+      window.removeEventListener("pointermove", onMove);
+      document.removeEventListener("visibilitychange", start);
+      canvas.removeEventListener("webglcontextlost", onLost);
+      gl.deleteBuffer(buf);
+      gl.deleteProgram(prog);
+      if (vs) gl.deleteShader(vs);
+      if (fs) gl.deleteShader(fs);
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      canvas.remove();
+    };
   }, []);
 
   return <div ref={host} className="absolute inset-0" />;

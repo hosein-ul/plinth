@@ -20,7 +20,7 @@ export function HeroGlass() {
           height={2008}
           fetchPriority="high"
           decoding="async"
-          className="absolute inset-0 h-full w-full select-none object-cover object-top xl:object-right"
+          className="absolute inset-0 h-full w-full select-none object-cover object-top [@media(min-aspect-ratio:11/10)]:object-fill"
         />
       </picture>
       <HeroGlassLive />
