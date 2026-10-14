@@ -132,6 +132,16 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     },
     circle: { cctpDomain: 26, gatewayNanopayments: null, gasStation: null },
     maxLogRange: 2000,
+    extraTokens: {
+      EURC: {
+        symbol: "EURC",
+        address: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+        decimals: 6,
+        eip712: { name: "EURC", version: "2" },
+        authorization: { transferWithAuthorization: true, receiveWithAuthorization: true, permit: true, verified: true, verifiedAt: "2026-10-15" },
+        source: "https://docs.arc.io/arc/references/contract-addresses (Testnet tab)",
+      },
+    },
   },
   "base-sepolia": {
     id: "base-sepolia",
@@ -188,6 +198,16 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     },
     circle: { cctpDomain: 26, gatewayNanopayments: null, gasStation: null },
     maxLogRange: 2000,
+    extraTokens: {
+      EURC: {
+        symbol: "EURC",
+        address: "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+        decimals: 6,
+        eip712: { name: "EURC", version: "2" },
+        authorization: { transferWithAuthorization: true, receiveWithAuthorization: true, permit: true, verified: true, verifiedAt: "2026-10-15" },
+        source: "https://docs.arc.io/arc/references/contract-addresses (Mainnet tab)",
+      },
+    },
   },
   "base-mainnet": {
     id: "base-mainnet",

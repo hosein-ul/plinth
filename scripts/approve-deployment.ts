@@ -23,6 +23,10 @@ const file = join(deploymentsDir(), `${network}.json`);
 if (!existsSync(file)) throw new Error(`No deployment record for ${network}. Run finalize:deployment first.`);
 const d = JSON.parse(readFileSync(file, "utf8"));
 if (!d.bytecodeVerified) throw new Error("Deployment bytecode is not verified");
+// The approval covers every token set in the record, so each one must be byte-verified too.
+for (const [sym, t] of Object.entries((d.tokens ?? {}) as Record<string, { bytecodeVerified?: boolean }>)) {
+  if (!t.bytecodeVerified) throw new Error(`The ${sym} contracts are not byte-verified`);
+}
 d.productionApproved = true;
 d.approval = { reviewer, audit, approvedAt: new Date().toISOString() };
 writeFileSync(file, JSON.stringify(d, null, 2) + "\n");
