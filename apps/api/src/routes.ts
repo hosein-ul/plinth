@@ -3,7 +3,7 @@ import { getAddress, type Hex } from "viem";
 import { and, eq, schema, sql } from "@plinth/db";
 import {
   createApiKeySchema, createInvoiceSchema, createPaymentIntentSchema, createPaymentLinkSchema, createRefundRequestSchema, createWebhookEndpointSchema,
-  enableNetworkSchema, loginSchema, web3authSchema, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
+  emailChangeSchema, emailConfirmSchema, enableNetworkSchema, loginSchema, web3authSchema, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
 } from "@plinth/shared";
 import * as E from "@plinth/engine";
 import type { Engine } from "@plinth/engine";
@@ -60,9 +60,7 @@ export function buildRoutes(e: Engine): RouteDef[] {
       method: "POST", path: "/v1/auth/web3auth", tag: "Auth", summary: "Sign in or sign up with a Web3Auth identity token", auth: "none", body: web3authSchema, rateLimit: 10,
       response: "A session token. The identity token is verified against Web3Auth's published keys for this deployment's client id.",
       handler: async ({ req, body }) => {
-        const clientId = process.env.WEB3AUTH_CLIENT_ID ?? process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID;
-        if (!clientId) throw new E.EngineError("NOT_CONFIGURED", "Web3Auth sign-in is not configured on this server", 503);
-        const identity = await E.verifyWeb3AuthToken(body.id_token, clientId);
+        const identity = await E.verifyIdentity(e, body.id_token);
         return E.signInWithIdentity(e, identity, { business_name: body.business_name }, { type: "USER", ip: req.ip });
       },
     }),
@@ -71,12 +69,31 @@ export function buildRoutes(e: Engine): RouteDef[] {
       handler: async ({ req }) => { await E.logout(e, String(req.headers.authorization).replace(/^Bearer\s+/i, "")); return { ok: true }; },
     }),
     route({
+      method: "GET", path: "/v1/auth/email", tag: "Auth", summary: "Email address status for the signed-in user", auth: "session",
+      description: "Whether the account has a real email, whether it is verified, how the user signs in (so the dashboard knows how to ask for re-authentication) and whether this server can send email.",
+      handler: async ({ auth }) => E.emailStatus(e, A(auth)),
+    }),
+    route({
+      method: "POST", path: "/v1/auth/email/verify", tag: "Auth", summary: "Send a verification link to the account email", auth: "session", rateLimit: 6,
+      handler: async ({ auth }) => E.requestEmailVerification(e, A(auth)),
+    }),
+    route({
+      method: "POST", path: "/v1/auth/email/change", tag: "Auth", summary: "Add or replace the account email", auth: "session", body: emailChangeSchema, rateLimit: 6,
+      description: "Needs a fresh sign-in (`reauth`): the current password, or a Web3Auth identity token issued in the last few minutes. The address only changes when the link sent to it is used.",
+      handler: async ({ auth, body }) => E.requestEmailChange(e, A(auth), body),
+    }),
+    route({
+      method: "POST", path: "/public/auth/email/confirm", tag: "Auth", summary: "Use the link from a verification email", auth: "none", body: emailConfirmSchema, rateLimit: 20,
+      description: "Single use. The web app opens this from `/verify-email?token=…`.",
+      handler: async ({ body }) => E.confirmEmailLink(e, body.token),
+    }),
+    route({
       method: "GET", path: "/v1/me", tag: "Auth", summary: "Current merchant, role and environment", auth: "merchant",
       handler: async ({ auth }) => {
         const a = A(auth);
         const [m] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, a.merchantId));
         const [u] = a.actor.type === "USER" && a.actor.id ? await e.db.select().from(schema.merchantUsers).where(eq(schema.merchantUsers.id, a.actor.id)) : [];
-        return { merchant: { id: m!.id, name: m!.name, underpayment_tolerance_bps: m!.underpaymentToleranceBps, overpayment_policy: m!.overpaymentPolicy, default_expiry_seconds: m!.defaultExpirySeconds }, user: u ? { id: u.id, email: u.email, role: u.role } : null, role: a.role, environment: a.environment, via: a.via };
+        return { merchant: { id: m!.id, name: m!.name, underpayment_tolerance_bps: m!.underpaymentToleranceBps, overpayment_policy: m!.overpaymentPolicy, default_expiry_seconds: m!.defaultExpirySeconds }, user: u ? { id: u.id, email: u.email, has_real_email: !E.isPlaceholderEmail(u.email), email_verified: !E.isPlaceholderEmail(u.email) && !!u.emailVerifiedAt, role: u.role } : null, role: a.role, environment: a.environment, via: a.via };
       },
     }),
 

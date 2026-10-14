@@ -22,3 +22,6 @@ export * from "./settlement-plan";
 export * from "./web3auth";
 export * from "./payout-route";
 export * from "./deployment-check";
+export * from "./email";
+export * from "./email-templates";
+export * from "./email-verification";

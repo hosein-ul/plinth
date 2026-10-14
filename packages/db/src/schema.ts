@@ -41,10 +41,28 @@ export const merchantUsers = pgTable(
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     role: text("role").notNull().default("OWNER"), // OWNER | ADMIN | DEVELOPER | VIEWER
+    /** Set once the address was proven (emailed link) or vouched for by the identity provider. Null = unverified. */
+    emailVerifiedAt: ts("email_verified_at"),
     createdAt: createdAt(),
     lastLoginAt: ts("last_login_at"),
   },
   (t) => [uniqueIndex("merchant_users_email_uq").on(sql`lower(${t.email})`), index("merchant_users_merchant_idx").on(t.merchantId)],
+);
+
+/** Single-use links sent by email: verify the current address, or add/replace it. Only the hash of the token is stored. */
+export const emailVerifications = pgTable(
+  "email_verifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => merchantUsers.id),
+    email: text("email").notNull(),
+    purpose: text("purpose").notNull(), // VERIFY (current address) | CHANGE (add or replace the address)
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: ts("expires_at").notNull(),
+    usedAt: ts("used_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("email_verifications_token_uq").on(t.tokenHash), index("email_verifications_user_idx").on(t.userId, t.createdAt)],
 );
 
 /** A sign-in identity from an external provider (e.g. Web3Auth), linked to one dashboard user. */

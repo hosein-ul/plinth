@@ -1,5 +1,5 @@
 import * as jose from "jose";
-import { eq, schema } from "@plinth/db";
+import { and, eq, isNull, schema } from "@plinth/db";
 import { newId, randomToken } from "@plinth/shared";
 import { audit, type Actor } from "./audit";
 import { startSession } from "./auth";
@@ -24,7 +24,16 @@ export interface Web3AuthIdentity {
   subject: string;
   email: string | null;
   name: string | null;
+  /** True only when the provider vouches that the user controls `email` (Google, Apple, passwordless email OTP). */
+  emailVerified: boolean;
+  /** The login method, e.g. "google" or "email_passwordless"; null for wallet logins. */
+  connection: string | null;
+  /** When the identity token was issued (unix seconds). Used to insist on a fresh sign-in for sensitive changes. */
+  issuedAt: number | null;
 }
+
+/** Login methods whose email address the user has really proven. Others (X, Discord, ...) may carry unverified emails. */
+const EMAIL_VERIFYING_CONNECTIONS = new Set(["google", "apple", "email_passwordless"]);
 
 type KeySet = Parameters<typeof jose.jwtVerify>[1];
 const remote = new Map<string, KeySet>();
@@ -66,7 +75,16 @@ export async function verifyWeb3AuthToken(idToken: string, clientId: string, key
   else if (userId) subject = `${connection ?? "w3a"}:${userId.toLowerCase()}`;
   else if (walletAddress) subject = `wallet:${walletAddress.toLowerCase()}`;
   if (!subject) throw new EngineError("INVALID_TOKEN", `Web3Auth token carries no stable user id (claims: ${Object.keys(payload).join(", ")})`, 401);
-  return { subject, email: str(payload.email)?.toLowerCase() ?? null, name: str(payload.name) };
+  const email = str(payload.email)?.toLowerCase() ?? null;
+  const vouched = payload.email_verified === true || (connection !== null && EMAIL_VERIFYING_CONNECTIONS.has(connection.toLowerCase()));
+  return { subject, email, name: str(payload.name), emailVerified: !!email && vouched, connection, issuedAt: typeof payload.iat === "number" ? payload.iat : null };
+}
+
+/** Verify an identity token with the configured client id (or the test override). */
+export async function verifyIdentity(e: Engine, idToken: string): Promise<Web3AuthIdentity> {
+  if (e.cfg.verifyIdentityToken) return e.cfg.verifyIdentityToken(idToken);
+  if (!e.cfg.web3authClientId) throw new EngineError("NOT_CONFIGURED", "Web3Auth sign-in is not configured on this server", 503);
+  return verifyWeb3AuthToken(idToken, e.cfg.web3authClientId);
 }
 
 /**
@@ -89,10 +107,14 @@ export async function signInWithIdentity(e: Engine, id: Web3AuthIdentity, input:
     const created = userId;
     await e.db.transaction(async (tx) => {
       await tx.insert(schema.merchants).values({ id: merchantId, name });
-      await tx.insert(schema.merchantUsers).values({ id: created, merchantId, email, passwordHash: await hashPassword(randomToken("nopw", 24)), role: "OWNER" });
+      await tx.insert(schema.merchantUsers).values({ id: created, merchantId, email, passwordHash: await hashPassword(randomToken("nopw", 24)), role: "OWNER", emailVerifiedAt: id.emailVerified && id.email ? e.now() : null });
       await tx.insert(schema.externalIdentities).values({ id: newId("ext"), userId: created, provider, subject: id.subject, email: id.email });
       await audit(tx, { merchantId, actor, action: "merchant.created", targetType: "merchant", targetId: merchantId, data: { via: provider } });
     });
+  }
+  else if (id.emailVerified && id.email) {
+    // A returning user whose provider now vouches for the address we hold: mark it verified (never overwrite the address).
+    await e.db.update(schema.merchantUsers).set({ emailVerifiedAt: e.now() }).where(and(eq(schema.merchantUsers.id, userId), eq(schema.merchantUsers.email, id.email), isNull(schema.merchantUsers.emailVerifiedAt)));
   }
   return startSession(e, userId, actor);
 }

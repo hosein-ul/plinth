@@ -5,6 +5,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Hex, LocalAccount, PublicClient } from "viem";
 import { DefaultAlertSink } from "./alerts";
 import { checkChain } from "./deployment-check";
+import { createEmailSender, type EmailSender } from "./email";
 import type { AlertSink, ChainRuntime, Engine, EngineConfig, Logger } from "./context";
 import { parseSecretKey } from "./crypto";
 import { resolvePolicyDetails } from "./policy";
@@ -42,6 +43,7 @@ export interface CreateEngineOptions {
   env?: Record<string, string | undefined>;
   logger?: Logger;
   alerts?: AlertSink;
+  email?: EmailSender;
   signers?: SignerProvider;
   now?: () => Date;
   /** Extra runtime-defined networks (local dev chains, tests). */
@@ -70,6 +72,11 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
     alertWebhookUrl: env.ALERT_WEBHOOK_URL,
     sessionTtlSeconds: Number(env.SESSION_TTL_SECONDS ?? 60 * 60 * 24 * 7),
     platformFeeBps: Number(env.PLATFORM_FEE_BPS ?? DEFAULT_FEE_BPS),
+    emailLinkTtlSeconds: Number(env.EMAIL_LINK_TTL_SECONDS ?? 24 * 3600),
+    reauthWindowSeconds: Number(env.REAUTH_WINDOW_SECONDS ?? 300),
+    // Development and tests: no waiting. Production: 24 hours unless an operator chooses otherwise.
+    payoutCooldownSeconds: Number(env.PAYOUT_COOLDOWN_SECONDS ?? (production ? 24 * 3600 : 0)),
+    web3authClientId: env.WEB3AUTH_CLIENT_ID ?? env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID,
     ...opts.config,
   };
   const alerts = opts.alerts ?? new DefaultAlertSink(opts.db, log, cfg.alertWebhookUrl, undefined, now);
@@ -108,7 +115,7 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
   const registryOnly = new Set(registryIds);
   for (const x of opts.extraNetworks ?? []) register(x.network, x.deployment, x.client);
 
-  const engine: Engine = { db: opts.db, cfg, chains, log, alerts, now };
+  const engine: Engine = { db: opts.db, cfg, chains, log, alerts, email: opts.email ?? createEmailSender(env, log), now };
   // Read the deployed contracts back and compare them with the records before any network takes payments.
   for (const chain of chains.values()) {
     if (chain.baseOperational) await checkChain(engine, chain, registryOnly.has(chain.network.id));

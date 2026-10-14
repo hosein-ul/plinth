@@ -24,7 +24,7 @@ const actor = { type: "USER" as const, ip: "127.0.0.1" };
 describe("Web3Auth identity tokens", () => {
   it("accepts a token signed for our client id and reduces it to a stable subject", async () => {
     const t = await sign({ authConnection: "google", userId: "Alice@Example.com", email: "Alice@Example.com", name: "Alice" });
-    expect(await verifyWeb3AuthToken(t, CLIENT, keys)).toEqual({ subject: "google:alice@example.com", email: "alice@example.com", name: "Alice" });
+    expect(await verifyWeb3AuthToken(t, CLIENT, keys)).toMatchObject({ subject: "google:alice@example.com", email: "alice@example.com", name: "Alice", emailVerified: true, connection: "google" });
   });
 
   it("maps an external wallet login to a wallet subject", async () => {
@@ -35,6 +35,20 @@ describe("Web3Auth identity tokens", () => {
   it("accepts a session token from the SDK v11 citadel service (issuer web3auth.io)", async () => {
     const t = await sign({ sub: "usr_citadel_1", wallets: [{ address: "0xAbC0000000000000000000000000000000000002" }] }, { iss: "web3auth.io" });
     expect((await verifyWeb3AuthToken(t, CLIENT, keys)).subject).toBe("wallet:0xabc0000000000000000000000000000000000002");
+  });
+
+  it("only treats an email as verified when the login method vouches for it", async () => {
+    const google = await verifyWeb3AuthToken(await sign({ authConnection: "google", userId: "g1", email: "g@example.com" }), CLIENT, keys);
+    expect(google.emailVerified).toBe(true);
+    const otp = await verifyWeb3AuthToken(await sign({ authConnection: "email_passwordless", userId: "e1", email: "e@example.com" }), CLIENT, keys);
+    expect(otp.emailVerified).toBe(true);
+    const social = await verifyWeb3AuthToken(await sign({ authConnection: "twitter", userId: "t1", email: "t@example.com" }), CLIENT, keys);
+    expect(social.emailVerified).toBe(false);
+    const explicit = await verifyWeb3AuthToken(await sign({ authConnection: "twitter", userId: "t2", email: "t2@example.com", email_verified: true }), CLIENT, keys);
+    expect(explicit.emailVerified).toBe(true);
+    const wallet = await verifyWeb3AuthToken(await sign({ wallets: [{ address: "0xAbC0000000000000000000000000000000000009" }] }, { iss: "https://authjs.web3auth.io" }), CLIENT, keys);
+    expect(wallet).toMatchObject({ emailVerified: false, email: null });
+    expect(typeof google.issuedAt).toBe("number");
   });
 
   it("rejects a wrong audience, a wrong issuer, an expired token, an unsigned token and one signed by another key", async () => {
@@ -51,7 +65,7 @@ describe("Web3Auth identity tokens", () => {
 
 describe("signing in with an external identity", () => {
   it("creates the merchant on first use and reuses it afterwards", async () => {
-    const id = { subject: "google:bob@example.com", email: "bob@example.com", name: "Bob" };
+    const id = { subject: "google:bob@example.com", email: "bob@example.com", name: "Bob", emailVerified: true, connection: "google", issuedAt: null };
     const first = await signInWithIdentity(h.engine, id, { business_name: "Bob's Bakery" }, actor);
     expect(first.merchant.name).toBe("Bob's Bakery");
     expect(first.user.role).toBe("OWNER");
@@ -64,11 +78,11 @@ describe("signing in with an external identity", () => {
 
   it("never auto-links an existing password account that shares the email", async () => {
     await signup(h.engine, { business_name: "Carol Co", email: "carol@example.com", password: "a-long-password-1" }, { type: "SYSTEM" });
-    await expect(signInWithIdentity(h.engine, { subject: "google:carol@example.com", email: "carol@example.com", name: null }, {}, actor)).rejects.toMatchObject({ code: "EMAIL_TAKEN" });
+    await expect(signInWithIdentity(h.engine, { subject: "google:carol@example.com", email: "carol@example.com", name: null, emailVerified: true, connection: "google", issuedAt: null }, {}, actor)).rejects.toMatchObject({ code: "EMAIL_TAKEN" });
   });
 
   it("gives a wallet-only user a working session without an email", async () => {
-    const s = await signInWithIdentity(h.engine, { subject: "wallet:0xabc0000000000000000000000000000000000001", email: null, name: null }, {}, actor);
+    const s = await signInWithIdentity(h.engine, { subject: "wallet:0xabc0000000000000000000000000000000000001", email: null, name: null, emailVerified: false, connection: null, issuedAt: null }, {}, actor);
     expect(s.token.startsWith("sess_")).toBe(true);
     expect(s.user.email.endsWith("@sso.plinth.invalid")).toBe(true);
   });

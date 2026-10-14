@@ -2,6 +2,7 @@ import type { LocalAccount, PublicClient, WalletClient } from "viem";
 import type { EvmAdapter } from "@plinth/blockchain";
 import type { Database } from "@plinth/db";
 import type { Deployment, NetworkConfig } from "@plinth/shared";
+import type { EmailSender } from "./email";
 
 /** Per-network guardrails on what the relayer may spend and do. Fail-closed on mainnet. */
 export interface RelayerPolicy {
@@ -55,6 +56,16 @@ export interface EngineConfig {
   sessionTtlSeconds: number;
   /** Default platform fee in basis points for merchants without their own override. */
   platformFeeBps: number;
+  /** How long an emailed one-time link stays valid. */
+  emailLinkTtlSeconds: number;
+  /** How recently a user must have signed in again to change sensitive settings. */
+  reauthWindowSeconds: number;
+  /** Time a newly confirmed payout wallet waits before new invoices use it (0 in development). */
+  payoutCooldownSeconds: number;
+  /** Web3Auth client id the identity tokens must be issued for. */
+  web3authClientId?: string;
+  /** Replaces identity-token verification (tests only). */
+  verifyIdentityToken?: (idToken: string) => Promise<import("./web3auth").Web3AuthIdentity>;
 }
 
 export interface Logger {
@@ -80,6 +91,7 @@ export interface Engine {
   chains: Map<string, ChainRuntime>;
   log: Logger;
   alerts: AlertSink;
+  email: EmailSender;
   now(): Date;
 }
 

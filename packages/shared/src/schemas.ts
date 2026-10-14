@@ -100,6 +100,12 @@ export const signupSchema = z.object({
   password: z.string().min(12).max(200),
 });
 export const web3authSchema = z.object({ id_token: z.string().min(20).max(8000), business_name: z.string().trim().min(1).max(120).optional() });
+/** Proof that the person at the keyboard owns the account right now: a password, or a fresh sign-in identity token. */
+export const reauthSchema = z
+  .object({ password: z.string().min(1).max(200).optional(), id_token: z.string().min(20).max(8000).optional() })
+  .refine((r) => !!r.password || !!r.id_token, "Provide the password, or a fresh sign-in token");
+export const emailChangeSchema = z.object({ email: z.string().trim().email().max(320), reauth: reauthSchema });
+export const emailConfirmSchema = z.object({ token: z.string().min(20).max(200) });
 export const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(200) });
 
 export const WEBHOOK_EVENT_TYPES = [

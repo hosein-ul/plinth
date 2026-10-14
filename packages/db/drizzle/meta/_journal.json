@@ -29,6 +29,13 @@
       "when": 1792004744576,
       "tag": "0003_platform_fee_and_payout_routes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792006629546,
+      "tag": "0004_verified_email",
+      "breakpoints": true
     }
   ]
 }

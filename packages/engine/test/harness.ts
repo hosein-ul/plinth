@@ -7,6 +7,7 @@ import type { Address } from "viem";
 import pg from "pg";
 import {
   MemoryAlertSink,
+  MemoryEmailSender,
   createEngine,
   processWebhookJobs,
   relayerTick,
@@ -22,6 +23,8 @@ export interface Harness {
   handle: DbHandle;
   engine: Engine;
   alerts: MemoryAlertSink;
+  /** Every email the engine sent, readable by tests (including one-time links). */
+  mail: MemoryEmailSender;
   net: string;
   clock: { offsetMs: number };
   webhookSink: { server: Server; url: string; received: { headers: Record<string, string>; body: string }[]; status: number };
@@ -77,6 +80,7 @@ export async function startHarness(opts: { confirmations?: number } = {}): Promi
   const handle = connect(dbUrl);
   if (!pgAdmin) await handle.migrate();
   const alerts = new MemoryAlertSink();
+  const mail = new MemoryEmailSender();
   const clock = { offsetMs: 0 };
 
   const received: Harness["webhookSink"]["received"] = [];
@@ -97,6 +101,9 @@ export async function startHarness(opts: { confirmations?: number } = {}): Promi
     db: handle.db,
     logger: silentLogger,
     alerts,
+    email: mail,
+    // Tests mint "identity tokens" as JSON; the override returns them as-is (real verification is tested in web3auth.test.ts).
+    config: { verifyIdentityToken: async (t: string) => JSON.parse(t) },
     now: () => new Date(Date.now() + clock.offsetMs),
     env: { APP_SECRET_KEY: "11".repeat(32), ALLOW_PRIVATE_WEBHOOK_TARGETS: "true", PUBLIC_WEB_URL: "http://localhost:3000" },
     signers: { getSigner: (n) => (n === chain.network.id ? chain.accounts[1] : undefined) },
@@ -105,7 +112,7 @@ export async function startHarness(opts: { confirmations?: number } = {}): Promi
 
   let n = 0;
   const h: Harness = {
-    chain, handle, engine, alerts, net: chain.network.id, clock, webhookSink: sink,
+    chain, handle, engine, alerts, mail, net: chain.network.id, clock, webhookSink: sink,
     async newMerchant(name = `Merchant ${++n}`) {
       const { merchantId } = await signup(engine, { business_name: name, email: `m${n}-${Math.random().toString(36).slice(2)}@example.com`, password: "correct horse battery staple" }, { type: "SYSTEM" });
       return { merchantId, environment: "test", actor: { type: "SYSTEM" }, role: "OWNER", via: "session" } as AuthContext;

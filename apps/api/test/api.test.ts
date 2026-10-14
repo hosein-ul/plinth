@@ -97,6 +97,41 @@ describe("authentication & authorisation", () => {
   });
 });
 
+describe("verified email over HTTP", () => {
+  it("status, verification link, re-authenticated change, and single-use confirmation", async () => {
+    const st = await call("GET", "/v1/auth/email", { token: session });
+    expect(st.status).toBe(200);
+    expect(st.body).toMatchObject({ email: "owner@acme.test", verified: false, auth_method: "password", email_available: true });
+    expect((await call("GET", "/v1/auth/email", { token: apiKey })).status).toBe(403); // sessions only
+
+    expect((await call("POST", "/v1/auth/email/verify", { token: session })).body.status).toBe("sent");
+    const link = h.mail.linkTo("owner@acme.test")!;
+    const token = new URL(link).searchParams.get("token")!;
+    const ok = await call("POST", "/public/auth/email/confirm", { body: { token } });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ email: "owner@acme.test", purpose: "VERIFY" });
+    expect((await call("POST", "/public/auth/email/confirm", { body: { token } })).status).toBe(410);
+    expect((await call("GET", "/v1/me", { token: session })).body.user).toMatchObject({ has_real_email: true, email_verified: true });
+
+    // changing the address needs the password
+    const noAuth = await call("POST", "/v1/auth/email/change", { token: session, body: { email: "ceo@acme.test" } });
+    expect(noAuth.status).toBe(400); // reauth is required by the schema
+    const wrong = await call("POST", "/v1/auth/email/change", { token: session, body: { email: "ceo@acme.test", reauth: { password: "not-the-password-123" } } });
+    expect(wrong.status).toBe(403);
+    expect(wrong.body.error.code).toBe("REAUTH_FAILED");
+    expect((await call("POST", "/v1/auth/email/change", { token: session, body: { email: "ceo@acme.test", reauth: { password: "a-very-long-passphrase-123" } } })).body.status).toBe("sent");
+    expect(h.mail.to("ceo@acme.test")).toHaveLength(1);
+    // put it back so later tests that log in with owner@acme.test keep working
+    const back = new URL(h.mail.linkTo("ceo@acme.test")!).searchParams.get("token")!;
+    expect((await call("POST", "/public/auth/email/confirm", { body: { token: back } })).body.purpose).toBe("CHANGE");
+    const me = await call("GET", "/v1/me", { token: session });
+    expect(me.body.user.email).toBe("ceo@acme.test");
+    expect((await call("POST", "/v1/auth/email/change", { token: session, body: { email: "owner@acme.test", reauth: { password: "a-very-long-passphrase-123" } } })).status).toBe(200);
+    await call("POST", "/public/auth/email/confirm", { body: { token: new URL(h.mail.linkTo("owner@acme.test")!).searchParams.get("token")! } });
+    expect((await call("GET", "/v1/me", { token: session })).body.user.email).toBe("owner@acme.test");
+  });
+});
+
 describe("payment intents over HTTP", () => {
   let piId: string;
   it("validates input with field-level errors", async () => {
