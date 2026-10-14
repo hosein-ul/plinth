@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Logo } from "@/components/logo";
 import { Notice } from "@/components/page";
+import { WEB3AUTH_CLIENT_ID, getWeb3AuthIdToken } from "@/lib/web3auth-client";
 import { SettleDemo } from "@/components/marketing/settle-demo";
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
@@ -14,6 +15,25 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const signup = mode === "signup";
+
+  async function viaWeb3Auth() {
+    setBusy(true);
+    setError(null);
+    try {
+      const id_token = await getWeb3AuthIdToken();
+      const res = await fetch("/api/auth/web3auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token }) });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) {
+        router.push(signup ? "/dashboard/networks?welcome=1" : "/dashboard");
+        router.refresh();
+        return;
+      }
+      setError(json?.error?.message ?? "Could not sign in");
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : "Could not sign in");
+    }
+    setBusy(false);
+  }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -45,7 +65,14 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <div className="m-auto w-full max-w-[23rem] py-12">
           <h1 className="t-2 text-ink">{signup ? "Create your account" : "Welcome back"}</h1>
           <p className="mt-2 text-[0.9375rem] text-ink-3">{signup ? "Start on testnet. Nothing here moves real funds until you enable a mainnet." : "Sign in to your Plinth dashboard."}</p>
-          <form onSubmit={submit} className="mt-8 space-y-5" noValidate>
+          {WEB3AUTH_CLIENT_ID && (
+            <div className="mt-8">
+              <Button type="button" variant="primary" size="lg" className="w-full" loading={busy} onClick={viaWeb3Auth}>Continue with wallet, Google or email</Button>
+              <p className="mt-2.5 text-center text-xs text-ink-3">Wallet, social and email sign-in, powered by Web3Auth.</p>
+              <div className="my-6 flex items-center gap-3 text-xs text-ink-4"><span className="h-px flex-1 bg-line" />or use a password<span className="h-px flex-1 bg-line" /></div>
+            </div>
+          )}
+          <form onSubmit={submit} className={WEB3AUTH_CLIENT_ID ? "space-y-5" : "mt-8 space-y-5"} noValidate>
             {signup && (
               <Field label="Business name" htmlFor="business_name" error={fieldErrors.business_name}>
                 <Input id="business_name" name="business_name" required autoComplete="organization" aria-invalid={!!fieldErrors.business_name} />
@@ -58,7 +85,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               <Input id="password" name="password" type="password" required minLength={signup ? 12 : 1} autoComplete={signup ? "new-password" : "current-password"} aria-invalid={!!fieldErrors.password} />
             </Field>
             {error && <Notice tone="bad"><span role="alert">{error}</span></Notice>}
-            <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy}>{signup ? "Create account" : "Sign in"}</Button>
+            <Button type="submit" variant={WEB3AUTH_CLIENT_ID ? "secondary" : "primary"} size="lg" className="w-full" loading={busy}>{signup ? "Create account" : "Sign in"}</Button>
           </form>
           <p className="mt-6 text-sm text-ink-3">
             {signup ? "Already have an account? " : "New to Plinth? "}

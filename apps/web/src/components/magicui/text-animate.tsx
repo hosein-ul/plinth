@@ -421,21 +421,31 @@ const TextAnimateBase = ({
         {...props}
       >
         {accessible && <span className="sr-only">{children}</span>}
-        {segments.map((segment, i) => (
-          <motion.span
-            key={`${by}-${segment}-${i}`}
-            variants={finalVariants.item}
-            custom={i * staggerTimings[by]}
-            className={cn(
-              by === "line" ? "block" : "inline-block whitespace-pre",
-              by === "character" && "",
-              segmentClassName
-            )}
-            aria-hidden={accessible ? true : undefined}
-          >
-            {segment}
-          </motion.span>
-        ))}
+        {(() => {
+          const item = (segment: string, i: number) => (
+            <motion.span
+              key={`${by}-${segment}-${i}`}
+              variants={finalVariants.item}
+              custom={i * staggerTimings[by]}
+              className={cn(by === "line" ? "block" : "inline-block whitespace-pre", segmentClassName)}
+              aria-hidden={accessible ? true : undefined}
+            >
+              {segment}
+            </motion.span>
+          )
+          if (by !== "character") return segments.map(item)
+          // Characters of one word stay together, so a line can only break between words.
+          let at = 0
+          return children.split(/(\s+)/).map((word, w) => {
+            const start = at
+            at += word.length
+            return (
+              <span key={`w-${w}`} className="inline-block whitespace-nowrap">
+                {word.split("").map((ch, k) => item(ch, start + k))}
+              </span>
+            )
+          })
+        })()}
       </MotionComponent>
     </AnimatePresence>
   )

@@ -8,7 +8,7 @@ export function Code({ label, children, className }: { label: string; children: 
         <span aria-hidden className="flex gap-1.5"><i className="size-2 rounded-full bg-white/20" /><i className="size-2 rounded-full bg-white/20" /><i className="size-2 rounded-full bg-white/20" /></span>
         <span className="ml-1 font-mono">{label}</span>
       </figcaption>
-      <pre className="overflow-x-auto p-4 font-mono text-[0.8125rem] leading-6 text-white/85"><code>{children}</code></pre>
+      <pre className="overflow-x-auto p-4 max-md:whitespace-pre-wrap max-md:[overflow-wrap:anywhere] font-mono text-[0.8125rem] leading-6 text-white/85"><code>{children}</code></pre>
     </figure>
   );
 }

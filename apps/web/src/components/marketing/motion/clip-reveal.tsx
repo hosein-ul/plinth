@@ -47,16 +47,16 @@ export function ClipReveal({ children, variant = "inset", className, delay = 0, 
   if (compact) {
     return (
       <Outer ref={ref} className={className}>
-        <motion.div initial={{ opacity: 0, y: 14 }} animate={seen ? { opacity: 1, y: 0 } : undefined} transition={{ duration: 0.5, delay: Math.min(delay, 0.2), ease: [0.16, 1, 0.3, 1] }} className="h-full">{children}</motion.div>
+        <motion.div key="rise" initial={{ opacity: 0, y: 14 }} animate={seen ? { opacity: 1, y: 0 } : undefined} transition={{ duration: 0.5, delay: Math.min(delay, 0.2), ease: [0.16, 1, 0.3, 1] }} className="h-full">{children}</motion.div>
       </Outer>
     );
   }
   return (
     <Outer ref={ref} className={className}>
       {scrub ? (
-        <ScrubMask outer={ref} from={from} to={to}>{children}</ScrubMask>
+        <ScrubMask key="scrub" outer={ref} from={from} to={to}>{children}</ScrubMask>
       ) : (
-        <motion.div className="paint-clip h-full" initial={{ clipPath: from }} animate={{ clipPath: seen ? to : from }} transition={{ duration, delay, ease: [0.76, 0, 0.24, 1] }}>
+        <motion.div key="mask" className="paint-clip h-full" initial={{ clipPath: from }} animate={{ clipPath: seen ? to : from }} transition={{ duration, delay, ease: [0.76, 0, 0.24, 1] }}>
           {children}
         </motion.div>
       )}

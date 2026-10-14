@@ -4,6 +4,7 @@ import { ArrowRight, Lock, ShieldAlert, FlaskConical } from "lucide-react";
 import { WEBHOOK_EVENT_TYPES } from "@plinth/shared";
 import { buttonStyles } from "@/components/ui/button";
 import { Hero } from "@/components/marketing/hero-variants";
+import { StartPaths } from "@/components/marketing/start-paths";
 import { Statement } from "@/components/marketing/statement";
 import { LiveNetwork, LiveNetworkSkeleton } from "@/components/marketing/live-network";
 import { AssetsNetworks } from "@/components/marketing/assets-networks";
@@ -28,6 +29,7 @@ export default function Home() {
   return (
     <div className="overflow-x-clip">
       <Hero />
+      <StartPaths />
 
       <Suspense fallback={<LiveNetworkSkeleton />}><LiveNetwork /></Suspense>
       <AssetsNetworks />

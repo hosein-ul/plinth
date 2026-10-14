@@ -9,11 +9,11 @@ import { Reveal } from "@/components/marketing/motion/reveal";
 import { wrap } from "@/components/marketing/parts";
 
 const FACTS: { chip: [tone: "info" | "warn" | "neutral" | "ok", label: string]; title: string; text: string }[] = [
-  { chip: ["info", "Testnet only"], title: "No real money moves", text: "Every network that runs today is a test network. Test USDC has no value." },
-  { chip: ["warn", "Unaudited"], title: "Contracts have not been independently audited", text: "They are tested, and the tests run against real chains, but no outside firm has reviewed them." },
-  { chip: ["neutral", "Mainnet off"], title: "Mainnet needs explicit approval", text: "It is disabled by default and requires an operator to enable it, network by network." },
-  { chip: ["neutral", "No customers"], title: "Nobody uses it in production yet", text: "There are no customer logos, volume figures or testimonials here because there is nothing true to put in them." },
-  { chip: ["neutral", "No history"], title: "No uptime record, no price list", text: "Status is live but short-lived. Pricing is a structure, not a published number." },
+  { chip: ["ok", "Built end to end"], title: "The whole payment flow is in place", text: "Create a payment, pay by wallet or by address, settle to a vault, receive a signed webhook. Tested end to end on a local chain." },
+  { chip: ["ok", "Non-custodial"], title: "We never hold your money", text: "Funds go from the customer's invoice address straight to a vault that only your wallet can withdraw from." },
+  { chip: ["info", "Testnet first"], title: "Try everything with test USDC", text: "Every network that runs today is a test network, so you can build and break things at no cost." },
+  { chip: ["neutral", "Audit gate"], title: "Mainnet waits for an independent audit", text: "An outside review of the contracts is a launch requirement, not an afterthought." },
+  { chip: ["ok", "Documented"], title: "A versioned API you can read", text: "REST under /v1 with an OpenAPI 3.1 document, idempotent requests, and signed webhooks you can replay." },
 ];
 
 export function WhereWeStand() {
@@ -24,10 +24,10 @@ export function WhereWeStand() {
           <div className="lg:sticky lg:top-28 lg:self-start">
             <h2 id="stand-h" className="t-1 text-on-ink">
               <TextAnimate as="span" by="word" animation="slideUp" duration={0.5} once className="block">Where Plinth stands.</TextAnimate>
-              <TextAnimate as="span" by="word" animation="slideUp" duration={0.5} delay={0.3} once className="block text-white/45" aria-hidden>Early, working, and honest about it.</TextAnimate>
+              <TextAnimate as="span" by="word" animation="slideUp" duration={0.5} delay={0.3} once className="block text-white/45" aria-hidden>Built carefully, going live deliberately.</TextAnimate>
             </h2>
             <Reveal delay={0.1}>
-              <p className="mt-6 max-w-md text-lg text-white/65">A payments product should say plainly what it has not done. This is that list. It will change as the product does.</p>
+              <p className="mt-6 max-w-md text-lg text-white/65">Testnet today. This is what is already true, and what stands between here and production.</p>
               <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[0.9375rem] font-medium">
                 {([["Security model", "/security"], ["Live status", "/status"], ["Pricing", "/pricing"], ["Risk disclosure", "/legal/risk-disclosure"]] as const).map(([l, h]) => (
                   <Link key={h} href={h} className="text-on-ink underline decoration-white/30 underline-offset-4 hover:decoration-white">{l}</Link>

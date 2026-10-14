@@ -1,0 +1,14 @@
+{
+  "name": "plinth-chat-bot-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A paid-access chat bot that takes USDC through Plinth. Test networks only.",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": { "grammy": "^1.30.0" },
+  "devDependencies": { "@types/node": "^24.0.0", "tsx": "^4.19.0", "typescript": "^5.9.0", "vitest": "^3.2.0" }
+}

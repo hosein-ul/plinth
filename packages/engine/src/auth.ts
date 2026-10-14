@@ -53,6 +53,13 @@ export async function login(e: Engine, email: string, password: string, actor: A
   // Always run a hash to keep timing flat for unknown emails.
   const ok = u ? await verifyPassword(password, u.passwordHash) : (await hashPassword(password), false);
   if (!u || !ok) throw new EngineError("INVALID_CREDENTIALS", "Invalid email or password", 401);
+  return startSession(e, u.id, actor);
+}
+
+/** Open a dashboard session for an already-authenticated user (password or an external identity). */
+export async function startSession(e: Engine, userId: string, actor: Actor) {
+  const [u] = await e.db.select().from(schema.merchantUsers).where(eq(schema.merchantUsers.id, userId));
+  if (!u) throw new EngineError("INVALID_CREDENTIALS", "Unknown user", 401);
   const [m] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, u.merchantId));
   if (m?.status !== "ACTIVE") throw new EngineError("ACCOUNT_SUSPENDED", "This account is suspended", 403);
   const token = randomToken("sess", 32);

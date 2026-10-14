@@ -1,7 +1,7 @@
 "use client";
 import { useReduced } from "./use-reduced";
 import { useRef, useState } from "react";
-import { motion, useMotionValueEvent, useScroll, useTransform, type MotionValue } from "motion/react";
+import { motion, useMotionValueEvent, useScroll, useSpring } from "motion/react";
 import { DrawPath, arcPath } from "./draw";
 import { WipeStack, useWipe } from "./wipe-stack";
 import { cn } from "@/lib/cn";
@@ -25,8 +25,9 @@ export function StickySteps({ steps, className }: { steps: StickyStep[]; classNa
   const reduce = useReduced();
   const n = steps.length;
   const wipe = useWipe(n);
-  const { scrollYProgress } = useScroll({ target: outer, offset: ["start 64px", "end end"] });
-  useMotionValueEvent(scrollYProgress, "change", (v) => {
+  const { scrollYProgress: rawProgress } = useScroll({ target: outer, offset: ["start 64px", "end end"] });
+  const scrollYProgress = useSpring(rawProgress, { stiffness: 140, damping: 32, restDelta: 0.0005 });
+  useMotionValueEvent(rawProgress, "change", (v) => {
     const i = Math.max(0, Math.min(n - 1, Math.floor(v * n * 0.999)));
     setActive(i);
   });
@@ -71,7 +72,7 @@ export function StickySteps({ steps, className }: { steps: StickyStep[]; classNa
             <div className="relative h-[min(30rem,calc(100dvh-8rem))]">
               <div className="grid h-full">
                 {steps.map((s, i) => (
-                  <ScrubPanel key={s.id} progress={scrollYProgress} i={i} n={n} still={reduce} active={i === active}>
+                  <ScrubPanel key={s.id} i={i} current={active} still={reduce} active={i === active}>
                     <div className="grid h-full place-items-center px-2 py-8 xl:px-8"><div className="w-full max-w-[34rem]">{s.visual}</div></div>
                   </ScrubPanel>
                 ))}
@@ -102,22 +103,22 @@ export function StickySteps({ steps, className }: { steps: StickyStep[]; classNa
 }
 
 /**
- * One visual of the sequence, driven directly by the scroll position (no timers, so no lag and fully reversible).
- * At each boundary the leaving panel fades out first and the arriving one fades in after it, so two visuals never overlap.
+ * One visual of the sequence. The active step is chosen from scroll position, but the change itself is a timed
+ * cross-fade with a short rise, so it stays smooth however the page is scrolled (wheel notches, flicks, keyboard).
+ * The arriving panel waits a beat for the leaving one, so two visuals never overlap.
  */
-function ScrubPanel({ progress, i, n, children, still, active }: { progress: MotionValue<number>; i: number; n: number; children: React.ReactNode; still?: boolean; active: boolean }) {
-  const w = 0.05;
-  const a = i / n;
-  const b = (i + 1) / n;
-  const inFrom = i === 0 ? -1 : a;
-  const inTo = i === 0 ? -0.5 : a + w;
-  const outFrom = i === n - 1 ? 2 : b - w;
-  const outTo = i === n - 1 ? 3 : b;
-  const opacity = useTransform(progress, [inFrom, inTo, outFrom, outTo], [i === 0 ? 1 : 0, 1, 1, i === n - 1 ? 1 : 0]);
-  const y = useTransform(progress, [inFrom, inTo, outFrom, outTo], [i === 0 ? 0 : 18, 0, 0, i === n - 1 ? 0 : -18]);
-  const scale = useTransform(progress, [inFrom, inTo, outFrom, outTo], [i === 0 ? 1 : 0.97, 1, 1, i === n - 1 ? 1 : 0.97]);
+function ScrubPanel({ i, children, still, active, current }: { i: number; children: React.ReactNode; still?: boolean; active: boolean; current: number }) {
+  const state = active ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: i < current ? -22 : 22, scale: 0.975 };
   return (
-    <motion.div className="[grid-area:1/1]" style={still ? { opacity: active ? 1 : 0 } : { opacity, y, scale }} aria-hidden={!active} inert={!active}>
+    <motion.div
+      className="[grid-area:1/1]"
+      initial={false}
+      animate={still ? { opacity: active ? 1 : 0 } : state}
+      transition={still ? { duration: 0 } : { duration: active ? 0.7 : 0.4, delay: active ? 0.18 : 0, ease: [0.16, 1, 0.3, 1] }}
+      style={{ pointerEvents: active ? "auto" : "none" }}
+      aria-hidden={!active}
+      inert={!active}
+    >
       {children}
     </motion.div>
   );

@@ -3,7 +3,7 @@ import { getAddress, type Hex } from "viem";
 import { and, eq, schema, sql } from "@plinth/db";
 import {
   createApiKeySchema, createInvoiceSchema, createPaymentIntentSchema, createPaymentLinkSchema, createRefundRequestSchema, createWebhookEndpointSchema,
-  enableNetworkSchema, loginSchema, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
+  enableNetworkSchema, loginSchema, web3authSchema, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
 } from "@plinth/shared";
 import * as E from "@plinth/engine";
 import type { Engine } from "@plinth/engine";
@@ -55,6 +55,16 @@ export function buildRoutes(e: Engine): RouteDef[] {
       method: "POST", path: "/v1/auth/login", tag: "Auth", summary: "Sign in to the dashboard", auth: "none", body: loginSchema, rateLimit: 10,
       response: "A session token. Treat as a password.",
       handler: async ({ req, body }) => E.login(e, body.email, body.password, { type: "USER", ip: req.ip }),
+    }),
+    route({
+      method: "POST", path: "/v1/auth/web3auth", tag: "Auth", summary: "Sign in or sign up with a Web3Auth identity token", auth: "none", body: web3authSchema, rateLimit: 10,
+      response: "A session token. The identity token is verified against Web3Auth's published keys for this deployment's client id.",
+      handler: async ({ req, body }) => {
+        const clientId = process.env.WEB3AUTH_CLIENT_ID ?? process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID;
+        if (!clientId) throw new E.EngineError("NOT_CONFIGURED", "Web3Auth sign-in is not configured on this server", 503);
+        const identity = await E.verifyWeb3AuthToken(body.id_token, clientId);
+        return E.signInWithIdentity(e, identity, { business_name: body.business_name }, { type: "USER", ip: req.ip });
+      },
     }),
     route({
       method: "POST", path: "/v1/auth/logout", tag: "Auth", summary: "End the current session", auth: "session",

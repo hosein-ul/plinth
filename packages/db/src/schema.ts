@@ -44,6 +44,20 @@ export const merchantUsers = pgTable(
   (t) => [uniqueIndex("merchant_users_email_uq").on(sql`lower(${t.email})`), index("merchant_users_merchant_idx").on(t.merchantId)],
 );
 
+/** A sign-in identity from an external provider (e.g. Web3Auth), linked to one dashboard user. */
+export const externalIdentities = pgTable(
+  "external_identities",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => merchantUsers.id),
+    provider: text("provider").notNull(), // "web3auth"
+    subject: text("subject").notNull(), // stable id from the provider, e.g. "google:alice@example.com" or "wallet:0x..."
+    email: text("email"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("external_identities_provider_subject_uq").on(t.provider, t.subject), index("external_identities_user_idx").on(t.userId)],
+);
+
 export const sessions = pgTable("sessions", {
   /** SHA-256 of the bearer token; the token itself is never stored. */
   id: text("id").primaryKey(),

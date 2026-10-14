@@ -19,3 +19,4 @@ export * from "./relayer";
 export * from "./forwarding";
 export * from "./worker";
 export * from "./settlement-plan";
+export * from "./web3auth";

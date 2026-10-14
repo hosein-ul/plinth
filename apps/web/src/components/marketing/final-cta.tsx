@@ -19,7 +19,7 @@ export function FinalCta() {
   return (
     <Band tone="dark" shape="leaf-b" grid={false} labelledBy="cta-h" backdrop={<> <ShaderField preset="mist" colors={SHADER_COLORS["mist-dark"]!} seed={9} /> <div className="absolute inset-0 bg-[linear-gradient(90deg,rgb(10_16_25/0.8),rgb(10_16_25/0.3)_58%,transparent)]" /> </>}>
       <div className={wrap}>
-        <div className="grid gap-14 lg:grid-cols-[minmax(0,7fr)_minmax(0,4fr)] lg:items-center">
+        <div className="grid gap-12 lg:gap-14 lg:grid-cols-[minmax(0,7fr)_minmax(0,4fr)] lg:items-center">
           <div>
             <h2 id="cta-h" className="t-display text-[clamp(2.75rem,7vw,6.25rem)] text-on-ink">
               <TextAnimate as="span" by="character" animation="blurInUp" duration={0.6} once className="block">Send a test payment</TextAnimate>
@@ -33,10 +33,10 @@ export function FinalCta() {
               </div>
             </Reveal>
           </div>
-          <Parallax distance={26} className="hidden lg:block">
+          <Parallax distance={26}>
             <div className="relative mx-auto w-full max-w-[21rem] pb-10">
               <div className="origin-bottom-left -rotate-[3deg]"><WalletFrame /></div>
-              <div className="absolute -bottom-2 -left-14 w-[17.5rem] rounded-card border border-white/12 bg-ink-lift/95 p-4 shadow-float">
+              <div className="absolute -bottom-2 -left-1 w-[16rem] sm:-left-14 sm:w-[17.5rem] rounded-card border border-white/12 bg-ink-lift/95 p-4 shadow-float">
                 <p className="flex items-center gap-2 text-xs font-medium text-white"><span className="grid size-5 place-items-center rounded-full bg-signal text-on-ink"><Check className="size-3" strokeWidth={3.5} aria-hidden /></span>Webhook delivered</p>
                 <p className="mt-2 font-mono text-2xs leading-5 text-white/60">payment.completed<br />Plinth-Signature: t=…,v1=…<br /><span className="text-[#6ee7b7]">200 OK</span></p>
               </div>

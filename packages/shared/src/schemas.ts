@@ -94,6 +94,7 @@ export const signupSchema = z.object({
   email: z.string().email().max(320),
   password: z.string().min(12).max(200),
 });
+export const web3authSchema = z.object({ id_token: z.string().min(20).max(8000), business_name: z.string().trim().min(1).max(120).optional() });
 export const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(200) });
 
 export const WEBHOOK_EVENT_TYPES = [

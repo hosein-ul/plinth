@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
-import { Activity, ArrowRight, BookOpen, ChevronDown, FlaskConical, Network, Play, Plug, Store, Tag, Terminal, Webhook } from "lucide-react";
+import { Activity, ArrowRight, Sparkles, BookOpen, ChevronDown, FlaskConical, Network, Play, Plug, Store, Tag, Terminal, Webhook } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { MobileMenu, type MenuGroup } from "@/components/marketing/mobile-menu";
 import { useReduced } from "@/components/marketing/motion/use-reduced";
@@ -30,6 +30,7 @@ const MEGAS: Mega[] = [
     key: "developers",
     label: "Developers",
     items: [
+      { icon: Sparkles, title: "Build with AI", text: "Copy a prompt; your assistant builds it.", href: "/build-with-ai" },
       { icon: Terminal, title: "Quickstart", text: "One request creates a payment.", href: "/developers#quickstart" },
       { icon: BookOpen, title: "API reference", text: "Versioned REST with OpenAPI.", href: "/developers#api" },
       { icon: Webhook, title: "Webhooks", text: "Signed, retried, replayable.", href: "/developers#webhooks" },
@@ -41,11 +42,12 @@ const MEGAS: Mega[] = [
 
 const LINKS: [string, string][] = [["Security", "/security"], ["FAQ", "/faq"]];
 
+const asLinks = (key: string) => MEGAS.find((m) => m.key === key)!.items.map((i) => ({ label: i.title, href: i.href, text: i.text, icon: i.icon }));
 const MENU: MenuGroup[] = [
-  { title: "Product", links: [["Live demo", DEMO_HREF], ["Use cases", "/use-cases"], ["Integrations", "/integrations"], ["Networks", "/networks"], ["Pricing", "/pricing"]] },
-  { title: "Build and trust", links: [["Developers", "/developers"], ["Security", "/security"], ["Status", "/status"], ["FAQ", "/faq"], ["Contact", "/contact"]] },
-  { title: "Account", links: [["Sign in", "/login"], ["Create account", "/signup"]] },
+  { title: "Product", links: [{ label: "Live demo", href: DEMO_HREF, text: "A populated dashboard on sample data.", icon: Play }, ...asLinks("product")] },
+  { title: "Developers", links: asLinks("developers") },
 ];
+const QUICK: [string, string][] = [["Security", "/security"], ["FAQ", "/faq"], ["Contact", "/contact"]];
 
 /**
  * A floating pill. The hover indicator is one shared element that glides between items; Product and Developers open a
@@ -110,7 +112,7 @@ export function SiteHeader() {
             </Link>
             <Link href="/login" className={cn(buttonStyles({ variant: "ghost", size: "md" }), "hidden rounded-full sm:inline-flex")}>Sign in</Link>
             <Link href="/signup" className={cn(buttonStyles({ variant: "primary", size: "md" }), "rounded-full px-4")}>Create account</Link>
-            <MobileMenu groups={MENU} />
+            <MobileMenu groups={MENU} quick={QUICK} statusHref="/status" />
           </div>
         </div>
 

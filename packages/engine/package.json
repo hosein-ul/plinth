@@ -14,6 +14,7 @@
     "@plinth/blockchain": "workspace:*",
     "@plinth/db": "workspace:*",
     "@plinth/shared": "workspace:*",
+    "jose": "^6.2.12",
     "viem": "2.57.4"
   },
   "devDependencies": {
