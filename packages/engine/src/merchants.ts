@@ -106,13 +106,23 @@ export function buildSettlementPolicyTx(
   return { to: vaultAddress, data, note: "Sign and send from the vault owner wallet. Policies that forward funds take effect after the vault's configuration delay." };
 }
 
+/** The gate's reasons are written for operators. A merchant should read what they mean, not the name of an environment variable. */
+function readable(reason: string): string {
+  if (/ENABLED_NETWORKS/.test(reason)) return "Not switched on yet";
+  if (/no deployment record/.test(reason)) return "Contracts are not deployed on this network yet";
+  if (/ALLOW_MAINNET/.test(reason)) return "Mainnet stays off until it is explicitly approved";
+  if (/capabilities not verified/i.test(reason)) return "This network's USDC has not been verified yet";
+  if (/relayer policy/i.test(reason)) return "Mainnet needs a spending policy before it can run";
+  return reason;
+}
+
 export async function listNetworks(e: Engine, ctx: AuthContext) {
   const vaults = await e.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, ctx.merchantId));
   const live = [...e.chains.values()].map((c) => {
     const v = vaults.find((x) => x.networkId === c.network.id);
     return {
       id: c.network.id, chain_id: c.network.chainId, name: c.network.name, environment: c.network.environment,
-      operational: c.operational, not_operational_reasons: c.gateReasons, explorer_url: c.network.explorerUrl, public_rpc_urls: c.network.rpcUrls, chain_native: c.network.nativeCurrency,
+      operational: c.operational, not_operational_reasons: c.gateReasons.map(readable), explorer_url: c.network.explorerUrl, public_rpc_urls: c.network.rpcUrls, chain_native: c.network.nativeCurrency,
       native_currency: c.network.nativeCurrency.symbol, gas_model: c.network.gas.model,
       usdc: { address: c.network.usdc.address, decimals: 6 },
       payment_methods: { address: c.operational, wallet: c.operational && !!c.signer && c.network.authorization.receiveWithAuthorization && c.network.authorization.verified },
@@ -129,7 +139,7 @@ export async function listNetworks(e: Engine, ctx: AuthContext) {
     .filter((n) => !e.chains.has(n.id))
     .map((n) => ({
       id: n.id, chain_id: n.chainId, name: n.name, environment: n.environment,
-      operational: false, not_operational_reasons: operationalGate(n, undefined, { enabledNetworks: [], allowMainnet: false }).reasons, explorer_url: n.explorerUrl, public_rpc_urls: n.rpcUrls, chain_native: n.nativeCurrency,
+      operational: false, not_operational_reasons: operationalGate(n, undefined, { enabledNetworks: [], allowMainnet: false }).reasons.map(readable), explorer_url: n.explorerUrl, public_rpc_urls: n.rpcUrls, chain_native: n.nativeCurrency,
       native_currency: n.nativeCurrency.symbol, gas_model: n.gas.model,
       usdc: { address: n.usdc.address, decimals: 6 },
       payment_methods: { address: false, wallet: false },
