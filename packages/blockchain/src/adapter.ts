@@ -8,17 +8,17 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
-import type { Deployment, NetworkConfig } from "@plinth/shared";
-import { InvoiceFactoryAbi, MerchantVaultAbi, PaymentRouterAbi, VaultFactoryAbi } from "./abi/generated";
-import { computeInvoiceAddress } from "./invoice-address";
+import { destinationKindFromIndex, destinationKindIndex, type Deployment, type DestinationKind, type NetworkConfig } from "@plinth/shared";
+import { InvoiceDepositAbi, InvoiceFactoryAbi, MerchantVaultAbi, PaymentRouterAbi, VaultFactoryAbi } from "./abi/generated";
+import { computeInvoiceAddress, type InvoiceRoute } from "./invoice-address";
 import type { RouterPayment } from "./eip3009";
 
 const erc20Transfer = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const invoicePaidEvent = parseAbiItem(
-  "event InvoicePaid(bytes32 indexed invoiceId, bytes32 indexed merchantId, address indexed vault, address payer, uint256 amount, bytes32 nonce)",
+  "event InvoicePaid(bytes32 indexed invoiceId, bytes32 indexed merchantId, address indexed destination, uint8 kind, address payer, uint256 amount, uint256 fee, bytes32 nonce)",
 );
 const sweptEvent = parseAbiItem(
-  "event Swept(bytes32 indexed invoiceId, bytes32 indexed merchantId, address indexed vault, address token, uint256 amount)",
+  "event Swept(bytes32 indexed invoiceId, bytes32 indexed merchantId, address indexed destination, uint8 kind, address token, uint256 amount, uint256 fee)",
 );
 const erc20Abi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "a", type: "address" }], outputs: [{ type: "uint256" }] },
@@ -40,9 +40,14 @@ export interface ObservedTransfer {
 export interface ObservedRouterPayment {
   invoiceId: Hex;
   merchantId: Hex;
-  vault: Address;
+  /** The vault or merchant wallet that received the net amount. */
+  destination: Address;
+  kind: DestinationKind;
   payer: Address;
+  /** What the customer paid (before the fee). */
   amount: bigint;
+  /** What the treasury actually received. 0 when the fee was zero or skipped. */
+  fee: bigint;
   nonce: Hex;
   txHash: Hex;
   logIndex: number;
@@ -54,9 +59,14 @@ export interface ObservedRouterPayment {
 export interface ObservedSweep {
   invoiceId: Hex;
   merchantId: Hex;
-  vault: Address;
+  /** The vault or merchant wallet that received the net amount. */
+  destination: Address;
+  kind: DestinationKind;
   token: Address;
+  /** The whole swept balance (before the fee). */
   amount: bigint;
+  /** What the treasury actually received. 0 when the fee was zero or skipped. */
+  fee: bigint;
   /** The invoice clone that emitted the event. */
   emitter: Address;
   txHash: Hex;
@@ -91,6 +101,20 @@ export interface VaultState {
 }
 
 const MODES = ["BALANCE_IN_VAULT", "INSTANT_FORWARD", "THRESHOLD_OR_PERIODIC"] as const;
+
+/** Event args carry `kind` as a uint8; the rest of the code uses the string form. */
+function normaliseKind<T extends object>(args: T): T & { kind: DestinationKind } {
+  const kind = (args as { kind?: number | bigint }).kind;
+  return { ...args, kind: destinationKindFromIndex(Number(kind)) };
+}
+
+/** What the deployed implementation, factory and router report about themselves. */
+export interface DeploymentFacts {
+  implementation: { token: Address; chainId: number; version: number; treasury: Address; maxFeeBps: number };
+  factory: { implementation: Address; token: Address; vaults: Address; chainId: number; version: number; treasury: Address; maxFeeBps: number };
+  router: { token: Address; vaults: Address; treasury: Address; maxFeeBps: number };
+  treasuryHasCode: boolean;
+}
 
 /**
  * Network-agnostic surface the payment engine depends on. A Solana adapter would implement the same
@@ -196,7 +220,7 @@ export class EvmAdapter implements ChainAdapter {
       });
       for (const l of logs) {
         if (l.blockNumber === null || l.logIndex === null || l.transactionHash === null || l.blockHash === null) continue;
-        out.push({ ...l.args, txHash: l.transactionHash, logIndex: l.logIndex, blockNumber: l.blockNumber, blockHash: l.blockHash, emitter: getAddress(l.address) } as ObservedRouterPayment);
+        out.push({ ...normaliseKind(l.args as object), txHash: l.transactionHash, logIndex: l.logIndex, blockNumber: l.blockNumber, blockHash: l.blockHash, emitter: getAddress(l.address) } as ObservedRouterPayment);
       }
     }
     return out;
@@ -210,7 +234,7 @@ export class EvmAdapter implements ChainAdapter {
       const logs = await this.client.getLogs({ address: invoiceAddresses.slice(i, i + 100), event: sweptEvent, fromBlock: from, toBlock: to });
       for (const l of logs) {
         if (l.blockNumber === null || l.logIndex === null || l.transactionHash === null || l.blockHash === null) continue;
-        out.push({ ...l.args, emitter: getAddress(l.address), txHash: l.transactionHash, logIndex: l.logIndex, blockNumber: l.blockNumber, blockHash: l.blockHash } as ObservedSweep);
+        out.push({ ...normaliseKind(l.args as object), emitter: getAddress(l.address), txHash: l.transactionHash, logIndex: l.logIndex, blockNumber: l.blockNumber, blockHash: l.blockHash } as ObservedSweep);
       }
     }
     return out;
@@ -226,11 +250,11 @@ export class EvmAdapter implements ChainAdapter {
       try {
         if (isAddressEqual(l.address, this.deployment.paymentRouter)) {
           const d = decodeEventLog({ abi: [invoicePaidEvent], data: l.data, topics: l.topics as [Hex, ...Hex[]] });
-          payments.push({ ...(d.args as object), ...base } as ObservedRouterPayment);
+          payments.push({ ...normaliseKind(d.args as object), ...base } as ObservedRouterPayment);
           continue;
         }
         const d = decodeEventLog({ abi: [sweptEvent], data: l.data, topics: l.topics as [Hex, ...Hex[]] });
-        sweeps.push({ ...(d.args as object), ...base } as ObservedSweep);
+        sweeps.push({ ...normaliseKind(d.args as object), ...base } as ObservedSweep);
       } catch {
         /* unrelated log */
       }
@@ -290,17 +314,66 @@ export class EvmAdapter implements ChainAdapter {
     return !!code && code !== "0x";
   }
 
-  predictInvoiceAddress(vault: Address, merchantId: Hex, invoiceId: Hex): Address {
+  predictInvoiceAddress(route: InvoiceRoute, merchantId: Hex, invoiceId: Hex): Address {
     return computeInvoiceAddress({
       factory: this.deployment.invoiceFactory,
       implementation: this.deployment.invoiceImplementation,
       token: this.usdc,
-      vault,
+      treasury: this.deployment.treasury,
+      ...route,
       merchantId,
       invoiceId,
       chainId: this.network.chainId,
       version: this.deployment.version,
     });
+  }
+
+  /** The factory's own prediction, used to cross-check the offline derivation before showing an address. */
+  async predictInvoiceAddressOnChain(route: InvoiceRoute, merchantId: Hex, invoiceId: Hex): Promise<Address> {
+    return this.client.readContract({
+      address: this.deployment.invoiceFactory,
+      abi: InvoiceFactoryAbi,
+      functionName: "predict",
+      args: [merchantId, invoiceId, route.destination, destinationKindIndex(route.kind), route.feeBps],
+    });
+  }
+
+  /**
+   * Read what the deployed contracts say about themselves (token, chain, version, treasury, fee cap) so the
+   * engine and the deploy tooling can compare it with the registry and the deployment record.
+   */
+  async readDeploymentFacts(): Promise<DeploymentFacts> {
+    const d = this.deployment;
+    const call = <T,>(address: Address, abi: readonly unknown[], fn: string) =>
+      this.client.readContract({ address, abi: abi as never, functionName: fn as never }) as Promise<T>;
+    const [iToken, iChain, iVersion, iTreasury, iMax] = await Promise.all([
+      call<Address>(d.invoiceImplementation, InvoiceDepositAbi, "TOKEN"),
+      call<bigint>(d.invoiceImplementation, InvoiceDepositAbi, "CHAIN_ID"),
+      call<number>(d.invoiceImplementation, InvoiceDepositAbi, "VERSION"),
+      call<Address>(d.invoiceImplementation, InvoiceDepositAbi, "TREASURY"),
+      call<number>(d.invoiceImplementation, InvoiceDepositAbi, "MAX_FEE_BPS"),
+    ]);
+    const [fImpl, fToken, fVaults, fChain, fVersion, fTreasury, fMax] = await Promise.all([
+      call<Address>(d.invoiceFactory, InvoiceFactoryAbi, "IMPLEMENTATION"),
+      call<Address>(d.invoiceFactory, InvoiceFactoryAbi, "TOKEN"),
+      call<Address>(d.invoiceFactory, InvoiceFactoryAbi, "VAULTS"),
+      call<bigint>(d.invoiceFactory, InvoiceFactoryAbi, "CHAIN_ID"),
+      call<number>(d.invoiceFactory, InvoiceFactoryAbi, "VERSION"),
+      call<Address>(d.invoiceFactory, InvoiceFactoryAbi, "TREASURY"),
+      call<number>(d.invoiceFactory, InvoiceFactoryAbi, "MAX_FEE_BPS"),
+    ]);
+    const [rToken, rVaults, rTreasury, rMax] = await Promise.all([
+      call<Address>(d.paymentRouter, PaymentRouterAbi, "TOKEN"),
+      call<Address>(d.paymentRouter, PaymentRouterAbi, "VAULTS"),
+      call<Address>(d.paymentRouter, PaymentRouterAbi, "TREASURY"),
+      call<number>(d.paymentRouter, PaymentRouterAbi, "MAX_FEE_BPS"),
+    ]);
+    return {
+      implementation: { token: getAddress(iToken), chainId: Number(iChain), version: Number(iVersion), treasury: getAddress(iTreasury), maxFeeBps: Number(iMax) },
+      factory: { implementation: getAddress(fImpl), token: getAddress(fToken), vaults: getAddress(fVaults), chainId: Number(fChain), version: Number(fVersion), treasury: getAddress(fTreasury), maxFeeBps: Number(fMax) },
+      router: { token: getAddress(rToken), vaults: getAddress(rVaults), treasury: getAddress(rTreasury), maxFeeBps: Number(rMax) },
+      treasuryHasCode: await this.hasCode(getAddress(iTreasury)),
+    };
   }
 
   async predictVault(merchantId: Hex, owner: Address): Promise<Address> {
@@ -356,10 +429,14 @@ export class EvmAdapter implements ChainAdapter {
 
   // ------------------------------------------------------------------ calldata (relayer-submitted)
 
-  encodeDeployAndSweep(merchantId: Hex, invoiceId: Hex, vault: Address): { to: Address; data: Hex } {
+  encodeDeployAndSweep(merchantId: Hex, invoiceId: Hex, route: InvoiceRoute): { to: Address; data: Hex } {
     return {
       to: this.deployment.invoiceFactory,
-      data: encodeFunctionData({ abi: InvoiceFactoryAbi, functionName: "deployAndSweep", args: [merchantId, invoiceId, vault] }),
+      data: encodeFunctionData({
+        abi: InvoiceFactoryAbi,
+        functionName: "deployAndSweep",
+        args: [merchantId, invoiceId, route.destination, destinationKindIndex(route.kind), route.feeBps],
+      }),
     };
   }
 

@@ -309,6 +309,10 @@ export interface Deployment {
   invoiceImplementation: Address;
   invoiceFactory: Address;
   paymentRouter: Address;
+  /** Platform fee recipient baked into the implementation and the router (immutable). */
+  treasury: Address;
+  /** Immutable cap on any invoice's fee, in basis points. */
+  maxFeeBps: number;
   deployBlock: number;
   deployer: Address;
   /** Set only after bytecode on the target chain was compared with the audited build artifacts. */

@@ -751,39 +751,157 @@ export const VaultFactoryAbi = [
 
 export const InvoiceDepositAbi = [
   {
-    "type": "function",
-    "name": "config",
-    "inputs": [],
-    "outputs": [
+    "type": "constructor",
+    "inputs": [
       {
         "name": "token",
         "type": "address",
         "internalType": "contract IERC20"
       },
       {
-        "name": "vault",
+        "name": "treasury",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "merchantId",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "invoiceId",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "chainId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "maxFeeBps",
+        "type": "uint16",
+        "internalType": "uint16"
       },
       {
         "name": "version",
         "type": "uint16",
         "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "CHAIN_ID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_FEE_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TOKEN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IERC20"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TREASURY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "VERSION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "config",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "c",
+        "type": "tuple",
+        "internalType": "struct InvoiceDeposit.Config",
+        "components": [
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "contract IERC20"
+          },
+          {
+            "name": "destination",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "enum DestinationKind"
+          },
+          {
+            "name": "feeBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "treasury",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "maxFeeBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "merchantId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "invoiceId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "version",
+            "type": "uint16",
+            "internalType": "uint16"
+          }
+        ]
       }
     ],
     "stateMutability": "view"
@@ -826,6 +944,31 @@ export const InvoiceDepositAbi = [
   },
   {
     "type": "event",
+    "name": "FeeSkipped",
+    "inputs": [
+      {
+        "name": "invoiceId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "indexed": false,
+        "internalType": "uint16"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Swept",
     "inputs": [
       {
@@ -841,10 +984,16 @@ export const InvoiceDepositAbi = [
         "internalType": "bytes32"
       },
       {
-        "name": "vault",
+        "name": "destination",
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum DestinationKind"
       },
       {
         "name": "token",
@@ -854,6 +1003,12 @@ export const InvoiceDepositAbi = [
       },
       {
         "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "fee",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -893,12 +1048,28 @@ export const InvoiceDepositAbi = [
   },
   {
     "type": "error",
+    "name": "FeeTooHigh",
+    "inputs": [
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "maxFeeBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "NotAClone",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "NotVaultOwner",
+    "name": "NotRescueAuthority",
     "inputs": []
   },
   {
@@ -950,19 +1121,9 @@ export const InvoiceFactoryAbi = [
         "internalType": "address"
       },
       {
-        "name": "token",
-        "type": "address",
-        "internalType": "contract IERC20"
-      },
-      {
         "name": "vaults",
         "type": "address",
         "internalType": "contract VaultFactory"
-      },
-      {
-        "name": "version",
-        "type": "uint16",
-        "internalType": "uint16"
       }
     ],
     "stateMutability": "nonpayable"
@@ -995,6 +1156,19 @@ export const InvoiceFactoryAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_FEE_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "TOKEN",
     "inputs": [],
     "outputs": [
@@ -1002,6 +1176,19 @@ export const InvoiceFactoryAbi = [
         "name": "",
         "type": "address",
         "internalType": "contract IERC20"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TREASURY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -1047,9 +1234,19 @@ export const InvoiceFactoryAbi = [
         "internalType": "bytes32"
       },
       {
-        "name": "vault",
+        "name": "destination",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "enum DestinationKind"
+      },
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "outputs": [
@@ -1086,9 +1283,19 @@ export const InvoiceFactoryAbi = [
             "internalType": "bytes32"
           },
           {
-            "name": "vault",
+            "name": "destination",
             "type": "address",
             "internalType": "address"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "enum DestinationKind"
+          },
+          {
+            "name": "feeBps",
+            "type": "uint16",
+            "internalType": "uint16"
           }
         ]
       }
@@ -1117,9 +1324,19 @@ export const InvoiceFactoryAbi = [
         "internalType": "bytes32"
       },
       {
-        "name": "vault",
+        "name": "destination",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "enum DestinationKind"
+      },
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "outputs": [
@@ -1148,7 +1365,7 @@ export const InvoiceFactoryAbi = [
         "internalType": "bytes32"
       },
       {
-        "name": "vault",
+        "name": "destination",
         "type": "address",
         "indexed": true,
         "internalType": "address"
@@ -1158,6 +1375,18 @@ export const InvoiceFactoryAbi = [
         "type": "address",
         "indexed": false,
         "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum DestinationKind"
+      },
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "indexed": false,
+        "internalType": "uint16"
       }
     ],
     "anonymous": false
@@ -1179,6 +1408,27 @@ export const InvoiceFactoryAbi = [
   },
   {
     "type": "error",
+    "name": "FeeTooHigh",
+    "inputs": [
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "maxFeeBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ImplementationMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InsufficientBalance",
     "inputs": [
       {
@@ -1190,6 +1440,17 @@ export const InvoiceFactoryAbi = [
         "name": "needed",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidDestination",
+    "inputs": [
+      {
+        "name": "destination",
+        "type": "address",
+        "internalType": "address"
       }
     ]
   },
@@ -1245,9 +1506,32 @@ export const PaymentRouterAbi = [
         "name": "vaults",
         "type": "address",
         "internalType": "contract VaultFactory"
+      },
+      {
+        "name": "treasury",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "maxFeeBps",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "MAX_FEE_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1271,6 +1555,19 @@ export const PaymentRouterAbi = [
         "name": "",
         "type": "address",
         "internalType": "contract IFiatToken"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TREASURY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -1303,9 +1600,19 @@ export const PaymentRouterAbi = [
             "internalType": "address"
           },
           {
-            "name": "vault",
+            "name": "destination",
             "type": "address",
             "internalType": "address"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "enum DestinationKind"
+          },
+          {
+            "name": "feeBps",
+            "type": "uint16",
+            "internalType": "uint16"
           },
           {
             "name": "merchantId",
@@ -1373,9 +1680,19 @@ export const PaymentRouterAbi = [
             "internalType": "address"
           },
           {
-            "name": "vault",
+            "name": "destination",
             "type": "address",
             "internalType": "address"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "enum DestinationKind"
+          },
+          {
+            "name": "feeBps",
+            "type": "uint16",
+            "internalType": "uint16"
           },
           {
             "name": "merchantId",
@@ -1421,6 +1738,31 @@ export const PaymentRouterAbi = [
   },
   {
     "type": "event",
+    "name": "FeeSkipped",
+    "inputs": [
+      {
+        "name": "invoiceId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "indexed": false,
+        "internalType": "uint16"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "InvoicePaid",
     "inputs": [
       {
@@ -1436,10 +1778,16 @@ export const PaymentRouterAbi = [
         "internalType": "bytes32"
       },
       {
-        "name": "vault",
+        "name": "destination",
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum DestinationKind"
       },
       {
         "name": "payer",
@@ -1454,6 +1802,12 @@ export const PaymentRouterAbi = [
         "internalType": "uint256"
       },
       {
+        "name": "fee",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
         "name": "nonce",
         "type": "bytes32",
         "indexed": false,
@@ -1461,6 +1815,33 @@ export const PaymentRouterAbi = [
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "FeeTooHigh",
+    "inputs": [
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "maxFeeBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidDestination",
+    "inputs": [
+      {
+        "name": "destination",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",
@@ -1477,6 +1858,11 @@ export const PaymentRouterAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "TokenMismatch",
+    "inputs": []
   },
   {
     "type": "error",
@@ -1650,6 +2036,19 @@ export const MockFiatTokenAbi = [
   },
   {
     "type": "function",
+    "name": "blacklist",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "decimals",
     "inputs": [],
     "outputs": [
@@ -1660,6 +2059,25 @@ export const MockFiatTokenAbi = [
       }
     ],
     "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "isBlacklisted",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1872,6 +2290,19 @@ export const MockFiatTokenAbi = [
         "name": "s",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "unBlacklist",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],

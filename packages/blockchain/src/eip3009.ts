@@ -8,12 +8,16 @@ import {
 } from "viem";
 import type { NetworkConfig } from "@plinth/shared";
 
-/** keccak256("Plinth.PaymentRouter.v1") — PaymentRouter.NONCE_TAG. */
-export const ROUTER_NONCE_TAG = keccak256(toBytes("Plinth.PaymentRouter.v1"));
+/** keccak256("Plinth.PaymentRouter.v2") — PaymentRouter.NONCE_TAG. */
+export const ROUTER_NONCE_TAG = keccak256(toBytes("Plinth.PaymentRouter.v2"));
 
 export interface RouterPayment {
   from: Address;
-  vault: Address;
+  /** The merchant's vault (kind 0) or wallet (kind 1). */
+  destination: Address;
+  /** DestinationKind index: 0 = VAULT, 1 = DIRECT. */
+  kind: number;
+  feeBps: number;
   merchantId: Hex;
   invoiceId: Hex;
   value: bigint;
@@ -22,8 +26,11 @@ export interface RouterPayment {
   salt: Hex;
 }
 
-/** Offline mirror of PaymentRouter.paymentNonce(). */
-export function paymentNonce(chainId: number, router: Address, p: RouterPayment): Hex {
+/**
+ * Offline mirror of PaymentRouter.paymentNonce(). The nonce binds the chain, the router, the invoice,
+ * the merchant, the destination, its kind, the treasury, the fee, the payer, the amount and a salt.
+ */
+export function paymentNonce(chainId: number, router: Address, treasury: Address, p: RouterPayment): Hex {
   return keccak256(
     encodeAbiParameters(
       [
@@ -33,11 +40,14 @@ export function paymentNonce(chainId: number, router: Address, p: RouterPayment)
         { type: "bytes32" },
         { type: "bytes32" },
         { type: "address" },
+        { type: "uint8" },
+        { type: "address" },
+        { type: "uint16" },
         { type: "address" },
         { type: "uint256" },
         { type: "bytes32" },
       ],
-      [ROUTER_NONCE_TAG, BigInt(chainId), router, p.invoiceId, p.merchantId, p.vault, p.from, p.value, p.salt],
+      [ROUTER_NONCE_TAG, BigInt(chainId), router, p.invoiceId, p.merchantId, p.destination, p.kind, treasury, p.feeBps, p.from, p.value, p.salt],
     ),
   );
 }
@@ -54,8 +64,8 @@ export const receiveWithAuthorizationTypes = {
 } as const;
 
 /** Exact EIP-712 payload the customer's wallet signs. `to` is always the PaymentRouter. */
-export function buildReceiveAuthorization(net: NetworkConfig, router: Address, p: RouterPayment) {
-  const nonce = paymentNonce(net.chainId, router, p);
+export function buildReceiveAuthorization(net: NetworkConfig, router: Address, treasury: Address, p: RouterPayment) {
+  const nonce = paymentNonce(net.chainId, router, treasury, p);
   return {
     domain: {
       name: net.usdc.eip712.name,

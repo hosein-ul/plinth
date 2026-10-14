@@ -15,8 +15,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createPublicClient, getAddress, http, keccak256, type Address, type Hex } from "viem";
-import { NETWORKS, type Deployment, type NetworkId } from "@plinth/shared";
-import { computeInvoiceAddress, deploymentsDir, InvoiceFactoryAbi, loadArtifact, maskImmutables, PaymentRouterAbi, resolveRpcUrls, VaultFactoryAbi } from "@plinth/blockchain";
+import { destinationKindIndex, MAX_FEE_BPS, NETWORKS, treasuryFor, type Deployment, type NetworkId } from "@plinth/shared";
+import { computeInvoiceAddress, deploymentsDir, InvoiceDepositAbi, InvoiceFactoryAbi, loadArtifact, maskImmutables, PaymentRouterAbi, resolveRpcUrls, VaultFactoryAbi } from "@plinth/blockchain";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce<[string, string][]>((a, v, i, all) => (v.startsWith("--") ? [...a, [v.slice(2), all[i + 1] ?? "true"]] : a), []));
 const networkId = args.network;
@@ -69,11 +69,32 @@ ok(eq(await read<string>(raw.vaultFactory as Address, VaultFactoryAbi, "TOKEN"),
 ok(eq(await read<string>(raw.paymentRouter as Address, PaymentRouterAbi, "TOKEN"), usdc), "PaymentRouter.TOKEN = official USDC");
 ok(eq(await read<string>(raw.paymentRouter as Address, PaymentRouterAbi, "VAULTS"), String(raw.vaultFactory)), "PaymentRouter.VAULTS = VaultFactory");
 
-// Backend offline derivation must equal the deployed factory's prediction.
-const sample = { merchantId: keccak256("0x01"), invoiceId: keccak256("0x02"), vault: getAddress("0x00000000000000000000000000000000000000aa") };
-const onchainPredict = await client.readContract({ address: raw.invoiceFactory as Address, abi: InvoiceFactoryAbi, functionName: "predict", args: [sample.merchantId, sample.invoiceId, sample.vault] });
-const offline = computeInvoiceAddress({ factory: raw.invoiceFactory as Address, implementation: raw.invoiceImplementation as Address, token: usdc, ...sample, chainId, version: Number(raw.version) });
-ok(eq(onchainPredict, offline), `offline CREATE2 derivation equals InvoiceFactory.predict() (${offline})`);
+// Fee wiring: treasury and fee cap must be what the configuration says, and identical in implementation, factory and router.
+const expectedTreasury = treasuryFor(String(networkId));
+const impl = raw.invoiceImplementation as Address;
+const factory = raw.invoiceFactory as Address;
+const router = raw.paymentRouter as Address;
+const implTreasury = await read<string>(impl, InvoiceDepositAbi, "TREASURY");
+const implMax = Number(await read<number>(impl, InvoiceDepositAbi, "MAX_FEE_BPS"));
+ok(eq(implTreasury, expectedTreasury), `InvoiceDeposit.TREASURY = configured treasury for ${networkId} (${expectedTreasury})`);
+ok(eq(await read<string>(factory, InvoiceFactoryAbi, "TREASURY"), expectedTreasury), "InvoiceFactory.TREASURY = configured treasury");
+ok(eq(await read<string>(router, PaymentRouterAbi, "TREASURY"), expectedTreasury), "PaymentRouter.TREASURY = configured treasury");
+ok(implMax === MAX_FEE_BPS, `InvoiceDeposit.MAX_FEE_BPS = ${MAX_FEE_BPS} (the platform cap)`);
+ok(Number(await read<number>(factory, InvoiceFactoryAbi, "MAX_FEE_BPS")) === implMax && Number(await read<number>(router, PaymentRouterAbi, "MAX_FEE_BPS")) === implMax, "factory and router carry the same fee cap");
+ok(eq(await read<string>(impl, InvoiceDepositAbi, "TOKEN"), usdc), "InvoiceDeposit.TOKEN = official USDC");
+ok(Number(await read<bigint>(impl, InvoiceDepositAbi, "CHAIN_ID")) === chainId && Number(await read<number>(impl, InvoiceDepositAbi, "VERSION")) === Number(raw.version), "InvoiceDeposit chain id and version match the record");
+const treasuryCode = (await client.getCode({ address: expectedTreasury })) ?? "0x";
+const treasuryHasCode = treasuryCode !== "0x";
+if (treasuryHasCode) console.warn(`  WARN  the treasury ${expectedTreasury} has contract code on ${networkId}. It is assumed to be a plain EOA: confirm it can receive USDC before opening this network.`);
+else console.log("  PASS  the treasury is a plain account (no code) on this chain");
+
+// Backend offline derivation must equal the deployed factory's prediction, in both modes.
+const sample = { merchantId: keccak256("0x01"), invoiceId: keccak256("0x02"), destination: getAddress("0x00000000000000000000000000000000000000aa"), feeBps: 20 };
+for (const kind of ["VAULT", "DIRECT"] as const) {
+  const onchainPredict = await client.readContract({ address: factory, abi: InvoiceFactoryAbi, functionName: "predict", args: [sample.merchantId, sample.invoiceId, sample.destination, destinationKindIndex(kind), sample.feeBps] });
+  const offline = computeInvoiceAddress({ factory, implementation: impl, token: usdc, treasury: expectedTreasury, ...sample, kind, chainId, version: Number(raw.version) });
+  ok(eq(onchainPredict, offline), `offline CREATE2 derivation equals InvoiceFactory.predict() for ${kind} (${offline})`);
+}
 
 if (problems.length) {
   console.error(`\n${problems.length} check(s) failed. Nothing was recorded.`);
@@ -84,9 +105,11 @@ const out: Deployment & Record<string, unknown> = {
   networkId, chainId, version: Number(raw.version),
   vaultFactory: getAddress(String(raw.vaultFactory)), invoiceImplementation: getAddress(String(raw.invoiceImplementation)),
   invoiceFactory: getAddress(String(raw.invoiceFactory)), paymentRouter: getAddress(String(raw.paymentRouter)),
+  treasury: getAddress(expectedTreasury), maxFeeBps: implMax,
   deployBlock: Number(raw.deployBlock), deployer: getAddress(String(raw.deployer)),
   bytecodeVerified: true, productionApproved: false,
   vaultConfigDelaySeconds: Number(process.env.VAULT_CONFIG_DELAY_SECONDS ?? 86_400),
+  treasuryHasCode,
   verifiedAt: new Date().toISOString(),
   artifactHashes: Object.fromEntries(contracts.map(([n]) => [n, loadArtifact(n).deployedCodeHash])),
 };

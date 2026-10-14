@@ -17,6 +17,7 @@
     "worker": "pnpm --filter @plinth/worker start",
     "web": "pnpm --filter @plinth/web dev",
     "verify:networks": "tsx scripts/verify-networks.ts",
+    "treasury": "tsx scripts/treasury.ts",
     "finalize:deployment": "tsx scripts/finalize-deployment.ts",
     "approve:deployment": "tsx scripts/approve-deployment.ts",
     "abis": "node scripts/export-abis.mjs",

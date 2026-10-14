@@ -1,42 +1,50 @@
 import {
   concat,
   encodeAbiParameters,
+  encodePacked,
   getCreate2Address,
   keccak256,
   toHex,
   type Address,
   type Hex,
 } from "viem";
+import { destinationKindIndex, type DestinationKind } from "@plinth/shared";
 
-export interface InvoiceAddressInput {
+/** Where the swept funds go and what the platform takes: everything the address commits to besides the ids. */
+export interface InvoiceRoute {
+  /** The merchant's vault (VAULT) or the merchant's own wallet (DIRECT). */
+  destination: Address;
+  kind: DestinationKind;
+  /** Platform fee in basis points, committed in the address. */
+  feeBps: number;
+}
+
+export interface InvoiceAddressInput extends InvoiceRoute {
   /** InvoiceFactory address on the target chain (the CREATE2 deployer). */
   factory: Address;
   /** InvoiceDeposit implementation the factory clones. */
   implementation: Address;
   token: Address;
-  vault: Address;
+  /** Fee recipient: an immutable of the implementation, committed in the salt. */
+  treasury: Address;
   merchantId: Hex; // bytes32
   invoiceId: Hex; // bytes32
   chainId: number;
   version: number;
 }
 
-/** abi.encode(token, vault, merchantId, invoiceId, chainId, version) — the clone's immutable args. */
+/** Length of the clone's immutable args: destination(20) | feeBps(2) | kind(1) | merchantId(32) | invoiceId(32). */
+export const INVOICE_ARGS_LENGTH = 87;
+
+/** abi.encodePacked(destination, feeBps, kind, merchantId, invoiceId) — the clone's immutable args. */
 export function invoiceCloneArgs(i: InvoiceAddressInput): Hex {
-  return encodeAbiParameters(
-    [
-      { type: "address" },
-      { type: "address" },
-      { type: "bytes32" },
-      { type: "bytes32" },
-      { type: "uint256" },
-      { type: "uint16" },
-    ],
-    [i.token, i.vault, i.merchantId, i.invoiceId, BigInt(i.chainId), i.version],
+  return encodePacked(
+    ["address", "uint16", "uint8", "bytes32", "bytes32"],
+    [i.destination, i.feeBps, destinationKindIndex(i.kind), i.merchantId, i.invoiceId],
   );
 }
 
-/** keccak256(abi.encode(merchantId, invoiceId, vault, token, chainId, version)) — InvoiceFactory._salt. */
+/** keccak256(abi.encode(merchantId, invoiceId, destination, kind, feeBps, token, treasury, chainId, version)) — InvoiceFactory._salt. */
 export function invoiceSalt(i: InvoiceAddressInput): Hex {
   return keccak256(
     encodeAbiParameters(
@@ -44,11 +52,14 @@ export function invoiceSalt(i: InvoiceAddressInput): Hex {
         { type: "bytes32" },
         { type: "bytes32" },
         { type: "address" },
+        { type: "uint8" },
+        { type: "uint16" },
+        { type: "address" },
         { type: "address" },
         { type: "uint256" },
         { type: "uint16" },
       ],
-      [i.merchantId, i.invoiceId, i.vault, i.token, BigInt(i.chainId), i.version],
+      [i.merchantId, i.invoiceId, i.destination, destinationKindIndex(i.kind), i.feeBps, i.token, i.treasury, BigInt(i.chainId), i.version],
     ),
   );
 }

@@ -35,8 +35,10 @@ export interface DevChain {
   deployment: Deployment;
   publicClient: PublicClient;
   walletFor(index: number): WalletClient;
-  /** Accounts: 0 deployer, 1 relayer, 2 merchant owner, 3 customer, 4 second merchant owner. */
+  /** Accounts: 0 deployer, 1 relayer, 2 merchant owner, 3 customer, 4 second merchant owner, 9 treasury. */
   accounts: ReturnType<typeof anvilAccount>[];
+  /** Platform fee recipient (account 9) baked into the dev implementation and router. */
+  treasury: Address;
   usdc: Address;
   mine(blocks?: number): Promise<void>;
   setTime(unixSeconds: number): Promise<void>;
@@ -54,6 +56,8 @@ export interface StartOptions {
   confirmations?: number;
   blockTimeSeconds?: number;
   vaultConfigDelaySeconds?: number;
+  /** Immutable fee cap of the dev deployment (default 100 = 1%). */
+  maxFeeBps?: number;
 }
 
 export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> {
@@ -103,10 +107,12 @@ export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> 
 
   const usdc = await deploy("MockFiatToken");
   const vaultFactory = await deploy("VaultFactory", [usdc]);
-  const invoiceImplementation = await deploy("InvoiceDeposit");
-  const version = 1;
-  const invoiceFactory = await deploy("InvoiceFactory", [invoiceImplementation, usdc, vaultFactory, version]);
-  const paymentRouter = await deploy("PaymentRouter", [usdc, vaultFactory]);
+  const treasury = accounts[9]!.address;
+  const maxFeeBps = opts.maxFeeBps ?? 100;
+  const version = 2;
+  const invoiceImplementation = await deploy("InvoiceDeposit", [usdc, treasury, maxFeeBps, version]);
+  const invoiceFactory = await deploy("InvoiceFactory", [invoiceImplementation, vaultFactory]);
+  const paymentRouter = await deploy("PaymentRouter", [usdc, vaultFactory, treasury, maxFeeBps]);
   const head = await publicClient.getBlockNumber();
 
   const network: NetworkConfig = {
@@ -138,6 +144,8 @@ export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> 
     invoiceImplementation,
     invoiceFactory,
     paymentRouter,
+    treasury,
+    maxFeeBps,
     deployBlock: Number(head),
     deployer: accounts[0]!.address,
     bytecodeVerified: true,
@@ -155,6 +163,7 @@ export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> 
     publicClient,
     walletFor,
     accounts,
+    treasury,
     usdc,
     mine: async (blocks = 1) => {
       await rpc("anvil_mine", [`0x${blocks.toString(16)}`]);
