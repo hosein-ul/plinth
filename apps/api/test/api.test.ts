@@ -132,6 +132,66 @@ describe("verified email over HTTP", () => {
   });
 });
 
+describe("payout methods over HTTP", () => {
+  const PASSWORD = "a-very-long-passphrase-123";
+  const payee = () => h.chain.accounts[6]!;
+
+  it("wallet proof, fresh sign-in, emailed link, then new payments go straight to the wallet; and back to the vault", async () => {
+    const before = await call("GET", "/v1/payout-methods", { token: session });
+    expect(before.status).toBe(200);
+    const row = before.body.data.find((n: any) => n.network === h.net);
+    expect(row).toMatchObject({ mode: "VAULT", status: "ACTIVE", fee: { bps: 20, percent: "0.2%" }, pending: null });
+    expect((await call("GET", "/v1/payout-methods", { token: apiKey })).status).toBe(200); // read-only for API keys
+
+    // session-only, and wallet rights
+    expect((await call("POST", "/v1/payout-methods/challenge", { token: apiKey, body: { network: h.net, address: payee().address, purpose: "PAYOUT_WALLET" } })).status).toBe(403);
+    const ch = await call("POST", "/v1/payout-methods/challenge", { token: session, body: { network: h.net, address: payee().address, purpose: "PAYOUT_WALLET" } });
+    expect(ch.status).toBe(200);
+    expect(ch.body.message).toContain("wants you to sign in with your Ethereum account");
+
+    const signature = await payee().signMessage({ message: ch.body.message });
+    const noReauth = await call("POST", "/v1/payout-methods/wallet", { token: session, body: { network: h.net, address: payee().address, nonce: ch.body.nonce, signature } });
+    expect(noReauth.status).toBe(400);
+    const wrong = await call("POST", "/v1/payout-methods/wallet", { token: session, body: { network: h.net, address: payee().address, nonce: ch.body.nonce, signature, reauth: { password: "not-the-password-123" } } });
+    expect(wrong.body.error.code).toBe("REAUTH_FAILED");
+    const asked = await call("POST", "/v1/payout-methods/wallet", { token: session, body: { network: h.net, address: payee().address, nonce: ch.body.nonce, signature, reauth: { password: PASSWORD } } });
+    expect(asked.status).toBe(201);
+    expect(asked.body).toMatchObject({ mode: "DIRECT", status: "PENDING_CONFIRMATION" });
+
+    // still the vault until the link is used
+    const pi0 = await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "2.00" } });
+    expect((await call("GET", `/v1/payments/${pi0.body.id}`, { token: session })).body.payout_routes[0].mode).toBe("VAULT");
+
+    const token = new URL(h.mail.linkTo("owner@acme.test")!).searchParams.get("token")!;
+    expect((await call("POST", "/public/payout/confirm", { body: { token } })).body).toMatchObject({ status: "ACTIVE", mode: "DIRECT" });
+    expect((await call("POST", "/public/payout/confirm", { body: { token } })).status).toBe(410);
+
+    const pi1 = await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "2.00" } });
+    const detail = await call("GET", `/v1/payments/${pi1.body.id}`, { token: session });
+    expect(detail.body.payout_routes[0]).toMatchObject({ mode: "DIRECT", destination: payee().address, fee_bps: 20 });
+    expect((await call("GET", "/v1/payout-methods/history", { token: session })).body.data[0]).toMatchObject({ mode: "DIRECT", status: "ACTIVE" });
+
+    // back to the vault
+    const wrongBack = await call("POST", "/v1/payout-methods/vault", { token: session, body: { network: h.net, reauth: { password: "not-the-password-123" } } });
+    expect(wrongBack.status).toBe(403);
+    expect((await call("POST", "/v1/payout-methods/vault", { token: session, body: { network: h.net, reauth: { password: PASSWORD } } })).body).toMatchObject({ mode: "VAULT", status: "ACTIVE" });
+    const pi2 = await call("POST", "/v1/payment-intents", { token: apiKey, body: { amount: "2.00" } });
+    expect((await call("GET", `/v1/payments/${pi2.body.id}`, { token: session })).body.payout_routes[0].mode).toBe("VAULT");
+  });
+
+  it("the operator can give a merchant its own fee within the cap; merchants cannot", async () => {
+    const me = await call("GET", "/v1/me", { token: session });
+    const mid = me.body.merchant.id;
+    expect((await call("POST", `/admin/merchants/${mid}/fee`, { token: session, body: { fee_bps: 10 } })).status).toBe(401);
+    const adm = { "x-admin-token": "op-secret-token" };
+    expect((await call("POST", `/admin/merchants/${mid}/fee`, { headers: adm, body: { fee_bps: 101 } })).status).toBe(400);
+    expect((await call("POST", `/admin/merchants/${mid}/fee`, { headers: adm, body: { fee_bps: 10 } })).body).toMatchObject({ fee_bps: 10, effective_bps: 10 });
+    const nets = await call("GET", "/v1/networks", { token: session });
+    expect(nets.body.data.find((n: any) => n.id === h.net).fee).toMatchObject({ bps: 10, percent: "0.1%" });
+    expect((await call("POST", `/admin/merchants/${mid}/fee`, { headers: adm, body: { fee_bps: null } })).body).toMatchObject({ fee_bps: null, effective_bps: 20 });
+  });
+});
+
 describe("payment intents over HTTP", () => {
   let piId: string;
   it("validates input with field-level errors", async () => {

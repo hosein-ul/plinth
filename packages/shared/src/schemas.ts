@@ -92,6 +92,8 @@ export const enableNetworkSchema = z.object({
   network: networkIdSchema,
   /** The merchant's own address that will own the vault (use a multisig in production). */
   owner_address: addressSchema,
+  /** Proof that the owner wallet signed the challenge from POST /v1/payout-methods/challenge (purpose VAULT_OWNER). Required in production. */
+  proof: z.object({ nonce: z.string().min(16).max(64), signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/, "Expected a 65-byte hex signature") }).optional(),
 });
 
 export const signupSchema = z.object({
@@ -104,6 +106,12 @@ export const web3authSchema = z.object({ id_token: z.string().min(20).max(8000),
 export const reauthSchema = z
   .object({ password: z.string().min(1).max(200).optional(), id_token: z.string().min(20).max(8000).optional() })
   .refine((r) => !!r.password || !!r.id_token, "Provide the password, or a fresh sign-in token");
+const signatureSchema = z.string().regex(/^0x[0-9a-fA-F]{130}$/, "Expected a 65-byte hex signature");
+export const payoutChallengeSchema = z.object({ network: networkIdSchema, address: addressSchema, purpose: z.enum(["PAYOUT_WALLET", "VAULT_OWNER"]) });
+export const payoutWalletSchema = z.object({ network: networkIdSchema, address: addressSchema, nonce: z.string().min(16).max(64), signature: signatureSchema, reauth: reauthSchema });
+export const payoutVaultSchema = z.object({ network: networkIdSchema, reauth: reauthSchema });
+export const payoutConfirmSchema = z.object({ token: z.string().min(20).max(200) });
+export const merchantFeeSchema = z.object({ fee_bps: z.number().int().min(0).max(100).nullable() });
 export const emailChangeSchema = z.object({ email: z.string().trim().email().max(320), reauth: reauthSchema });
 export const emailConfirmSchema = z.object({ token: z.string().min(20).max(200) });
 export const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(200) });

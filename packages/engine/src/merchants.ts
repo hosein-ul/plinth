@@ -1,5 +1,5 @@
 import { and, eq, schema } from "@plinth/db";
-import { formatFeePercent, MAX_FEE_BPS, NETWORKS, newId, operationalGate, toBytes32Id, treasuryFor } from "@plinth/shared";
+import { assertValidFeeBps, formatFeePercent, MAX_FEE_BPS, NETWORKS, newId, operationalGate, toBytes32Id, treasuryFor } from "@plinth/shared";
 import { encodeFunctionData, getAddress, type Address } from "viem";
 import { MerchantVaultAbi } from "@plinth/blockchain";
 import { audit } from "./audit";
@@ -173,4 +173,16 @@ export async function updateMerchantSettings(e: Engine, ctx: AuthContext, patch:
   });
   const [m] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, ctx.merchantId));
   return { id: m!.id, name: m!.name, underpayment_tolerance_bps: m!.underpaymentToleranceBps, overpayment_policy: m!.overpaymentPolicy, default_expiry_seconds: m!.defaultExpirySeconds };
+}
+
+/** Operator action: give one merchant their own fee (basis points, never above the platform cap) or clear it. */
+export async function setMerchantFee(e: Engine, merchantId: string, feeBps: number | null, actor: { id?: string }) {
+  if (feeBps !== null) assertValidFeeBps(feeBps, MAX_FEE_BPS);
+  const [m] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, merchantId));
+  if (!m) throw new EngineError("NOT_FOUND", "Merchant not found", 404);
+  await e.db.transaction(async (tx) => {
+    await tx.update(schema.merchants).set({ feeBps }).where(eq(schema.merchants.id, merchantId));
+    await audit(tx, { merchantId, actor: { type: "USER", id: actor.id }, action: "merchant.fee_changed", targetType: "merchant", targetId: merchantId, data: { from: m.feeBps, to: feeBps } });
+  });
+  return { merchant_id: merchantId, fee_bps: feeBps, effective_bps: feeBps ?? e.cfg.platformFeeBps, applies_to: "invoices created from now on; issued addresses keep their fee" };
 }

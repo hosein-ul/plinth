@@ -3,7 +3,7 @@ import { getAddress, type Hex } from "viem";
 import { and, eq, schema, sql } from "@plinth/db";
 import {
   createApiKeySchema, createInvoiceSchema, createPaymentIntentSchema, createPaymentLinkSchema, createRefundRequestSchema, createWebhookEndpointSchema,
-  emailChangeSchema, emailConfirmSchema, enableNetworkSchema, loginSchema, web3authSchema, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
+  emailChangeSchema, emailConfirmSchema, enableNetworkSchema, loginSchema, merchantFeeSchema, payoutChallengeSchema, payoutConfirmSchema, payoutVaultSchema, payoutWalletSchema, web3authSchema, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
 } from "@plinth/shared";
 import * as E from "@plinth/engine";
 import type { Engine } from "@plinth/engine";
@@ -204,6 +204,41 @@ export function buildRoutes(e: Engine): RouteDef[] {
       handler: async ({ params, auth }) => { const a = A(auth); E.requirePermission(a, "developers"); await E.retryDelivery(e, a.merchantId, params.id!); return { id: params.id, status: "RETRYING" }; },
     }),
 
+    // ------------------------------------------------------------------ payout methods
+    route({
+      method: "GET", path: "/v1/payout-methods", tag: "Payout methods", summary: "How you are paid on each network", auth: "merchant",
+      description: "Per network: the mode in use (`VAULT` or `DIRECT`), where the money goes, the platform fee and treasury, the vault, and any change that is waiting for its email link or its cooldown.",
+      handler: async ({ auth }) => list(await E.listPayoutMethods(e, A(auth))),
+    }),
+    route({
+      method: "GET", path: "/v1/payout-methods/history", tag: "Payout methods", summary: "Every payout change you requested", auth: "merchant", query: z.object({ limit: limitQ }),
+      handler: async ({ auth, query }) => list(await E.listPayoutHistory(e, A(auth), query.limit)),
+    }),
+    route({
+      method: "POST", path: "/v1/payout-methods/challenge", tag: "Payout methods", summary: "Get the message a wallet must sign to prove control", auth: "session", body: payoutChallengeSchema, rateLimit: 20,
+      description: "Returns a Sign-In with Ethereum (EIP-4361) message that expires in ten minutes. The wallet signs it with `personal_sign`; the signature is single use. Plain wallets (EOAs) only; smart-contract wallets are not supported in this version.",
+      handler: async ({ auth, body }) => E.createPayoutChallenge(e, A(auth), body),
+    }),
+    route({
+      method: "POST", path: "/v1/payout-methods/wallet", tag: "Payout methods", summary: "Ask to be paid directly to your own wallet", auth: "session", body: payoutWalletSchema, rateLimit: 10, successStatus: 201,
+      description: "Needs a verified email, the signed challenge, and a fresh sign-in (`reauth`). The change only starts after you open the link emailed to you, plus the cooldown. Invoices that already have an address keep the destination they were issued with.",
+      handler: async ({ auth, body }) => E.requestPayoutWallet(e, A(auth), body),
+    }),
+    route({
+      method: "POST", path: "/v1/payout-methods/vault", tag: "Payout methods", summary: "Go back to being paid into your vault", auth: "session", body: payoutVaultSchema, rateLimit: 10,
+      description: "Applies immediately to new invoices. Needs a fresh sign-in.",
+      handler: async ({ auth, body }) => E.switchToVault(e, A(auth), body),
+    }),
+    route({
+      method: "POST", path: "/v1/payout-methods/:id/cancel", tag: "Payout methods", summary: "Cancel a pending or cooling-down payout change", auth: "session",
+      handler: async ({ auth, params }) => E.cancelPendingPayout(e, A(auth), { id: params.id! }),
+    }),
+    route({
+      method: "POST", path: "/public/payout/confirm", tag: "Payout methods", summary: "Use the link from a payout confirmation email", auth: "none", body: payoutConfirmSchema, rateLimit: 20,
+      description: "Single use. The web app opens this from `/confirm-payout?token=…`. Starts the cooldown.",
+      handler: async ({ body }) => E.confirmPayoutLink(e, body.token),
+    }),
+
     // ------------------------------------------------------------------ vaults & settlement policy
     route({
       method: "POST", path: "/v1/vaults", tag: "Vaults & settlement", summary: "Enable a network: create your settlement vault", auth: "merchant", body: enableNetworkSchema, idempotent: true, successStatus: 201,
@@ -268,6 +303,11 @@ export function buildRoutes(e: Engine): RouteDef[] {
     route({ method: "POST", path: "/public/links/:slug/checkout", tag: "Checkout", summary: "Open a payment link: creates a fresh payment", auth: "none", rateLimit: 20, successStatus: 201, handler: async ({ params }) => E.createIntentFromLink(e, params.slug!) }),
 
     // ------------------------------------------------------------------ operator
+    route({
+      method: "POST", path: "/admin/merchants/:id/fee", tag: "Operator", summary: "Set or clear one merchant's platform fee", auth: "admin", body: merchantFeeSchema,
+      description: "Basis points, 0 to 100 (the on-chain cap). `null` returns the merchant to the platform default. Applies to invoices created afterwards.",
+      handler: async ({ params, body }) => E.setMerchantFee(e, params.id!, body.fee_bps, { id: "admin" }),
+    }),
     route({ method: "GET", path: "/admin/relayer", tag: "Operator", summary: "Relayer queue, balances and spend per network", auth: "admin", handler: async () => list(await E.relayerStatus(e)) }),
     route({
       method: "POST", path: "/admin/relayer/:network/pause", tag: "Operator", summary: "Emergency stop: disable NEW relayer actions", auth: "admin", body: z.object({ reason: z.string().min(3).max(300) }),
