@@ -1,0 +1,10 @@
+name = "plinth-keepalive"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+# Render's free web service sleeps after 15 idle minutes. This pings it every 5 so the API and its worker stay awake.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+TARGET = "https://plinth-api.onrender.com/readyz"
