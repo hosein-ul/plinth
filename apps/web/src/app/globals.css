@@ -329,3 +329,8 @@ main:has([data-joins-footer]) + .site-footer.grid-ink::before { display: none; }
   .scene-anim, .scene-anim * { animation-name: none !important; }
   .scene-anim [style*="perspective"] { perspective: none !important; }
 }
+
+/* hero glass: a slow drift so the ribbon feels alive; compositor-only, off for reduced motion */
+@keyframes hero-glass-drift { from { transform: translate3d(0, 0, 0) scale(1.02); } to { transform: translate3d(-1.2%, -1.6%, 0) scale(1.06); } }
+.hero-glass-drift { animation: hero-glass-drift 22s ease-in-out infinite alternate; will-change: transform; }
+@media (prefers-reduced-motion: reduce) { .hero-glass-drift { animation: none; } }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, FlaskConical, Lock, ShieldAlert } from "lucide-react";
 import { buttonStyles } from "@/components/ui/button";
 import { CollageScene } from "@/components/marketing/hero-visuals";
-import HeroCrystalGlassShader from "@/components/HeroCrystalGlassShader";
+import { HeroGlass } from "@/components/marketing/hero-glass";
 import { DEMO_HREF } from "@/lib/routes";
 import { wrap } from "@/components/marketing/parts";
 
@@ -17,7 +17,7 @@ export function Hero() {
   const second = "Straight to your own vault.".split(" ");
   return (
     <section className="relative isolate overflow-clip bg-white">
-      <HeroCrystalGlassShader />
+      <HeroGlass />
       <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-28 bg-gradient-to-b from-transparent to-ground" />
       <div className={`${wrap} relative z-[1] grid items-center gap-x-8 gap-y-12 pb-20 pt-14 xl:grid-cols-[minmax(0,31rem)_minmax(0,1fr)] xl:pb-28 xl:pt-20`}>
         <div className="relative z-10">
