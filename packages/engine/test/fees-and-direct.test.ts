@@ -19,7 +19,7 @@ import {
   MemoryAlertSink,
   type AuthContext,
 } from "../src";
-import { startHarness, type Harness } from "./harness";
+import { startHarness, type Harness, payoutProofFor } from "./harness";
 
 let h: Harness;
 let m: AuthContext;
@@ -33,6 +33,7 @@ async function setPayout(merchant: AuthContext, mode: "VAULT" | "DIRECT", addres
   const id = newId("pco");
   await h.engine.db.insert(schema.merchantPayoutConfigs).values({
     id, merchantId: merchant.merchantId, networkId: h.net, mode, address: address ? address.toLowerCase() : null, status: "CONFIRMED",
+    ...(address ? await payoutProofFor(h, merchant.merchantId, address) : {}),
     confirmedAt: new Date(Date.now() + h.clock.offsetMs + (setPayout.n = (setPayout.n ?? 0) + 1)), activeFrom: new Date(Date.now() + h.clock.offsetMs + activeInMs),
     createdAt: new Date(Date.now() + h.clock.offsetMs + (setPayout.n = (setPayout.n ?? 0) + 1)),
   });

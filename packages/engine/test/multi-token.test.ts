@@ -23,7 +23,7 @@ import {
   submitWalletPayment,
   type AuthContext,
 } from "../src";
-import { startHarness, type Harness } from "./harness";
+import { startHarness, type Harness, payoutProofFor } from "./harness";
 
 let h: Harness;
 let m: AuthContext;
@@ -131,7 +131,7 @@ describe("who can be paid in which token", () => {
     await expect(createPaymentIntent(h.engine, mm, input("5.00", "USDC"))).resolves.toBeTruthy();
 
     const wallet = h.chain.accounts[6]!.address;
-    await h.engine.db.insert(schema.merchantPayoutConfigs).values({ id: newId("pco"), merchantId: mm.merchantId, networkId: h.net, mode: "DIRECT", address: wallet.toLowerCase(), status: "CONFIRMED", confirmedAt: new Date(), activeFrom: new Date(Date.now() - 1000) });
+    await h.engine.db.insert(schema.merchantPayoutConfigs).values({ id: newId("pco"), merchantId: mm.merchantId, networkId: h.net, mode: "DIRECT", address: wallet.toLowerCase(), status: "CONFIRMED", ...(await payoutProofFor(h, mm.merchantId, wallet)), confirmedAt: new Date(), activeFrom: new Date(Date.now() - 1000) });
     const pi = await createPaymentIntent(h.engine, mm, input("30.00", "EURC"));
     const w0 = await bal("EURC", wallet);
     await h.payToken("EURC", pi.networks[0]!.deposit_address as Address, parseUsdc("30"));

@@ -4,7 +4,7 @@ import { MockFiatTokenAbi } from "@plinth/blockchain";
 import { newId, parseUsdc } from "@plinth/shared";
 import { getAddress, type Address, type Hex } from "viem";
 import { createPaymentIntent, enableNetwork, getPaymentIntent, listRefunds, requestRefund, submitRefundProof, type AuthContext } from "../src";
-import { startHarness, type Harness } from "./harness";
+import { startHarness, type Harness, payoutProofFor } from "./harness";
 
 let h: Harness;
 let m: AuthContext;
@@ -23,6 +23,7 @@ async function transfer(from: number, to: Address, units: bigint): Promise<Hex> 
 async function setDirect(wallet: Address | null) {
   await h.engine.db.insert(schema.merchantPayoutConfigs).values({
     id: newId("pco"), merchantId: m.merchantId, networkId: h.net, mode: wallet ? "DIRECT" : "VAULT", address: wallet ? wallet.toLowerCase() : null, status: "CONFIRMED",
+    ...(wallet ? await payoutProofFor(h, m.merchantId, wallet) : {}),
     confirmedAt: new Date(Date.now() + h.clock.offsetMs + Math.floor(Math.random() * 1000) + 1), activeFrom: new Date(Date.now() + h.clock.offsetMs - 1000),
   });
 }

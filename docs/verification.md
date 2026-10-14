@@ -1,25 +1,33 @@
 # Verification report
 
-What was actually run, what it proved, what was **not** done. Dates are 2026-10-09 unless stated. Nothing here is an audit.
+What was actually run, what it proved, what was **not** done. Dates are 2026-10-09 unless stated; the table below was re-run on 2026-10-15 after the fee, payout-wallet and multi-token changes. Nothing here is an audit.
 
 ## Test results (this machine: Windows 11, Node 24, Foundry 1.8.1, pnpm 12)
 
 | Suite | Result | What it exercises |
 | --- | --- | --- |
-| `contracts` (`forge test`) | **48 passed** = 45 unit/fuzz tests + 1 invariant test (2 invariants, 64 runs × depth 64) + 2 fork tests (these return early unless `FORK_URL` is set) | address prediction == deployment (512-run fuzz), every input changes the address, prefunded-undeployed → deploy+sweep with zero native gas, repeated/partial/over deposits, unauthorized changes, arbitrary-recipient attempts, cross-merchant isolation, chain-id binding, rescue, vault authority/policy/delay, router nonce binding/replay/expiry/tamper/front-run |
+| `contracts` (`forge test`) | **86 passed** (unit, fuzz, invariants, fee split and fail-open fee, vault and direct kinds, router v2 nonce binding, two-token deployments; the fork tests return early unless `FORK_URL` is set) | everything in the previous row plus: fee = floor(balance × bps / 10 000), fee above the immutable cap reverts, a failing treasury is skipped (`FeeSkipped`) while a failing destination reverts, DIRECT and VAULT addresses differ, token/treasury/version are bound into the address, one factory per token |
 | fork tests, **real USDC bytecode** | passed on Arc Testnet and Base Sepolia (read-only forks) | token has the expected EIP-3009 typehash/version/decimals; factory deploys, predicts, sweeps against the real token |
-| `packages/shared` | 17 passed | money exactness, full status derivation table, transition guard |
+| `packages/shared` | 23 passed | money exactness (any token), fee arithmetic and bounds, full status derivation table, transition guard |
 | `packages/db` | 6 passed (PGlite) | migrations apply; unique/partial-unique constraints (duplicate transfer log, one open sweep per address, idempotent ledger); queue claim/dedupe/retry/lock-expiry |
-| `packages/blockchain` | 8 passed (real anvil + real contracts) | offline CREATE2 == on-chain `predict`; **USDC to an undeployed address swept by a relayer, invoice address never holds gas**; later transfers swept by a stranger; wrong-token detection; gasless EIP-3009 payment by a customer with **zero** native balance; tamper/replay rejected; relayer cannot withdraw |
-| `packages/engine` | 36 passed (real anvil + PGlite) | full lifecycle partial→full, idempotent rescans, overpay, invalid asset, expiry classes (EXPIRED/UNDERPAID/LATE), reorg reversal, failed settlement → retry, kill switch, webhook retry, wallet checkout, refunds verified on-chain, tenant isolation; **resilience**: stuck-tx fee replacement, node-lost tx rebroadcast, rejected broadcast retry, RPC outage + alert, racing watchers, fee/min-balance/op-cap policies; **multi-network**: two chains/finality policies, distinct addresses, wrong-network deposit not credited |
-| `apps/api` | 17 passed | auth, permissions (API key ≠ wallets/keys/team), key rotation, structured validation errors, idempotency replay/conflict, merchant + environment isolation, rate limiting (429), public wallet checkout over HTTP, links, invoices, OpenAPI ↔ routes parity, no error leakage |
+| `packages/blockchain` | 23 passed (real anvil + real contracts) | offline CREATE2 == on-chain `predict` for both kinds and both tokens; USDC to an undeployed address swept by a relayer, invoice address never holds gas; wrong-token detection; gasless EIP-3009 payment with **zero** native balance (USDC and EURC); tamper/replay rejected; relayer cannot withdraw; deployment facts read back from chain; gas measurements |
+| `packages/engine` | 106 passed (real anvil + PGlite) | the earlier lifecycle, resilience and refund coverage, plus: fee accounting and ledger, fee skipped / mismatch checks, DIRECT mode and its refunds, payout-wallet flow (verified email, EIP-4361 proof, re-authentication, single-use link, cooldown, switch back), a database-edited payout row is refused, Web3Auth identity handling, relayer policy tiers and live fee quotes, EURC end to end |
+| `apps/api` | 26 passed | auth, permissions, idempotency, isolation, rate limiting, email verification and payout methods over HTTP, operator fee override, token selection (EURC vaults, payments, links, invoices, overview), OpenAPI ↔ routes parity |
 | TypeScript | clean in all 8 packages | |
-| `pnpm verify:networks` | PASS on Arc Testnet/Mainnet, Base Sepolia/Mainnet, Arbitrum One, OP Mainnet, Ethereum | read-only; EIP-712 domain reproduces each token's real `DOMAIN_SEPARATOR` |
-| `pnpm e2e:local` | passed | scripted acceptance run: vault → address payment → gasless sweep → wallet payment → signed webhooks (`docs/verification/local-dry-run.json`) |
+| `pnpm verify:networks` | PASS on Arc Testnet and Arc (USDC **and** EURC), Base Sepolia, Base, Arbitrum One, OP Mainnet, Ethereum. **Polygon PoS not probed** (no RPC configured; registered as unverified) | read-only; EIP-712 domain reproduces each token's real `DOMAIN_SEPARATOR`; every USDC address also matches Circle's published list |
+| `pnpm e2e:local` | passed | scripted acceptance run: vault → address payment → gasless sweep → wallet payment → direct payout wallet (verified email, signed proof, emailed link) → EURC payment → signed webhooks, with the merchant and treasury balances checked on-chain after each payment (`docs/verification/local-dry-run.json`) |
 | Browser run (embedded browser against the local stack) | passed | hosted checkout renders; wallet discovered via EIP-6963, chain switch, EIP-712 signature, relayed, status flipped to **Settled** from backend state; dashboard overview/detail show real data |
 | `deploy` pipeline on a throwaway chain | passed | `Deploy.s.sol` guards (wrong chain id reverts), `finalize-deployment` byte-verification + wiring + derivation, mainnet-override refusal |
 
-Measured gas (local EVM, optimizer 200): `createVault` ≈ 1.29 M, **`deployAndSweep` (clone deploy + sweep) ≈ 175 k**, relayed wallet payment ≈ 90 k.
+Measured gas (local EVM, optimizer 200, single call, cold):
+
+| Call | v1 (no fee) | v2 vault | v2 direct |
+| --- | --- | --- | --- |
+| `deployAndSweep` | 161 209 | 158 743 | 153 538 |
+| `sweep()` on a deployed clone | 42 295 | 59 355 | not measured separately |
+| `router.pay` | 93 490 | 113 889 | 108 998 |
+
+A first fee into a treasury that holds none of the token costs about 17 k more (`deployAndSweep` 175 843). `createVault` is unchanged at ≈ 1.29 M. The earlier figures in this file (175 k, 90 k) were medians from a different measurement and are not comparable.
 
 ## Verified feature list
 
@@ -46,10 +54,14 @@ Measured gas (local EVM, optimizer 200): `createVault` ≈ 1.29 M, **`deployAndS
 9. **No automatic balance-vs-ledger reconciliation job** and **no per-payment amount ceilings / merchant risk limits** yet.
 10. **Arc native-currency transfers** to a deposit address (value transfers, not ERC-20 `transfer`) are not log-detected; whether Arc emits a `Transfer` log for them was not tested.
 11. **WalletConnect / mobile wallets** not wired (browser-injected EIP-6963 wallets only). **EIP-1271 smart-contract-wallet** payers unsupported on the gasless path.
-12. No email delivery (invoices are shared as links); rate limiting and some counters are per-process; no multi-signer relayer sharding.
+12. **Email delivery through Resend has not been run against the real service** (the sender is exercised through an in-memory double and the console sender; no key or verified domain was available). Rate limiting and some counters are per-process; no multi-signer relayer sharding.
 13. Explorer source verification is manual; no CI pipeline is included.
 14. `apps/web` is typechecked/built and spot-checked in a browser (home, checkout both methods, login, overview, payment detail); not every dashboard page was visually reviewed,
     and no automated browser/e2e UI tests or accessibility audit (axe) were run. Contrast of the palette was computed, not user-tested.
+15. **Fee, Direct mode and the second token (added 2026-10-15)**: none of it has been deployed to any network, testnet included; the fork tests were not re-run against the live USDC with the v2 contracts (no `FORK_URL` available here). The EURC flows ran only against a faithful test double on a local chain; the live EURC contracts on Arc were probed read-only (symbol, decimals, EIP-712 domain, `receiveWithAuthorization`, `transferWithAuthorization`, `permit`) and passed on both Arc networks.
+16. **Web3Auth re-authentication and Google email-verified claims were not tested against a live Web3Auth project.** Token handling is tested with signed test tokens against all three JWKS shapes; whether a Google login carries `email_verified` depends on the dashboard setting "User details in ID token".
+17. **Polygon PoS** was not probed (no RPC configured), so its registry entry stays unverified and disabled. Other USDC chains on Circle's list (Avalanche, Linea, Unichain, World Chain, Sonic, Sei, Monad, and others) are **not** in the registry: each needs its chain id, RPC, finality rule and log-range limit verified before it can be added.
+18. **Direct-mode trade-off and backend compromise** are described in [threat-model.md](threat-model.md); the stored-signature check stops database-only tampering, not a compromised API process.
 
 ## Known issues / sharp edges
 

@@ -6,9 +6,11 @@
  *
  * It performs the full product lifecycle with real transactions and real receipts:
  *   merchant signup → vault creation via relayer → webhook endpoint → address-checkout payment sent by a
- *   customer wallet → watcher detection/verification/finality → gasless deploy+sweep into the vault →
- *   connected-wallet payment (EIP-3009, customer signs, relayer submits) → signed webhooks verified →
- *   on-chain balance assertions → results written to docs/verification/<network>.json.
+ *   customer wallet → watcher detection/verification/finality → gasless deploy+sweep (fee to the treasury, rest to the vault) →
+ *   connected-wallet payment (EIP-3009, customer signs, relayer submits) → direct payout: verified email, signed wallet proof,
+ *   emailed link, then a payment settles straight to the payout wallet → the same in EURC when the network lists it →
+ *   signed webhooks verified → on-chain balance assertions for the merchant AND the treasury →
+ *   results written to docs/verification/<network>.json.
  * Amounts are tiny. Mainnets are refused outright.
  */
 import { createServer } from "node:http";
@@ -21,10 +23,11 @@ import { schema, eq } from "@plinth/db";
 import {
   consoleLogger, createEngine, createEndpoint, createPaymentIntent, enableNetwork, paymentDetail, prepareWalletPayment, processWebhookJobs, relayerTick, signup,
   submitWalletPayment, verifyWebhookSignature, watcherTick, silentLogger, forwardTick, expireDueIntents, type AuthContext, type Engine,
+  MemoryEmailSender, requestEmailVerification, confirmEmailLink, createPayoutChallenge, requestPayoutWallet, confirmPayoutLink,
 } from "@plinth/engine";
 import { EvmAdapter, MockFiatTokenAbi, loadDeployment, resolveRpcUrls } from "@plinth/blockchain";
 import { startDevChain } from "@plinth/blockchain/dev";
-import { NETWORKS, toBytes32Id } from "@plinth/shared";
+import { NETWORKS, computeFee, toBytes32Id, type TokenSymbol } from "@plinth/shared";
 
 const local = process.argv.includes("--local");
 const wanted = process.argv.slice(2).find((a) => !a.startsWith("--"));
@@ -53,9 +56,11 @@ let explorer: (path: string) => string;
 let customerKey: Hex, ownerKey: Hex;
 let readerClient: ReturnType<typeof createPublicClient>;
 let usdcAddr: Address;
+const tokenAddr: Partial<Record<TokenSymbol, Address>> = {};
+const mail = new MemoryEmailSender();
 let send: (to: Address, data: Hex, from: Hex) => Promise<Hex>;
 let stopAll = async () => {};
-let mint: ((to: Address, units: bigint) => Promise<void>) | null = null;
+let mint: ((symbol: TokenSymbol, to: Address, units: bigint) => Promise<void>) | null = null;
 let fastBlocks: () => Promise<void> = async () => {};
 
 const handle = connect("pglite://memory");
@@ -70,10 +75,12 @@ await new Promise<void>((r) => sink.listen(0, "127.0.0.1", r));
 const hookUrl = `http://127.0.0.1:${(sink.address() as AddressInfo).port}/hook`;
 
 if (local) {
-  const chain = await startDevChain({ confirmations: 2, blockTimeSeconds: 1, vaultConfigDelaySeconds: 60 });
+  const chain = await startDevChain({ confirmations: 2, blockTimeSeconds: 1, vaultConfigDelaySeconds: 60, tokens: ["EURC"] });
   networkId = chain.network.id;
   readerClient = chain.publicClient as never;
   usdcAddr = chain.usdc;
+  tokenAddr.USDC = chain.usdc;
+  if (chain.tokens.EURC) tokenAddr.EURC = chain.tokens.EURC;
   explorer = (p) => `local:${p}`;
   const hexKey = (i: number) => `0x${Buffer.from(chain.accounts[i]!.getHdKey().privateKey!).toString("hex")}` as Hex;
   customerKey = hexKey(3);
@@ -82,10 +89,11 @@ if (local) {
   engine = await createEngine({
     db: handle.db, logger: silentLogger,
     env: { APP_SECRET_KEY: "33".repeat(32), ALLOW_PRIVATE_WEBHOOK_TARGETS: "true" },
+    email: mail,
     signers: { getSigner: () => privateKeyToAccount(relayerKey) },
     extraNetworks: [{ network: chain.network, deployment: chain.deployment, client: chain.publicClient }],
   });
-  mint = (to, units) => chain.mintUsdc(to, units);
+  mint = (symbol, to, units) => chain.mintToken(symbol, to, units);
   send = async (to, data, from) => {
     const a = privateKeyToAccount(from);
     const w = createWalletClient({ account: a, chain: undefined, transport: http(chain.rpcUrl) });
@@ -108,9 +116,11 @@ if (local) {
   const urls = resolveRpcUrls(net);
   readerClient = createPublicClient({ transport: http(urls[0]) }) as never;
   usdcAddr = net.usdc.address;
+  tokenAddr.USDC = net.usdc.address;
+  for (const [sym, t] of Object.entries(net.extraTokens ?? {})) tokenAddr[sym as TokenSymbol] = t!.address;
   explorer = (p) => `${net.explorerUrl}/${p}`;
   engine = await createEngine({
-    db: handle.db, logger: consoleLogger,
+    db: handle.db, logger: consoleLogger, email: mail,
     env: { ...process.env, ENABLED_NETWORKS: net.id, APP_SECRET_KEY: "33".repeat(32), ALLOW_PRIVATE_WEBHOOK_TARGETS: "true" } as never,
   });
   const chainRt = engine.chains.get(net.id);
@@ -128,6 +138,7 @@ void formatUnits; void MockFiatTokenAbi; void forwardTick; void expireDueIntents
 
 const chainRt = engine.chains.get(networkId)!;
 const adapter: EvmAdapter = chainRt.adapter;
+const treasury = getAddress(chainRt.deployment.treasury);
 const customer = privateKeyToAccount(customerKey);
 const owner = privateKeyToAccount(ownerKey);
 results.network = networkId;
@@ -147,20 +158,27 @@ async function pump(until: () => Promise<boolean>, label: string, timeoutMs = 24
   }
   throw new Error(`Timed out waiting for: ${label}`);
 }
-const bal = (a: Address) => readerClient.readContract({ address: usdcAddr, abi: erc20, functionName: "balanceOf", args: [a] });
+const balOf = (symbol: TokenSymbol, a: Address) => readerClient.readContract({ address: tokenAddr[symbol]!, abi: erc20, functionName: "balanceOf", args: [a] });
+const bal = (a: Address) => balOf("USDC", a);
 
 // ---------------------------------------------------------------- run
 try {
   const AMOUNT_ADDRESS = "0.05";
   const AMOUNT_WALLET = "0.03";
   const units = (s: string) => parseUnits(s, 6);
-  if (mint) await mint(customer.address, units("10"));
+  if (mint) { await mint("USDC", customer.address, units("10")); if (tokenAddr.EURC) await mint("EURC", customer.address, units("10")); }
   const custStart = await bal(customer.address);
   if (custStart < units("0.2")) throw new Error(`Customer ${customer.address} holds ${formatUnits(custStart, 6)} USDC; fund it from the faucet first`);
   step("customer funded", { address: customer.address, usdc: formatUnits(custStart, 6) });
 
-  const { merchantId } = await signup(engine, { business_name: "E2E Merchant", email: `e2e-${Date.now()}@example.test`, password: "e2e-correct-horse-battery" }, { type: "SYSTEM" });
-  const ctx: AuthContext = { merchantId, environment: "test", actor: { type: "SYSTEM" }, role: "OWNER", via: "session" };
+  const email = `e2e-${Date.now()}@example.test`;
+  const PASSWORD = "e2e-correct-horse-battery";
+  const { merchantId, userId } = await signup(engine, { business_name: "E2E Merchant", email, password: PASSWORD }, { type: "SYSTEM" });
+  const ctx: AuthContext = { merchantId, environment: "test", actor: { type: "USER", id: userId }, role: "OWNER", via: "session" };
+  const feeBps = engine.cfg.platformFeeBps;
+  const feeOf = (amount: string) => computeFee(units(amount), feeBps);
+  const treasuryStart = await bal(treasury);
+  step("platform fee configured", { feeBps, treasury, treasuryHasCode: chainRt.deployment.treasury ? ((await readerClient.getCode({ address: treasury })) ?? "0x") !== "0x" : null });
   const hook = await createEndpoint(engine, merchantId, "test", { url: hookUrl, events: ["*"] });
 
   const vaultInfo = await enableNetwork(engine, ctx, { network: networkId, owner_address: owner.address });
@@ -170,6 +188,7 @@ try {
   step("vault deployed by relayer, owned by merchant", { vault, owner: vstate.owner, gatewayIsOwner: vstate.owner.toLowerCase() === chainRt.signer!.address.toLowerCase(), explorer: explorer(`address/${vault}`) });
   if (vstate.owner.toLowerCase() !== owner.address.toLowerCase()) throw new Error("vault owner mismatch");
   const vaultBefore = await bal(vault);
+  const fee = (amount: string) => feeOf(amount);
 
   // ---- A. address checkout
   const piA = await createPaymentIntent(engine, ctx, { amount: AMOUNT_ADDRESS, currency: "USDC", checkout_methods: ["ADDRESS"], expires_in_seconds: 3600, order_reference: "E2E-ADDR" } as never);
@@ -184,10 +203,12 @@ try {
   const vaultAfterA = await bal(vault);
   step("address payment SETTLED", {
     transfer: dA.transactions.find((t: any) => t.kind === "INCOMING_TRANSFER")?.explorer_url, sweep: dA.settlements[0]?.explorer_url,
-    vaultDelta: formatUnits(vaultAfterA - vaultBefore, 6), invoiceAddressNativeBalanceAfter: invoiceGas.toString(), invoiceDeployed: await adapter.hasCode(depositAddr),
+    vaultDelta: formatUnits(vaultAfterA - vaultBefore, 6), treasuryDelta: formatUnits((await bal(treasury)) - treasuryStart, 6), invoiceAddressNativeBalanceAfter: invoiceGas.toString(), invoiceDeployed: await adapter.hasCode(depositAddr),
     relayerGasSpentWei: (relayerGasBefore - (await readerClient.getBalance({ address: chainRt.signer!.address }))).toString(),
   });
-  if (vaultAfterA - vaultBefore !== units(AMOUNT_ADDRESS)) throw new Error("vault balance delta mismatch (address payment)");
+  if (vaultAfterA - vaultBefore !== units(AMOUNT_ADDRESS) - fee(AMOUNT_ADDRESS)) throw new Error("vault balance delta mismatch (address payment): expected the amount minus the fee");
+  if ((await bal(treasury)) - treasuryStart !== fee(AMOUNT_ADDRESS)) throw new Error("treasury did not receive exactly the fee (address payment)");
+  if (dA.fee_amount_units !== fee(AMOUNT_ADDRESS).toString()) throw new Error("the API's fee_amount differs from the fee computed from the amount");
   if (invoiceGas !== 0n) throw new Error("invoice address held native gas");
 
   // ---- B. wallet checkout (EIP-3009)
@@ -203,10 +224,62 @@ try {
     await pump(async () => (await paymentDetail(engine, ctx, piB.id)).status === "SETTLED", "wallet payment SETTLED");
     const dB = await paymentDetail(engine, ctx, piB.id);
     const vaultAfterB = await bal(vault);
-    step("wallet payment SETTLED (customer signed; relayer paid gas)", { tx: dB.transactions[0]?.explorer_url, vaultDelta: formatUnits(vaultAfterB - vaultAfterA, 6) });
-    if (vaultAfterB - vaultAfterA !== units(AMOUNT_WALLET)) throw new Error("vault balance delta mismatch (wallet payment)");
+    step("wallet payment SETTLED (customer signed; relayer paid gas)", { tx: dB.transactions[0]?.explorer_url, vaultDelta: formatUnits(vaultAfterB - vaultAfterA, 6), treasuryDelta: formatUnits((await bal(treasury)) - treasuryStart, 6) });
+    if (vaultAfterB - vaultAfterA !== units(AMOUNT_WALLET) - fee(AMOUNT_WALLET)) throw new Error("vault balance delta mismatch (wallet payment): expected the amount minus the fee");
+    if ((await bal(treasury)) - treasuryStart !== fee(AMOUNT_ADDRESS) + fee(AMOUNT_WALLET)) throw new Error("treasury did not receive exactly the fees so far");
   } else {
     step("wallet payment skipped: network USDC lacks receiveWithAuthorization");
+  }
+
+  // ---- C. direct payout: verified email, signed wallet proof, emailed link, then a payment settles straight to the payout wallet
+  const tokenFromLink = (link: string) => new URL(link).searchParams.get("token")!;
+  await requestEmailVerification(engine, ctx);
+  await confirmEmailLink(engine, tokenFromLink(mail.linkTo(email)!));
+  const challenge = await createPayoutChallenge(engine, ctx, { network: networkId, address: owner.address, purpose: "PAYOUT_WALLET" });
+  const proof = await owner.signMessage({ message: challenge.message });
+  await requestPayoutWallet(engine, ctx, { network: networkId, address: owner.address, nonce: challenge.nonce, signature: proof, reauth: { password: PASSWORD } as never });
+  const confirmed = await confirmPayoutLink(engine, tokenFromLink(mail.linkTo(email)!));
+  step("payout wallet registered: verified email, signed proof, emailed link", { status: confirmed.status, wallet: owner.address });
+  const AMOUNT_DIRECT = "0.04";
+  const walletBefore = await bal(owner.address);
+  const vaultBeforeC = await bal(vault);
+  const treasuryBeforeC = await bal(treasury);
+  const piC = await createPaymentIntent(engine, ctx, { amount: AMOUNT_DIRECT, currency: "USDC", checkout_methods: ["ADDRESS"], expires_in_seconds: 3600, order_reference: "E2E-DIRECT" } as never);
+  const directAddr = piC.networks[0]!.deposit_address as Address;
+  await send(usdcAddr, (await import("viem")).encodeFunctionData({ abi: erc20, functionName: "transfer", args: [directAddr, units(AMOUNT_DIRECT)] }), customerKey);
+  await pump(async () => (await paymentDetail(engine, ctx, piC.id)).status === "SETTLED", "direct payment SETTLED");
+  const walletDelta = (await bal(owner.address)) - walletBefore;
+  step("direct payment SETTLED to the payout wallet", { walletDelta: formatUnits(walletDelta, 6), vaultDelta: formatUnits((await bal(vault)) - vaultBeforeC, 6), treasuryDelta: formatUnits((await bal(treasury)) - treasuryBeforeC, 6) });
+  if (walletDelta !== units(AMOUNT_DIRECT) - fee(AMOUNT_DIRECT)) throw new Error("payout wallet delta mismatch: expected the amount minus the fee");
+  if ((await bal(vault)) !== vaultBeforeC) throw new Error("the vault changed during a direct payment");
+  if ((await bal(treasury)) - treasuryBeforeC !== fee(AMOUNT_DIRECT)) throw new Error("treasury did not receive exactly the fee (direct payment)");
+
+  // ---- D. a second token (EURC on Arc; the local chain has a test double)
+  const eurcOps = chainRt.tokens.get("EURC");
+  if (eurcOps?.operational && tokenAddr.EURC) {
+    const AMOUNT_EURC = "0.05";
+    const eurcBal = await balOf("EURC", customer.address);
+    if (eurcBal < units("0.1")) {
+      step("EURC payment skipped: the customer wallet holds no EURC", { address: customer.address });
+    } else {
+      const eurcVaultInfo = await enableNetwork(engine, ctx, { network: networkId, owner_address: owner.address, token: "EURC" });
+      await pump(async () => (await engine.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, merchantId))).filter((v) => v.tokenSymbol === "EURC")[0]?.status === "ACTIVE", "EURC vault ACTIVE");
+      // The payout wallet is the destination on this network for every token now, so the EURC payment also goes straight to it.
+      const eurcWalletBefore = await balOf("EURC", owner.address);
+      const eurcTreasuryBefore = await balOf("EURC", treasury);
+      const piD = await createPaymentIntent(engine, ctx, { amount: AMOUNT_EURC, currency: "EURC", checkout_methods: ["ADDRESS"], expires_in_seconds: 3600, order_reference: "E2E-EURC" } as never);
+      const eurcAddr = piD.networks[0]!.deposit_address as Address;
+      await send(tokenAddr.EURC, (await import("viem")).encodeFunctionData({ abi: erc20, functionName: "transfer", args: [eurcAddr, units(AMOUNT_EURC)] }), customerKey);
+      await pump(async () => (await paymentDetail(engine, ctx, piD.id)).status === "SETTLED", "EURC payment SETTLED");
+      const dD = await paymentDetail(engine, ctx, piD.id);
+      const eurcWalletDelta = (await balOf("EURC", owner.address)) - eurcWalletBefore;
+      step("EURC payment SETTLED (fee taken in EURC)", { eurcVault: eurcVaultInfo.vault_address, currency: dD.currency, walletDelta: formatUnits(eurcWalletDelta, 6), treasuryDelta: formatUnits((await balOf("EURC", treasury)) - eurcTreasuryBefore, 6) });
+      if (dD.currency !== "EURC") throw new Error("the payment is not denominated in EURC");
+      if (eurcWalletDelta !== units(AMOUNT_EURC) - fee(AMOUNT_EURC)) throw new Error("EURC payout delta mismatch: expected the amount minus the fee");
+      if ((await balOf("EURC", treasury)) - eurcTreasuryBefore !== fee(AMOUNT_EURC)) throw new Error("treasury did not receive exactly the fee in EURC");
+    }
+  } else {
+    step("EURC payment skipped: this network lists no EURC, or its contracts are not operational");
   }
 
   // ---- webhooks

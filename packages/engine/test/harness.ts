@@ -3,7 +3,8 @@ import type { AddressInfo } from "node:net";
 import { connect, type DbHandle } from "@plinth/db";
 import { MockFiatTokenAbi } from "@plinth/blockchain";
 import { startDevChain, type DevChain } from "@plinth/blockchain/dev";
-import type { Address } from "viem";
+import { createSiweMessage } from "viem/siwe";
+import { getAddress, type Address } from "viem";
 import type { TokenSymbol } from "@plinth/shared";
 import pg from "pg";
 import {
@@ -36,6 +37,23 @@ export interface Harness {
   /** Pay any deployed token (USDC or EURC) to an address from an anvil account. */
   payToken(symbol: TokenSymbol, to: Address, units: bigint, from?: number): Promise<`0x${string}`>;
   stop(): Promise<void>;
+}
+
+/**
+ * What the payout-wallet flow stores for a confirmed DIRECT config: the EIP-4361 message the wallet signed and its signature.
+ * For tests that insert a confirmed config directly instead of running the whole email flow; the engine re-verifies it
+ * before it issues an address, so these must be real.
+ */
+export async function payoutProofFor(h: Harness, merchantId: string, address: Address) {
+  const account = h.chain.accounts.find((a) => a.address.toLowerCase() === address.toLowerCase());
+  if (!account) throw new Error("payoutProofFor needs one of the dev chain's accounts");
+  const net = h.engine.chains.get(h.chain.network.id)!.network;
+  const message = createSiweMessage({
+    address: getAddress(address), chainId: net.chainId, domain: "localhost:3000", nonce: "a".repeat(16), uri: "http://localhost:3000", version: "1",
+    statement: `Confirm that this wallet may receive stablecoin payouts directly on ${net.name} for Plinth merchant ${merchantId}. This signature does not send a transaction or move funds.`,
+    requestId: merchantId, issuedAt: new Date(),
+  });
+  return { proofMessage: message, proofSignature: await account.signMessage({ message }), proofSignedAt: new Date() };
 }
 
 /** Migrates once per process into a template database; each harness then clones it server-side (fast, no network migration). */

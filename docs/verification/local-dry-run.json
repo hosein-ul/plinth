@@ -1,62 +1,94 @@
 {
-  "startedAt": "2026-10-09T11:09:43.159Z",
+  "startedAt": "2026-10-14T23:28:41.974Z",
   "steps": [
     {
       "name": "customer funded",
       "address": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
       "usdc": "10",
-      "at": "2026-10-09T11:09:54.843Z"
+      "at": "2026-10-14T23:28:59.629Z"
+    },
+    {
+      "name": "platform fee configured",
+      "feeBps": 20,
+      "treasury": "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720",
+      "treasuryHasCode": false,
+      "at": "2026-10-14T23:28:59.878Z"
     },
     {
       "name": "vault deployed by relayer, owned by merchant",
-      "vault": "0x2be8B5D61d0e983D3429d31B0D3815026CacE1c8",
+      "vault": "0xb97F8f55780230EDe248cd775c8fACE40B8b63E1",
       "owner": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
       "gatewayIsOwner": false,
-      "explorer": "local:address/0x2be8B5D61d0e983D3429d31B0D3815026CacE1c8",
-      "at": "2026-10-09T11:09:55.965Z"
+      "explorer": "local:address/0xb97F8f55780230EDe248cd775c8fACE40B8b63E1",
+      "at": "2026-10-14T23:29:00.908Z"
     },
     {
       "name": "invoice created with counterfactual address",
-      "id": "pi_5cce5343344006a2775bf112fbba142c",
-      "depositAddr": "0x84E3921317AcC99e54BF7958c2Fec112Bd3493A5",
+      "id": "pi_68578a2c07817649cccf0aa4a9499937",
+      "depositAddr": "0x1eCD7B3bF9CD1EF9832F8E47D8A110057bFf5acF",
       "deployed": false,
-      "at": "2026-10-09T11:09:56.006Z"
+      "at": "2026-10-14T23:29:00.958Z"
     },
     {
       "name": "customer transferred USDC to the deposit address",
-      "tx": "0xc13d12051b4598da782af73e3bcdf77fd382fb09c8be9fe980170a53f936db1f",
-      "explorer": "local:tx/0xc13d12051b4598da782af73e3bcdf77fd382fb09c8be9fe980170a53f936db1f",
+      "tx": "0xe9fb6ff4aebcbd939a244b20802842a7ada44354ee3dbb73ad108595da3b428b",
+      "explorer": "local:tx/0xe9fb6ff4aebcbd939a244b20802842a7ada44354ee3dbb73ad108595da3b428b",
       "invoiceNativeBalance": "0",
-      "at": "2026-10-09T11:09:56.924Z"
+      "at": "2026-10-14T23:29:01.641Z"
     },
     {
       "name": "address payment SETTLED",
-      "transfer": "http://localhost/explorer/tx/0xc13d12051b4598da782af73e3bcdf77fd382fb09c8be9fe980170a53f936db1f",
-      "sweep": "http://localhost/explorer/tx/0x012013bc467891de85712e528bc833055546f4e814a1839ec1cf994931b7a60e",
-      "vaultDelta": "0.05",
+      "transfer": "http://localhost/explorer/tx/0xe9fb6ff4aebcbd939a244b20802842a7ada44354ee3dbb73ad108595da3b428b",
+      "sweep": "http://localhost/explorer/tx/0xb9d90520a21dab8198ebb8e45b169b60d6e1ebf9ec2d197f50928c0620a62430",
+      "vaultDelta": "0.0499",
+      "treasuryDelta": "0.0001",
       "invoiceAddressNativeBalanceAfter": "0",
       "invoiceDeployed": true,
-      "relayerGasSpentWei": "230602590944400",
-      "at": "2026-10-09T11:10:00.771Z"
+      "relayerGasSpentWei": "218022590585709",
+      "at": "2026-10-14T23:29:05.693Z"
     },
     {
       "name": "wallet payment SETTLED (customer signed; relayer paid gas)",
-      "tx": "http://localhost/explorer/tx/0x65729ce956c58c0ccba1c4e56300bc61bd926955a6fd82637f02c33014e82fda",
-      "vaultDelta": "0.03",
-      "at": "2026-10-09T11:10:03.762Z"
+      "tx": "http://localhost/explorer/tx/0xc183505bf9a64de532bf37256fd75e364c2168093ae02fdba1d29a616ba8063d",
+      "vaultDelta": "0.02994",
+      "treasuryDelta": "0.00016",
+      "at": "2026-10-14T23:29:07.971Z"
+    },
+    {
+      "name": "payout wallet registered: verified email, signed proof, emailed link",
+      "status": "ACTIVE",
+      "wallet": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "at": "2026-10-14T23:29:08.331Z"
+    },
+    {
+      "name": "direct payment SETTLED to the payout wallet",
+      "walletDelta": "0.03992",
+      "vaultDelta": "0",
+      "treasuryDelta": "0.00008",
+      "at": "2026-10-14T23:29:12.000Z"
+    },
+    {
+      "name": "EURC payment SETTLED (fee taken in EURC)",
+      "eurcVault": "0x168AB376580f2593DB201FacF5EdD75ed55911Fd",
+      "currency": "EURC",
+      "walletDelta": "0.0499",
+      "treasuryDelta": "0.0001",
+      "at": "2026-10-14T23:29:17.123Z"
     },
     {
       "name": "signed webhooks delivered",
-      "count": 8,
+      "count": 20,
       "types": [
         "payment.detected",
         "payment.confirmed",
         "settlement.submitted",
         "settlement.completed",
-        "payment.completed"
+        "payment.completed",
+        "payout.requested",
+        "payout.confirmed"
       ],
       "invalidSignatures": 0,
-      "at": "2026-10-09T11:10:03.767Z"
+      "at": "2026-10-14T23:29:17.126Z"
     },
     {
       "name": "relayer operations",
@@ -64,49 +96,86 @@
         {
           "kind": "CREATE_VAULT",
           "status": "CONFIRMED",
-          "tx": "0xc8edbd5129398a797afd6a15b8607f3f0874fa3f6aaa0def72661a5985309874",
+          "tx": "0x675808d7198de039d9186199422aece3d0a088d85038385bf88afd65eebee8c3",
           "gasUsed": "1287669",
-          "feeNativeWei": "1889615811566667",
+          "feeNativeWei": "1574160588087246",
           "feeUsdc": null
         },
         {
           "kind": "DEPLOY_AND_SWEEP",
           "status": "CONFIRMED",
-          "tx": "0x012013bc467891de85712e528bc833055546f4e814a1839ec1cf994931b7a60e",
-          "gasUsed": "175075",
-          "feeNativeWei": "230602590944400",
+          "tx": "0xb9d90520a21dab8198ebb8e45b169b60d6e1ebf9ec2d197f50928c0620a62430",
+          "gasUsed": "189427",
+          "feeNativeWei": "218022590585709",
           "feeUsdc": null
         },
         {
           "kind": "WALLET_PAYMENT",
           "status": "CONFIRMED",
-          "tx": "0x65729ce956c58c0ccba1c4e56300bc61bd926955a6fd82637f02c33014e82fda",
-          "gasUsed": "90136",
-          "feeNativeWei": "109319624779672",
+          "tx": "0xc183505bf9a64de532bf37256fd75e364c2168093ae02fdba1d29a616ba8063d",
+          "gasUsed": "113210",
+          "feeNativeWei": "124679617446390",
+          "feeUsdc": null
+        },
+        {
+          "kind": "DEPLOY_AND_SWEEP",
+          "status": "CONFIRMED",
+          "tx": "0x3ed5640cef5f3f304d557152af4ccd7cd8ccbc98b5131b7a786ba311c23e996c",
+          "gasUsed": "167174",
+          "feeNativeWei": "177118086938996",
+          "feeUsdc": null
+        },
+        {
+          "kind": "CREATE_VAULT",
+          "status": "CONFIRMED",
+          "tx": "0xc3dc1b51ad1e7dd4fec8012cbd92464c6e2d55432dbd906715296200e0adffa4",
+          "gasUsed": "1287669",
+          "feeNativeWei": "1346405414942901",
+          "feeUsdc": null
+        },
+        {
+          "kind": "DEPLOY_AND_SWEEP",
+          "status": "CONFIRMED",
+          "tx": "0xe596f528d1d909e52fe141d8fc34cd3262cc4e059f829f005bbe8df19ad0ab63",
+          "gasUsed": "184286",
+          "feeNativeWei": "189989547946982",
           "feeUsdc": null
         }
       ],
-      "at": "2026-10-09T11:10:03.770Z"
+      "at": "2026-10-14T23:29:17.127Z"
     }
   ],
   "network": "local-dev",
   "contracts": {
     "networkId": "local-dev",
     "chainId": 31337,
-    "version": 1,
-    "vaultFactory": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
-    "invoiceImplementation": "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0",
-    "invoiceFactory": "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9",
-    "paymentRouter": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
-    "deployBlock": 5,
+    "version": 2,
+    "vaultFactory": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    "invoiceImplementation": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+    "invoiceFactory": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    "paymentRouter": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    "treasury": "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720",
+    "maxFeeBps": 100,
+    "deployBlock": 10,
     "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     "bytecodeVerified": true,
     "productionApproved": false,
-    "vaultConfigDelaySeconds": 60
+    "vaultConfigDelaySeconds": 60,
+    "tokens": {
+      "EURC": {
+        "vaultFactory": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
+        "invoiceImplementation": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+        "invoiceFactory": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6",
+        "paymentRouter": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+        "version": 2,
+        "deployBlock": 10,
+        "bytecodeVerified": true
+      }
+    }
   },
   "relayer": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
   "customer": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
   "vaultOwner": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
   "ok": true,
-  "finishedAt": "2026-10-09T11:10:03.770Z"
+  "finishedAt": "2026-10-14T23:29:17.127Z"
 }
