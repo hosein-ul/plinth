@@ -1,10 +1,10 @@
 import { and, eq, schema } from "@plinth/db";
-import { assertValidFeeBps, formatFeePercent, MAX_FEE_BPS, NETWORKS, newId, operationalGate, toBytes32Id, treasuryFor } from "@plinth/shared";
+import { assertValidFeeBps, formatFeePercent, MAX_FEE_BPS, NETWORKS, networkTokens, newId, operationalGate, toBytes32Id, treasuryFor, type TokenSymbol } from "@plinth/shared";
 import { encodeFunctionData, getAddress, type Address } from "viem";
 import { MerchantVaultAbi } from "@plinth/blockchain";
 import { audit } from "./audit";
 import { requirePermission, type AuthContext } from "./auth";
-import { chainOf, EngineError, norm, type Engine } from "./context";
+import { chainOf, EngineError, norm, tokenRuntime, type Engine } from "./context";
 import { consumeChallenge, verifyVaultOwnerProof } from "./payout-config";
 import { feeBpsFor } from "./payout-route";
 
@@ -12,26 +12,29 @@ import { feeBpsFor } from "./payout-route";
  * Enable a network for a merchant: derive their vault address, record it, and have the gateway relayer
  * deploy it. The vault's OWNER is the merchant-supplied address; the gateway never holds a role in it.
  */
-export async function enableNetwork(e: Engine, ctx: AuthContext, input: { network: string; owner_address: string; proof?: { nonce: string; signature: string } }) {
+export async function enableNetwork(e: Engine, ctx: AuthContext, input: { network: string; owner_address: string; token?: TokenSymbol; proof?: { nonce: string; signature: string } }) {
   requirePermission(ctx, "wallets");
   const chain = e.chains.get(input.network);
   if (!chain) throw new EngineError("UNKNOWN_NETWORK", `Unknown network ${input.network}`, 400);
   if (!chain.operational) throw new EngineError("NETWORK_NOT_OPERATIONAL", `${chain.network.name} is not operational`, 409, { reasons: chain.gateReasons });
+  // A vault holds exactly one token, so each token a merchant accepts into a vault has its own.
+  const symbol = input.token ?? "USDC";
+  const tr = tokenRuntime(chain, symbol);
   const owner = getAddress(input.owner_address);
   const merchantId32 = toBytes32Id(ctx.merchantId);
 
-  const [existing] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, input.network)));
+  const [existing] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, input.network), eq(schema.merchantVaults.tokenSymbol, symbol)));
   if (existing) {
     if (norm(existing.ownerAddress) !== norm(owner)) {
-      throw new EngineError("VAULT_EXISTS", "A vault already exists for this network. Ownership changes happen on-chain (transferOwnership/acceptOwnership), not through the gateway.", 409);
+      throw new EngineError("VAULT_EXISTS", `A ${symbol} vault already exists for this network. Ownership changes happen on-chain (transferOwnership/acceptOwnership), not through the gateway.`, 409);
     }
     return vaultSummary(chain.network.explorerUrl, existing);
   }
 
   // A new vault is owned by whatever address is given here, so the owner must prove they control it (required in production).
   const proven = await verifyVaultOwnerProof(e, ctx, { network: input.network, owner, proof: input.proof });
-  const vault = await chain.adapter.predictVault(merchantId32, owner);
-  const alreadyDeployed = await chain.adapter.isRegisteredVault(vault);
+  const vault = await tr.adapter.predictVault(merchantId32, owner);
+  const alreadyDeployed = await tr.adapter.isRegisteredVault(vault);
   const id = newId("vlt");
   let opId: string | null = null;
 
@@ -40,15 +43,15 @@ export async function enableNetwork(e: Engine, ctx: AuthContext, input: { networ
     if (!alreadyDeployed) {
       if (!chain.signer) throw new EngineError("RELAYER_UNAVAILABLE", "No relayer is configured for this network; deploy the vault yourself via VaultFactory.createVault and retry.", 503);
       opId = newId("rop");
-      const call = chain.adapter.encodeCreateVault(merchantId32, owner);
-      await tx.insert(schema.relayerOperations).values({ id: opId, networkId: input.network, kind: "CREATE_VAULT", dedupeKey: `vault:${input.network}:${norm(vault)}`, toAddress: norm(call.to), calldata: call.data, relatedType: "merchant_vault", relatedId: id }).onConflictDoNothing();
+      const call = tr.adapter.encodeCreateVault(merchantId32, owner);
+      await tx.insert(schema.relayerOperations).values({ id: opId, networkId: input.network, kind: "CREATE_VAULT", tokenSymbol: symbol, dedupeKey: `vault:${input.network}:${norm(vault)}`, toAddress: norm(call.to), calldata: call.data, relatedType: "merchant_vault", relatedId: id }).onConflictDoNothing();
     }
     await tx.insert(schema.merchantWallets).values({ id: newId("wal"), merchantId: ctx.merchantId, networkId: input.network, kind: "VAULT_OWNER", address: norm(owner), label: "Vault owner" }).onConflictDoNothing();
     await tx.insert(schema.merchantVaults).values({
-      id, merchantId: ctx.merchantId, networkId: input.network, ownerAddress: norm(owner), vaultAddress: norm(vault),
+      id, merchantId: ctx.merchantId, networkId: input.network, tokenSymbol: symbol, ownerAddress: norm(owner), vaultAddress: norm(vault),
       status: alreadyDeployed ? "ACTIVE" : "PENDING", createRelayerOpId: opId, configDelaySeconds: chain.deployment.vaultConfigDelaySeconds,
     });
-    await audit(tx, { merchantId: ctx.merchantId, actor: ctx.actor, action: "network.enabled", targetType: "merchant_vault", targetId: id, data: { network: input.network, owner, vault } });
+    await audit(tx, { merchantId: ctx.merchantId, actor: ctx.actor, action: "network.enabled", targetType: "merchant_vault", targetId: id, data: { network: input.network, token: symbol, owner, vault } });
   });
   const [row] = await e.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.id, id));
   return vaultSummary(chain.network.explorerUrl, row!);
@@ -56,7 +59,7 @@ export async function enableNetwork(e: Engine, ctx: AuthContext, input: { networ
 
 export function vaultSummary(explorerUrl: string, v: typeof schema.merchantVaults.$inferSelect) {
   return {
-    id: v.id, network: v.networkId, status: v.status,
+    id: v.id, network: v.networkId, token: v.tokenSymbol, status: v.status,
     owner_address: getAddress(v.ownerAddress), vault_address: getAddress(v.vaultAddress),
     vault_explorer_url: `${explorerUrl}/address/${getAddress(v.vaultAddress)}`,
     config_delay_seconds: v.configDelaySeconds, created_tx_hash: v.createTxHash,
@@ -64,10 +67,10 @@ export function vaultSummary(explorerUrl: string, v: typeof schema.merchantVault
 }
 
 /** Live on-chain truth for a vault: owner, settlement policy, balance. Never trust the cache for decisions. */
-export async function readVaultState(e: Engine, ctx: AuthContext, network: string) {
+export async function readVaultState(e: Engine, ctx: AuthContext, network: string, token: TokenSymbol = "USDC") {
   const chain = chainOf(e, network);
-  const [v] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, network)));
-  if (!v) throw new EngineError("NOT_FOUND", "No vault for this network", 404);
+  const [v] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, network), eq(schema.merchantVaults.tokenSymbol, token)));
+  if (!v) throw new EngineError("NOT_FOUND", `No ${token} vault for this network`, 404);
   if (v.status !== "ACTIVE") return { ...vaultSummary(chain.network.explorerUrl, v), onchain: null };
   const s = await chain.adapter.readVault(getAddress(v.vaultAddress));
   await e.db.update(schema.merchantVaults).set({ cachedMode: s.mode, cachedDestination: norm(s.destination), cachedBalance: s.balance, cachedAt: e.now() }).where(eq(schema.merchantVaults.id, v.id));
@@ -82,11 +85,11 @@ export async function readVaultState(e: Engine, ctx: AuthContext, network: strin
 }
 
 /** If the relayer is unavailable the merchant can deploy the vault themselves; this re-checks the chain. */
-export async function confirmVault(e: Engine, ctx: AuthContext, network: string) {
+export async function confirmVault(e: Engine, ctx: AuthContext, network: string, token: TokenSymbol = "USDC") {
   const chain = chainOf(e, network);
-  const [v] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, network)));
-  if (!v) throw new EngineError("NOT_FOUND", "No vault for this network", 404);
-  if (await chain.adapter.isRegisteredVault(getAddress(v.vaultAddress))) {
+  const [v] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, network), eq(schema.merchantVaults.tokenSymbol, token)));
+  if (!v) throw new EngineError("NOT_FOUND", `No ${token} vault for this network`, 404);
+  if (await tokenRuntime(chain, token, { open: false }).adapter.isRegisteredVault(getAddress(v.vaultAddress))) {
     await e.db.update(schema.merchantVaults).set({ status: "ACTIVE" }).where(eq(schema.merchantVaults.id, v.id));
   }
   const [fresh] = await e.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.id, v.id));
@@ -116,7 +119,8 @@ function readable(reason: string): string {
   if (/ENABLED_NETWORKS/.test(reason)) return "Not switched on yet";
   if (/no deployment record/.test(reason)) return "Contracts are not deployed on this network yet";
   if (/ALLOW_MAINNET/.test(reason)) return "Mainnet stays off until it is explicitly approved";
-  if (/capabilities not verified/i.test(reason)) return "This network's USDC has not been verified yet";
+  if (/capabilities not verified/i.test(reason)) return "This network's token has not been verified yet";
+  if (/contracts not verified/i.test(reason)) return "This token's contracts are not verified yet";
   if (/relayer policy/i.test(reason)) return "Mainnet needs a spending policy before it can run";
   return reason;
 }
@@ -125,7 +129,8 @@ export async function listNetworks(e: Engine, ctx: AuthContext) {
   const vaults = await e.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, ctx.merchantId));
   const [merchant] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, ctx.merchantId));
   const live = [...e.chains.values()].map((c) => {
-    const v = vaults.find((x) => x.networkId === c.network.id);
+    const mine = vaults.filter((x) => x.networkId === c.network.id);
+    const v = mine.find((x) => x.tokenSymbol === "USDC") ?? mine[0];
     return {
       id: c.network.id, chain_id: c.network.chainId, name: c.network.name, environment: c.network.environment,
       operational: c.operational, not_operational_reasons: c.gateReasons.map(readable), explorer_url: c.network.explorerUrl, public_rpc_urls: c.network.rpcUrls, chain_native: c.network.nativeCurrency,
@@ -140,6 +145,17 @@ export async function listNetworks(e: Engine, ctx: AuthContext) {
       // What the platform takes on this network for this merchant: committed into every invoice address when it is issued.
       fee: { bps: feeBpsFor(e, merchant?.feeBps, c), percent: formatFeePercent(feeBpsFor(e, merchant?.feeBps, c)), max_bps: c.deployment.maxFeeBps, treasury: getAddress(c.deployment.treasury) },
       vault: v ? vaultSummary(c.network.explorerUrl, v) : null,
+      // Every payment token this network can take, each with its own contracts, vault and gasless-checkout capability.
+      tokens: [...c.tokens.values()].map((t) => {
+        const tv = mine.find((x) => x.tokenSymbol === t.symbol);
+        return {
+          symbol: t.symbol, address: t.config.address, decimals: t.config.decimals, operational: t.operational, not_operational_reasons: t.reasons.map(readable),
+          payment_methods: { address: t.operational, wallet: t.operational && !!c.signer && t.config.authorization.receiveWithAuthorization && t.config.authorization.verified },
+          authorization: { receive_with_authorization: t.config.authorization.receiveWithAuthorization, verified_at: t.config.authorization.verifiedAt },
+          contracts: t.operational ? { vault_factory: t.contracts.vaultFactory, invoice_factory: t.contracts.invoiceFactory, invoice_implementation: t.contracts.invoiceImplementation, payment_router: t.contracts.paymentRouter, version: t.contracts.version } : null,
+          vault: tv ? vaultSummary(c.network.explorerUrl, tv) : null,
+        };
+      }),
     };
   });
   // Networks in the registry whose contracts are not deployed yet are still listed, so the page says what exists and why it is off.
@@ -156,6 +172,7 @@ export async function listNetworks(e: Engine, ctx: AuthContext) {
       circle: n.circle,
       contracts: null, relayer_address: null, vault: null,
       fee: { bps: e.cfg.platformFeeBps, percent: formatFeePercent(e.cfg.platformFeeBps), max_bps: MAX_FEE_BPS, treasury: treasuryFor(n.id) },
+      tokens: Object.values(networkTokens(n)).map((t) => ({ symbol: t!.symbol, address: t!.address, decimals: t!.decimals, operational: false, not_operational_reasons: ["Contracts are not deployed on this network yet"], payment_methods: { address: false, wallet: false }, authorization: { receive_with_authorization: t!.authorization.receiveWithAuthorization, verified_at: t!.authorization.verifiedAt }, contracts: null, vault: null })),
     }));
   return [...live, ...pending];
 }

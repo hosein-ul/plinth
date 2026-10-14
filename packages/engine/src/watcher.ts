@@ -45,10 +45,12 @@ export async function watcherTick(e: Engine, networkId: string): Promise<Watcher
   const funded = fundedRows.map((r) => r.address as Address);
 
   const walletIntents = await e.db
-    .select({ invoiceId32: schema.paymentIntents.invoiceId32 })
+    .select({ invoiceId32: schema.paymentIntents.invoiceId32, currency: schema.paymentIntents.currency })
     .from(schema.paymentIntents)
     .where(and(gt(schema.paymentIntents.createdAt, windowStart), sql`${net.id} = any(${schema.paymentIntents.allowedNetworks})`, sql`'WALLET' = any(${schema.paymentIntents.checkoutMethods})`));
-  const invoiceIds = walletIntents.map((w) => w.invoiceId32 as Hex);
+  // Wallet payments come through the router of the payment's token: look at each token's router for its own invoices.
+  const idsByToken = new Map<string, Hex[]>();
+  for (const w of walletIntents) idsByToken.set(w.currency, [...(idsByToken.get(w.currency) ?? []), w.invoiceId32 as Hex]);
 
   // ---- cursor
   const [cursor] = await e.db.select().from(schema.watcherCursors).where(eq(schema.watcherCursors.networkId, net.id));
@@ -69,11 +71,12 @@ export async function watcherTick(e: Engine, networkId: string): Promise<Watcher
   let cursorBlock = from;
   while (cursorBlock <= info.head && chunks < MAX_CHUNKS_PER_TICK) {
     const to = cursorBlock + step - 1n > info.head ? info.head : cursorBlock + step - 1n;
-    const [transfers, sweeps, wallet] = await Promise.all([
+    const [transfers, sweeps, walletByToken] = await Promise.all([
       chain.adapter.scanTransfers(cursorBlock, to, addresses),
       chain.adapter.scanSweeps(cursorBlock, to, funded),
-      chain.adapter.scanRouterPayments(cursorBlock, to, invoiceIds),
+      Promise.all([...chain.tokens.values()].map((t) => t.adapter.scanRouterPayments(cursorBlock, to, idsByToken.get(t.symbol) ?? []))),
     ]);
+    const wallet = walletByToken.flat();
     for (const t of transfers) await ingestIncomingTransfer(e, chain, t, info);
     for (const s of sweeps) await ingestSweep(e, chain, s, info);
     for (const p of wallet) await ingestRouterPayment(e, chain, p, info);

@@ -57,6 +57,8 @@ export async function resolveRoute(
   merchant: { id: string; feeBps: number | null },
   chain: ChainRuntime,
   vaults: (typeof schema.merchantVaults.$inferSelect)[],
+  /** The token the payment is in: a vault holds one token, so the vault must be this token's. A direct wallet works for every token. */
+  token: string = "USDC",
 ): Promise<PayoutRoute | null> {
   const networkId = chain.network.id;
   const feeBps = feeBpsFor(e, merchant.feeBps, chain);
@@ -65,7 +67,7 @@ export async function resolveRoute(
   if (cfg?.mode === "DIRECT" && cfg.address) {
     return { networkId, kind: "DIRECT", destination: getAddress(cfg.address), feeBps, treasury, payoutConfigId: cfg.id };
   }
-  const vault = vaults.find((v) => v.networkId === networkId && v.status === "ACTIVE");
+  const vault = vaults.find((v) => v.networkId === networkId && v.tokenSymbol === token && v.status === "ACTIVE");
   if (!vault) return null;
   return { networkId, kind: "VAULT", destination: getAddress(vault.vaultAddress), feeBps, treasury, payoutConfigId: cfg?.id ?? null };
 }

@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   createPublicClient,
+  getAddress,
   createWalletClient,
   defineChain,
   http,
@@ -108,7 +109,7 @@ export async function startDevChain(opts: StartOptions = {}): Promise<DevChain> 
     });
     const r = await publicClient.waitForTransactionReceipt({ hash });
     if (!r.contractAddress || r.status !== "success") throw new Error(`deploy ${name} failed`);
-    return r.contractAddress;
+    return getAddress(r.contractAddress);
   };
 
   const usdc = await deploy("MockFiatToken");

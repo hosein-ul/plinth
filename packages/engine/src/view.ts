@@ -1,5 +1,5 @@
 import { eq, inArray, schema, type Executor } from "@plinth/db";
-import { formatUsdc } from "@plinth/shared";
+import { formatUsdc, type TokenSymbol } from "@plinth/shared";
 import { getAddress } from "viem";
 import type { Engine } from "./context";
 
@@ -29,7 +29,8 @@ export interface IntentView {
   net_amount_units: string;
   amount_refunded: string;
   excess_amount: string;
-  currency: "USDC";
+  /** The token the payment is denominated and paid in (USDC or EURC). */
+  currency: string;
   order_reference: string | null;
   description: string | null;
   customer_email: string | null;
@@ -46,7 +47,9 @@ export interface IntentView {
     chain_id: number;
     name: string;
     environment: string;
+    /** Address of the payment token on this network (named usdc_address for existing clients; it is the payment token, whatever it is). */
     usdc_address: string;
+    token: { symbol: string; address: string; decimals: number };
     deposit_address: string | null;
     deposit_address_explorer_url: string | null;
     wallet_checkout_supported: boolean;
@@ -61,7 +64,8 @@ export interface IntentView {
 export function intentView(e: Engine, i: Intent, addrs: Addr[]): IntentView {
   const nets = i.allowedNetworks.flatMap((id) => {
     const c = e.chains.get(id);
-    if (!c) return [];
+    const tok = c?.tokens.get(i.currency as TokenSymbol);
+    if (!c || !tok) return [];
     const a = addrs.find((x) => x.networkId === id);
     return [
       {
@@ -69,7 +73,8 @@ export function intentView(e: Engine, i: Intent, addrs: Addr[]): IntentView {
         chain_id: c.network.chainId,
         name: c.network.name,
         environment: c.network.environment,
-        usdc_address: c.network.usdc.address,
+        usdc_address: tok.config.address,
+        token: { symbol: tok.symbol, address: tok.config.address, decimals: tok.config.decimals },
         deposit_address: a ? getAddress(a.address) : null,
         deposit_address_explorer_url: a ? `${c.network.explorerUrl}/address/${getAddress(a.address)}` : null,
         explorer_url: c.network.explorerUrl,
@@ -77,7 +82,7 @@ export function intentView(e: Engine, i: Intent, addrs: Addr[]): IntentView {
         public_rpc_urls: c.network.rpcUrls,
         finality_confirmations: c.network.finality.confirmations,
         wallet_checkout_supported:
-          i.checkoutMethods.includes("WALLET") && c.network.authorization.receiveWithAuthorization && c.network.authorization.verified,
+          i.checkoutMethods.includes("WALLET") && tok.config.authorization.receiveWithAuthorization && tok.config.authorization.verified,
       },
     ];
   });
@@ -101,7 +106,7 @@ export function intentView(e: Engine, i: Intent, addrs: Addr[]): IntentView {
     net_amount_units: i.netAmount.toString(),
     amount_refunded: money(i.amountRefunded).decimal,
     excess_amount: money(i.excessAmount).decimal,
-    currency: "USDC",
+    currency: i.currency,
     order_reference: i.orderReference,
     description: i.description,
     customer_email: i.customerEmail,

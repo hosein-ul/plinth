@@ -41,7 +41,7 @@ export async function createPayoutChallenge(e: Engine, ctx: AuthContext, input: 
   const nonce = randomBytes(16).toString("hex");
   const issuedAt = e.now();
   const expiresAt = new Date(issuedAt.getTime() + CHALLENGE_TTL_MS);
-  const what = input.purpose === "PAYOUT_WALLET" ? "receive USDC payouts directly" : "own your Plinth vault";
+  const what = input.purpose === "PAYOUT_WALLET" ? "receive stablecoin payouts directly" : "own your Plinth vault";
   const message = createSiweMessage({
     address,
     chainId: chain.network.chainId,
@@ -60,7 +60,9 @@ export async function createPayoutChallenge(e: Engine, ctx: AuthContext, input: 
 
 function assertUsableWalletAddress(chain: ChainRuntime, address: Address) {
   const d = chain.deployment;
-  const refused = [zeroAddress, d.treasury, chain.network.usdc.address, d.vaultFactory, d.invoiceFactory, d.invoiceImplementation, d.paymentRouter];
+  // Never a payout wallet: the treasury, any payment token, and every contract of every token's set.
+  const sets = [...chain.tokens.values()].flatMap((t) => [t.config.address, t.contracts.vaultFactory, t.contracts.invoiceFactory, t.contracts.invoiceImplementation, t.contracts.paymentRouter]);
+  const refused = [zeroAddress, d.treasury, ...sets];
   if (refused.some((x) => isAddressEqual(x, address))) throw new EngineError("INVALID_ADDRESS", "That address cannot be used as a payout wallet.", 400);
 }
 
@@ -91,8 +93,10 @@ async function assertExternallyOwnedAccount(chain: ChainRuntime, address: Addres
 }
 
 async function assertNotBlacklisted(chain: ChainRuntime, address: Address) {
-  const listed = await chain.adapter.isBlacklisted(address);
-  if (listed === true) throw new EngineError("ADDRESS_BLOCKED", "The USDC issuer has blocked this address, so it cannot receive USDC.", 422);
+  // The wallet will receive every token the network accepts, so a block on any of them matters.
+  for (const t of chain.tokens.values()) {
+    if ((await t.adapter.isBlacklisted(address)) === true) throw new EngineError("ADDRESS_BLOCKED", `The ${t.symbol} issuer has blocked this address, so it cannot receive ${t.symbol}.`, 422);
+  }
 }
 
 /** Used by vault creation: the owner must prove control of the address that will own the vault. */
@@ -291,7 +295,8 @@ export async function listPayoutMethods(e: Engine, ctx: AuthContext) {
   for (const chain of e.chains.values()) {
     const id = chain.network.id;
     const active = await activePayoutConfig(e, e.db, ctx.merchantId, id);
-    const vault = vaults.find((v) => v.networkId === id);
+    const mineV = vaults.filter((v) => v.networkId === id);
+    const vault = mineV.find((v) => v.tokenSymbol === "USDC") ?? mineV[0];
     const mine = rows.filter((r) => r.networkId === id);
     const waiting = mine.find((r) => statusOf(e, r, active?.id ?? null) === "PENDING_CONFIRMATION") ?? mine.find((r) => statusOf(e, r, active?.id ?? null) === "COOLING_DOWN");
     const direct = active?.mode === "DIRECT" && active.address;

@@ -3,7 +3,7 @@ import { bumpFees, gasCost, MerchantVaultAbi, quoteFees, type FeeQuote } from "@
 import { newId } from "@plinth/shared";
 import { decodeEventLog, keccak256, type Hex, type TransactionReceipt } from "viem";
 import { audit } from "./audit";
-import { chainOf, norm, type ChainRuntime, type Engine } from "./context";
+import { chainOf, norm, tokenRuntime, type ChainRuntime, type Engine } from "./context";
 import { ingestRouterPayment, ingestSweep } from "./ingest";
 import { recomputeIntent } from "./recompute";
 import { emitEvent } from "./webhooks";
@@ -230,7 +230,9 @@ async function finalizeOp(e: Engine, chain: ChainRuntime, op: Op, receipt: Trans
     await failOp(e, chain, { ...op, status: "REVERTED" }, "transaction reverted on-chain", true);
     return;
   }
-  const events = chain.adapter.decodeReceiptEvents(receipt);
+  // Decode with the adapter of the token this operation served: its router is the one whose payments count.
+  const tr = tokenRuntime(chain, op.tokenSymbol, { open: false });
+  const events = tr.adapter.decodeReceiptEvents(receipt);
 
   if (op.kind === "DEPLOY_AND_SWEEP") {
     const [stl] = await e.db.select().from(schema.settlements).where(eq(schema.settlements.id, op.relatedId ?? ""));
@@ -255,7 +257,7 @@ async function finalizeOp(e: Engine, chain: ChainRuntime, op: Op, receipt: Trans
   } else if (op.kind === "CREATE_VAULT") {
     const [v] = await e.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.createRelayerOpId, op.id));
     if (v) {
-      const registered = await chain.adapter.isRegisteredVault(v.vaultAddress as Hex);
+      const registered = await tr.adapter.isRegisteredVault(v.vaultAddress as Hex);
       await e.db.transaction(async (tx) => {
         await tx.update(schema.merchantVaults).set({ status: registered ? "ACTIVE" : "FAILED", createTxHash: receipt.transactionHash }).where(eq(schema.merchantVaults.id, v.id));
         await audit(tx, { merchantId: v.merchantId, actor: { type: "RELAYER" }, action: registered ? "vault.created" : "vault.create_unverified", targetType: "merchant_vault", targetId: v.id, data: { vault: v.vaultAddress, txHash: receipt.transactionHash } });
@@ -276,7 +278,7 @@ async function recordForward(e: Engine, chain: ChainRuntime, op: Op, receipt: Tr
       const [vault] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.networkId, chain.network.id), eq(schema.merchantVaults.vaultAddress, norm(op.toAddress))));
       if (!vault) continue;
       await e.db.transaction(async (tx) => {
-        await tx.insert(schema.transactions).values({ id: newId("tx"), networkId: chain.network.id, txHash: receipt.transactionHash, logIndex: l.logIndex, kind: "FORWARD", merchantId: vault.merchantId, tokenAddress: norm(chain.network.usdc.address), fromAddress: norm(vault.vaultAddress), toAddress: norm(d.args.destination), amount: d.args.amount, blockNumber: receipt.blockNumber, blockHash: receipt.blockHash, status: "FINAL", finalizedAt: e.now() }).onConflictDoNothing();
+        await tx.insert(schema.transactions).values({ id: newId("tx"), networkId: chain.network.id, txHash: receipt.transactionHash, logIndex: l.logIndex, kind: "FORWARD", merchantId: vault.merchantId, tokenAddress: norm(tokenRuntime(chain, vault.tokenSymbol, { open: false }).config.address), fromAddress: norm(vault.vaultAddress), toAddress: norm(d.args.destination), amount: d.args.amount, blockNumber: receipt.blockNumber, blockHash: receipt.blockHash, status: "FINAL", finalizedAt: e.now() }).onConflictDoNothing();
         await tx.insert(schema.ledgerEntries).values({ id: newId("led"), merchantId: vault.merchantId, paymentIntentId: null, networkId: chain.network.id, account: "FORWARDED", direction: "CREDIT", amount: d.args.amount, refType: "tx", refId: `${receipt.transactionHash}:${l.logIndex}`, idempotencyKey: `FORWARDED:${receipt.transactionHash}:${l.logIndex}:CREDIT` }).onConflictDoNothing();
       });
     } catch {

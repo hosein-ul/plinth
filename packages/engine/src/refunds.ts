@@ -3,7 +3,7 @@ import { formatUsdc, newId, parseUsdc } from "@plinth/shared";
 import { getAddress, isAddressEqual, parseAbiItem, decodeEventLog, type Hex } from "viem";
 import { audit } from "./audit";
 import { requirePermission, type AuthContext } from "./auth";
-import { EngineError, norm, type Engine } from "./context";
+import { EngineError, norm, tokenRuntime, type Engine } from "./context";
 import { committedRoute } from "./payout-route";
 import { recomputeIntent } from "./recompute";
 import { emitEvent } from "./webhooks";
@@ -29,7 +29,7 @@ export async function requestRefund(e: Engine, ctx: AuthContext, input: { paymen
   if (refundable <= 0n) throw new EngineError("NOTHING_TO_REFUND", "Nothing has been delivered to you yet, so there is nothing to refund. Funds can be refunded once they have settled.", 422);
   if (amount + committed > refundable) {
     const left = refundable > committed ? refundable - committed : 0n;
-    throw new EngineError("REFUND_EXCEEDS_PAYMENT", `Only ${formatUsdc(left)} USDC remains refundable. The platform fee is not refunded.`, 422);
+    throw new EngineError("REFUND_EXCEEDS_PAYMENT", `Only ${formatUsdc(left)} ${intent.currency} remains refundable. The platform fee is not refunded.`, 422);
   }
 
   // Refunds go to the network the funds arrived on.
@@ -54,12 +54,15 @@ export async function submitRefundProof(e: Engine, ctx: AuthContext, refundId: s
   if (r.status !== "REQUESTED") throw new EngineError("INVALID_STATE", `Refund is ${r.status}`, 409);
   const chain = e.chains.get(r.networkId);
   if (!chain) throw new EngineError("UNKNOWN_NETWORK", "Network unavailable", 400);
+  // The refund is in the payment's own token.
+  const [intent] = await e.db.select().from(schema.paymentIntents).where(eq(schema.paymentIntents.id, r.paymentIntentId));
+  const tokenAddress = tokenRuntime(chain, intent!.currency, { open: false }).config.address;
   // The refund must leave the account the money was delivered to: the destination committed for this payment.
   const route = await committedRoute(e.db, r.paymentIntentId, r.networkId);
   let source: string;
   if (route) source = route.destinationAddress;
   else {
-    const [vault] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, r.networkId)));
+    const [vault] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, r.networkId), eq(schema.merchantVaults.tokenSymbol, intent!.currency)));
     if (!vault) throw new EngineError("NOT_FOUND", "Vault not found", 404);
     source = vault.vaultAddress;
   }
@@ -70,7 +73,7 @@ export async function submitRefundProof(e: Engine, ctx: AuthContext, refundId: s
   if (!chain.adapter.isFinal(receipt.blockNumber, info)) throw new EngineError("PROOF_PENDING", "Transaction is not final yet; retry shortly", 409);
 
   const match = receipt.logs.find((l) => {
-    if (!isAddressEqual(l.address, chain.network.usdc.address)) return false;
+    if (!isAddressEqual(l.address, tokenAddress)) return false;
     try {
       const d = decodeEventLog({ abi: [transferEvent], data: l.data, topics: l.topics });
       return isAddressEqual(d.args.from, source as Hex) && isAddressEqual(d.args.to, r.recipient as Hex) && d.args.value === r.amount;
@@ -78,7 +81,7 @@ export async function submitRefundProof(e: Engine, ctx: AuthContext, refundId: s
       return false;
     }
   });
-  if (!match) throw new EngineError("PROOF_INVALID", `No matching USDC transfer from ${route?.destinationKind === "DIRECT" ? "your payout wallet" : "your vault"} to the recipient for this amount was found in that transaction`, 422);
+  if (!match) throw new EngineError("PROOF_INVALID", `No matching ${intent!.currency} transfer from ${route?.destinationKind === "DIRECT" ? "your payout wallet" : "your vault"} to the recipient for this amount was found in that transaction`, 422);
 
   await e.db.transaction(async (tx) => {
     const updated = await tx.update(schema.refunds).set({ status: "COMPLETED", txHash, logIndex: match.logIndex, completedAt: e.now() }).where(and(eq(schema.refunds.id, r.id), eq(schema.refunds.status, "REQUESTED"))).returning();

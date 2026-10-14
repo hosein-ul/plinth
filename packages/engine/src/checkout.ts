@@ -1,10 +1,10 @@
 import { and, count, eq, schema } from "@plinth/db";
-import { computeFee, destinationKindIndex, newId, formatUsdc, toBytes32Id, type DestinationKind } from "@plinth/shared";
+import { computeFee, destinationKindIndex, newId, formatAmount, toBytes32Id, type DestinationKind } from "@plinth/shared";
 import { buildReceiveAuthorization, recoverAuthorizationSigner, splitSignature, type RouterPayment } from "@plinth/blockchain";
 import { getAddress, isAddressEqual, toHex, type Address, type Hex } from "viem";
 import { randomBytes } from "node:crypto";
 import { audit } from "./audit";
-import { EngineError, norm, type Engine } from "./context";
+import { EngineError, norm, tokenRuntime, type Engine } from "./context";
 import { committedRoute } from "./payout-route";
 import { loadIntentView } from "./view";
 
@@ -24,15 +24,15 @@ export async function publicCheckout(e: Engine, id: string) {
     merchant_name: merchant?.name ?? "",
     seconds_remaining: Math.max(0, Math.floor((row!.expiresAt.getTime() - now.getTime()) / 1000)),
     remaining_units: (remaining > 0n ? remaining : 0n).toString(),
-    remaining: formatUsdc(remaining > 0n ? remaining : 0n),
+    remaining: formatAmount(remaining > 0n ? remaining : 0n),
     // Wallet capability is reported per network from verified token behaviour AND relayer availability.
     networks: view.networks.map((n) => {
       const c = e.chains.get(n.network)!;
-      const wallet = n.wallet_checkout_supported && !!c.signer && c.operational;
-      return { ...n, wallet_checkout_supported: wallet, wallet_unavailable_reason: wallet ? null : !n.wallet_checkout_supported ? "The USDC contract on this network does not support gasless authorization." : "Gasless relaying is not available on this network right now." };
+      const wallet = n.wallet_checkout_supported && !!c.signer && !!c.tokens.get(row!.currency as never)?.operational;
+      return { ...n, wallet_checkout_supported: wallet, wallet_unavailable_reason: wallet ? null : !n.wallet_checkout_supported ? `The ${n.token.symbol} contract on this network does not support gasless authorization.` : "Gasless relaying is not available on this network right now." };
     }),
     payments: txs.filter((t) => t.kind !== "SWEEP").map((t) => ({
-      network: t.networkId, tx_hash: t.txHash, amount: formatUsdc(t.amount), status: t.status, confirmations: t.confirmations,
+      network: t.networkId, tx_hash: t.txHash, amount: formatAmount(t.amount), status: t.status, confirmations: t.confirmations,
       official_asset: t.isOfficialAsset, method: t.kind === "WALLET_PAYMENT" ? "WALLET" : "ADDRESS",
       explorer_url: `${e.chains.get(t.networkId)?.network.explorerUrl ?? ""}/tx/${t.txHash}`,
     })),
@@ -51,8 +51,10 @@ export async function prepareWalletPayment(e: Engine, intentId: string, input: {
   if (!intent.allowedNetworks.includes(input.network)) throw new EngineError("NETWORK_NOT_ALLOWED", "This network is not enabled for this payment", 400);
   const chain = e.chains.get(input.network);
   if (!chain || !chain.operational) throw new EngineError("NETWORK_NOT_OPERATIONAL", "This network is not available", 409);
+  const tr = tokenRuntime(chain, intent.currency);
   if (!chain.signer) throw new EngineError("WALLET_UNAVAILABLE", "Gasless payments are unavailable on this network. Pay with the deposit address instead.", 409);
-  if (!chain.network.authorization.verified || !chain.network.authorization.receiveWithAuthorization) throw new EngineError("WALLET_UNAVAILABLE", "This network's USDC does not support gasless authorization. Pay with the deposit address instead.", 409);
+  // Gasless checkout needs the token's own EIP-3009 support (probed per token); otherwise the deposit address is the way to pay.
+  if (!tr.config.authorization.verified || !tr.config.authorization.receiveWithAuthorization) throw new EngineError("WALLET_UNAVAILABLE", `This network's ${tr.symbol} does not support gasless authorization. Pay with the deposit address instead.`, 409);
 
   const [{ n } = { n: 0 }] = await e.db.select({ n: count() }).from(schema.paymentAttempts).where(eq(schema.paymentAttempts.paymentIntentId, intentId));
   if (n >= 25) throw new EngineError("TOO_MANY_ATTEMPTS", "Too many payment attempts for this payment", 429);
@@ -64,8 +66,8 @@ export async function prepareWalletPayment(e: Engine, intentId: string, input: {
   const remaining = intent.amount - intent.amountFinal - intent.amountPending;
   if (remaining <= 0n) throw new EngineError("ALREADY_PAID", "This payment is already fully funded", 409);
   const payer = getAddress(input.payer);
-  const balance = await chain.adapter.usdcBalanceOf(payer);
-  if (balance < remaining) throw new EngineError("INSUFFICIENT_BALANCE", `Your wallet holds ${formatUsdc(balance)} USDC on ${chain.network.name}; ${formatUsdc(remaining)} is required.`, 422, { balance_units: balance.toString(), required_units: remaining.toString() });
+  const balance = await tr.adapter.tokenBalanceOf(payer);
+  if (balance < remaining) throw new EngineError("INSUFFICIENT_BALANCE", `Your wallet holds ${formatAmount(balance)} ${tr.symbol} on ${chain.network.name}; ${formatAmount(remaining)} is required.`, 422, { balance_units: balance.toString(), required_units: remaining.toString() });
 
   // Authorization windows are enforced by the token against BLOCK time, so build them from chain time
   // (robust to clock skew between this server and the network), capped by the invoice expiry.
@@ -76,7 +78,7 @@ export async function prepareWalletPayment(e: Engine, intentId: string, input: {
     merchantId: toBytes32Id(intent.merchantId), invoiceId: intent.invoiceId32 as Hex,
     value: remaining, validAfter: BigInt(nowSec - 600), validBefore: BigInt(validBefore), salt: toHex(randomBytes(32)),
   };
-  const auth = buildReceiveAuthorization(chain.network, chain.deployment.paymentRouter, getAddress(route.treasuryAddress), payment);
+  const auth = buildReceiveAuthorization(chain.network, tr.contracts.paymentRouter, getAddress(route.treasuryAddress), payment, tr.config);
   const attemptId = newId("att");
   await e.db.insert(schema.paymentAttempts).values({
     id: attemptId, paymentIntentId: intentId, merchantId: intent.merchantId, networkId: input.network, method: "WALLET", status: "PREPARED", payer: norm(payer), amount: remaining, nonce: auth.nonce.toLowerCase(),
@@ -85,7 +87,8 @@ export async function prepareWalletPayment(e: Engine, intentId: string, input: {
   return {
     attempt_id: attemptId,
     network: input.network,
-    amount: formatUsdc(remaining),
+    currency: tr.symbol,
+    amount: formatAmount(remaining),
     amount_units: remaining.toString(),
     expires_at: new Date(validBefore * 1000).toISOString(),
     // The customer's wallet signs this exact EIP-712 payload; the destination (`to`) is the PaymentRouter.
@@ -97,7 +100,7 @@ export async function prepareWalletPayment(e: Engine, intentId: string, input: {
     },
     fee: { customer_network_fee: "0", note: "No network fee for you: the transaction is relayed and its fee is paid by the gateway operator." },
     // The platform fee is taken from the merchant's side of this payment: the customer pays exactly the amount above.
-    platform_fee: { bps: route.feeBps, amount_units: computeFee(remaining, route.feeBps).toString(), amount: formatUsdc(computeFee(remaining, route.feeBps), { minDecimals: 2 }) },
+    platform_fee: { bps: route.feeBps, amount_units: computeFee(remaining, route.feeBps).toString(), amount: formatAmount(computeFee(remaining, route.feeBps), undefined, { minDecimals: 2 }) },
   };
 }
 
@@ -109,6 +112,7 @@ export async function submitWalletPayment(e: Engine, intentId: string, input: { 
   if (!intent || !OPEN.includes(intent.status)) throw new EngineError("PAYMENT_NOT_OPEN", "This payment is no longer accepting funds", 409);
   const chain = e.chains.get(attempt.networkId);
   if (!chain || !chain.operational || !chain.signer) throw new EngineError("WALLET_UNAVAILABLE", "Gasless payments are unavailable right now", 409);
+  const tr = tokenRuntime(chain, intent.currency);
 
   const a = attempt.authorization!;
   const payment: RouterPayment = {
@@ -120,7 +124,7 @@ export async function submitWalletPayment(e: Engine, intentId: string, input: { 
   if (payment.validBefore <= nowSec + 20n) throw new EngineError("AUTHORIZATION_EXPIRED", "This authorization expired. Please start again.", 410);
 
   // The signature must be by the payer over EXACTLY the payload we issued. Anything else is rejected.
-  const auth = buildReceiveAuthorization(chain.network, chain.deployment.paymentRouter, getAddress(a.treasury!), payment);
+  const auth = buildReceiveAuthorization(chain.network, tr.contracts.paymentRouter, getAddress(a.treasury!), payment, tr.config);
   if (auth.nonce.toLowerCase() !== attempt.nonce) throw new EngineError("INTERNAL", "Authorization mismatch", 500);
   let signer: Address;
   try {
@@ -130,16 +134,16 @@ export async function submitWalletPayment(e: Engine, intentId: string, input: { 
   }
   if (!isAddressEqual(signer, payment.from)) throw new EngineError("INVALID_SIGNATURE", "The signature was not made by the paying wallet", 400);
   if (await chain.adapter.isAuthorizationUsed(payment.from, auth.nonce)) throw new EngineError("ATTEMPT_USED", "This authorization was already used", 409);
-  if ((await chain.adapter.usdcBalanceOf(payment.from)) < payment.value) throw new EngineError("INSUFFICIENT_BALANCE", "The wallet no longer holds enough USDC", 422);
+  if ((await tr.adapter.tokenBalanceOf(payment.from)) < payment.value) throw new EngineError("INSUFFICIENT_BALANCE", `The wallet no longer holds enough ${tr.symbol}`, 422);
 
   const { v, r, s } = splitSignature(input.signature as Hex);
-  const call = chain.adapter.encodePay(payment, v, r, s);
+  const call = tr.adapter.encodePay(payment, v, r, s);
   const opId = newId("rop");
   await e.db.transaction(async (tx) => {
     // Claim the attempt atomically so a double-submit cannot create two relayer operations.
     const claimed = await tx.update(schema.paymentAttempts).set({ status: "SUBMITTED", relayerOperationId: null, updatedAt: e.now() }).where(and(eq(schema.paymentAttempts.id, attempt.id), eq(schema.paymentAttempts.status, "PREPARED"))).returning({ id: schema.paymentAttempts.id });
     if (claimed.length === 0) throw new EngineError("ATTEMPT_USED", "This payment attempt was already submitted", 409);
-    await tx.insert(schema.relayerOperations).values({ id: opId, networkId: attempt.networkId, kind: "WALLET_PAYMENT", dedupeKey: `wallet:${attempt.id}`, toAddress: norm(call.to), calldata: call.data, relatedType: "payment_attempt", relatedId: attempt.id });
+    await tx.insert(schema.relayerOperations).values({ id: opId, networkId: attempt.networkId, kind: "WALLET_PAYMENT", tokenSymbol: tr.symbol, dedupeKey: `wallet:${attempt.id}`, toAddress: norm(call.to), calldata: call.data, relatedType: "payment_attempt", relatedId: attempt.id });
     await tx.update(schema.paymentAttempts).set({ relayerOperationId: opId }).where(eq(schema.paymentAttempts.id, attempt.id));
     await tx.insert(schema.paymentEvents).values({ id: newId("pev"), paymentIntentId: intentId, type: "wallet_payment.submitted", data: { network: attempt.networkId, payer: attempt.payer, amount_units: payment.value.toString() } });
     await audit(tx, { merchantId: intent.merchantId, actor: { type: "SYSTEM" }, action: "wallet_payment.submitted", targetType: "payment_attempt", targetId: attempt.id });

@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, ilike, inArray, lt, or, schema, sql, type Executor } from "@plinth/db";
-import { DEFAULT_EXPIRY_SECONDS, formatUsdc, newId, parseUsdc, toBytes32Id, type CreatePaymentIntentInput } from "@plinth/shared";
+import { DEFAULT_EXPIRY_SECONDS, formatAmount, formatUsdc, isTokenSymbol, newId, parseAmount, parseUsdc, toBytes32Id, TOKEN_DECIMALS, type CreatePaymentIntentInput, type TokenSymbol } from "@plinth/shared";
 import { getAddress, type Hex } from "viem";
 import { audit } from "./audit";
 import { requirePermission, type AuthContext } from "./auth";
-import { EngineError, norm, type Engine } from "./context";
+import { EngineError, norm, tokenRuntime, type Engine } from "./context";
 import { resolveRoute, type PayoutRoute } from "./payout-route";
 import { loadIntentView, loadIntentViews, type IntentView } from "./view";
 
@@ -23,7 +23,9 @@ export interface CreateOpts {
  */
 export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: CreatePaymentIntentInput, opts: CreateOpts = {}): Promise<IntentView> {
   requirePermission(ctx, "payments");
-  const amount = parseUsdc(input.amount);
+  const symbol = (input.currency ?? "USDC") as TokenSymbol;
+  if (!isTokenSymbol(symbol)) throw new EngineError("UNSUPPORTED_TOKEN", `Unsupported currency ${String(input.currency)}`, 400);
+  const amount = parseAmount(input.amount, TOKEN_DECIMALS, symbol);
   const wantEnv = ctx.environment === "live" ? "mainnet" : "testnet";
 
   const vaults = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.status, "ACTIVE")));
@@ -35,13 +37,14 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
   // A network is offered only when the merchant can actually be paid there: an active vault, or an active payout wallet.
   const routes: PayoutRoute[] = [];
   for (const c of e.chains.values()) {
-    if (!c.operational || c.network.environment !== wantEnv || (input.networks && !input.networks.includes(c.network.id))) continue;
-    const r = await resolveRoute(e, opts.tx ?? e.db, merchant!, c, vaults);
+    // The token must be open on this network (its own contracts verified), not only USDC.
+    if (!c.operational || !c.tokens.get(symbol)?.operational || c.network.environment !== wantEnv || (input.networks && !input.networks.includes(c.network.id))) continue;
+    const r = await resolveRoute(e, opts.tx ?? e.db, merchant!, c, vaults, symbol);
     if (r) routes.push(r);
   }
   const candidates = [...e.chains.values()].filter((c) => routes.some((r) => r.networkId === c.network.id));
   if (candidates.length === 0) {
-    throw new EngineError("NO_NETWORK_AVAILABLE", `No ${wantEnv} network is available. Set up a payout method on a network first (a vault, or a payout wallet).`, 422);
+    throw new EngineError("NO_NETWORK_AVAILABLE", `No ${wantEnv} network is available for ${symbol}. Set up a payout method first (a ${symbol} vault, or a payout wallet).`, 422);
   }
 
   const id = newId("pi");
@@ -55,8 +58,9 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
   if (methods.includes("ADDRESS")) {
     for (const chain of candidates) {
       const route = routes.find((r) => r.networkId === chain.network.id)!;
-      const offline = chain.adapter.predictInvoiceAddress(route, merchantId32, invoiceId32);
-      const onchain = await chain.adapter.predictInvoiceAddressOnChain(route, merchantId32, invoiceId32);
+      const adapter = tokenRuntime(chain, symbol).adapter;
+      const offline = adapter.predictInvoiceAddress(route, merchantId32, invoiceId32);
+      const onchain = await adapter.predictInvoiceAddressOnChain(route, merchantId32, invoiceId32);
       if (norm(offline) !== norm(onchain)) {
         // Never show an address we cannot prove. This indicates a registry/deployment mismatch.
         e.log.error("invoice address derivation mismatch", { network: chain.network.id, offline, onchain });
@@ -69,7 +73,7 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
   const run = async (tx: Executor) => {
     await tx.insert(schema.paymentIntents).values({
       id, invoiceId32, merchantId: ctx.merchantId, environment: ctx.environment, kind: opts.kind ?? "PAYMENT_INTENT", paymentLinkId: opts.paymentLinkId ?? null,
-      orderReference: input.order_reference ?? null, description: input.description ?? null, amount,
+      orderReference: input.order_reference ?? null, description: input.description ?? null, amount, currency: symbol,
       allowedNetworks: candidates.map((c) => c.network.id), checkoutMethods: methods, status: "AWAITING_PAYMENT", expiresAt,
       customerEmail: input.customer_email ?? null, successUrl: input.success_url ?? null, cancelUrl: input.cancel_url ?? null, metadata: input.metadata ?? {},
     });
@@ -84,12 +88,12 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
       await tx.insert(schema.invoiceAddresses).values({
         id: newId("inv").replace("inv_", "ia_"), paymentIntentId: id, merchantId: ctx.merchantId, networkId: a.chain.network.id, address: norm(a.address),
         vaultAddress: a.route.kind === "VAULT" ? norm(a.route.destination) : null, destinationKind: a.route.kind, destinationAddress: norm(a.route.destination),
-        feeBps: a.route.feeBps, treasuryAddress: norm(a.route.treasury),
-        merchantId32, invoiceId32, factoryAddress: norm(a.chain.deployment.invoiceFactory), implementationAddress: norm(a.chain.deployment.invoiceImplementation),
-        contractVersion: a.chain.deployment.version, createdBlock: a.createdBlock,
+        feeBps: a.route.feeBps, treasuryAddress: norm(a.route.treasury), tokenSymbol: symbol,
+        merchantId32, invoiceId32, factoryAddress: norm(tokenRuntime(a.chain, symbol).contracts.invoiceFactory), implementationAddress: norm(tokenRuntime(a.chain, symbol).contracts.invoiceImplementation),
+        contractVersion: tokenRuntime(a.chain, symbol).contracts.version, createdBlock: a.createdBlock,
       });
     }
-    await tx.insert(schema.paymentEvents).values({ id: newId("pev"), paymentIntentId: id, type: "created", data: { amount_units: amount.toString(), networks: candidates.map((c) => c.network.id) } });
+    await tx.insert(schema.paymentEvents).values({ id: newId("pev"), paymentIntentId: id, type: "created", data: { amount_units: amount.toString(), currency: symbol, networks: candidates.map((c) => c.network.id) } });
     await audit(tx, { merchantId: ctx.merchantId, actor: ctx.actor, action: "payment_intent.created", targetType: "payment_intent", targetId: id });
   };
   if (opts.tx) await run(opts.tx);
@@ -166,15 +170,16 @@ export async function paymentDetail(e: Engine, ctx: AuthContext, id: string) {
 
 // ------------------------------------------------------------------ payment links
 
-export async function createPaymentLink(e: Engine, ctx: AuthContext, input: { name: string; amount: string; description?: string; networks?: string[]; checkout_methods: string[]; success_url?: string; intent_expires_in_seconds: number }) {
+export async function createPaymentLink(e: Engine, ctx: AuthContext, input: { name: string; amount: string; currency?: TokenSymbol; description?: string; networks?: string[]; checkout_methods: string[]; success_url?: string; intent_expires_in_seconds: number }) {
   requirePermission(ctx, "payments");
-  parseUsdc(input.amount);
+  const currency = input.currency ?? "USDC";
+  parseAmount(input.amount, TOKEN_DECIMALS, currency);
   const wantEnv = ctx.environment === "live" ? "mainnet" : "testnet";
   const nets = (input.networks ?? [...e.chains.values()].filter((c) => c.network.environment === wantEnv).map((c) => c.network.id));
   const id = newId("pl");
   const slug = randomBytes(6).toString("base64url").toLowerCase().replace(/[^a-z0-9]/g, "x");
   await e.db.insert(schema.paymentLinks).values({
-    id, merchantId: ctx.merchantId, environment: ctx.environment, slug, name: input.name, description: input.description ?? null, amount: parseUsdc(input.amount),
+    id, merchantId: ctx.merchantId, environment: ctx.environment, slug, name: input.name, description: input.description ?? null, amount: parseAmount(input.amount, TOKEN_DECIMALS, currency), currency,
     allowedNetworks: nets, checkoutMethods: input.checkout_methods, successUrl: input.success_url ?? null, intentExpirySeconds: input.intent_expires_in_seconds,
   });
   await audit(e.db, { merchantId: ctx.merchantId, actor: ctx.actor, action: "payment_link.created", targetType: "payment_link", targetId: id });
@@ -182,7 +187,7 @@ export async function createPaymentLink(e: Engine, ctx: AuthContext, input: { na
 }
 
 const linkView = (e: Engine, l: typeof schema.paymentLinks.$inferSelect) => ({
-  id: l.id, object: "payment_link", livemode: l.environment === "live", name: l.name, description: l.description, amount: formatUsdc(l.amount), amount_units: l.amount.toString(),
+  id: l.id, object: "payment_link", livemode: l.environment === "live", name: l.name, description: l.description, currency: l.currency, amount: formatAmount(l.amount), amount_units: l.amount.toString(),
   networks: l.allowedNetworks, checkout_methods: l.checkoutMethods, active: l.active, url: `${e.cfg.publicWebUrl.replace(/\/$/, "")}/l/${l.slug}`, created_at: l.createdAt.toISOString(),
 });
 
@@ -209,7 +214,7 @@ export async function publicLinkInfo(e: Engine, slug: string) {
   const [l] = await e.db.select().from(schema.paymentLinks).where(eq(schema.paymentLinks.slug, slug));
   if (!l || !l.active) throw new EngineError("NOT_FOUND", "This payment link is not available", 404);
   const [m] = await e.db.select().from(schema.merchants).where(eq(schema.merchants.id, l.merchantId));
-  return { name: l.name, description: l.description, amount: formatUsdc(l.amount), merchant_name: m?.name ?? "", livemode: l.environment === "live" };
+  return { name: l.name, description: l.description, amount: formatAmount(l.amount), currency: l.currency, merchant_name: m?.name ?? "", livemode: l.environment === "live" };
 }
 
 export async function createIntentFromLink(e: Engine, slug: string) {
@@ -217,7 +222,7 @@ export async function createIntentFromLink(e: Engine, slug: string) {
   if (!l || !l.active) throw new EngineError("NOT_FOUND", "This payment link is not available", 404);
   const ctx: AuthContext = { merchantId: l.merchantId, environment: l.environment as "test" | "live", actor: { type: "SYSTEM" }, role: "DEVELOPER", via: "api_key" };
   return createPaymentIntent(e, ctx, {
-    amount: formatUsdc(l.amount), currency: "USDC", description: l.name, networks: l.allowedNetworks, checkout_methods: l.checkoutMethods as ("WALLET" | "ADDRESS")[],
+    amount: formatAmount(l.amount), currency: l.currency as TokenSymbol, description: l.name, networks: l.allowedNetworks, checkout_methods: l.checkoutMethods as ("WALLET" | "ADDRESS")[],
     expires_in_seconds: l.intentExpirySeconds, success_url: l.successUrl ?? undefined, order_reference: `link:${l.id}`,
   } as CreatePaymentIntentInput, { kind: "PAYMENT_LINK", paymentLinkId: l.id });
 }
@@ -227,22 +232,23 @@ export async function createIntentFromLink(e: Engine, slug: string) {
 export async function createInvoice(
   e: Engine,
   ctx: AuthContext,
-  input: { customer_name: string; customer_email: string; memo?: string; due_in_days: number; line_items: { description: string; quantity: number; unit_amount: string }[]; networks?: string[]; checkout_methods: ("WALLET" | "ADDRESS")[] },
+  input: { customer_name: string; customer_email: string; memo?: string; due_in_days: number; line_items: { description: string; quantity: number; unit_amount: string }[]; networks?: string[]; checkout_methods: ("WALLET" | "ADDRESS")[]; currency?: TokenSymbol },
 ) {
   requirePermission(ctx, "payments");
-  const total = input.line_items.reduce((a, li) => a + parseUsdc(li.unit_amount) * BigInt(li.quantity), 0n);
+  const currency = input.currency ?? "USDC";
+  const total = input.line_items.reduce((a, li) => a + parseAmount(li.unit_amount, TOKEN_DECIMALS, currency) * BigInt(li.quantity), 0n);
   const dueAt = new Date(e.now().getTime() + input.due_in_days * 86_400_000);
   // Not one big transaction: createPaymentIntent performs RPC reads, which must not run inside a DB transaction.
   const [m] = await e.db.update(schema.merchants).set({ invoiceSeq: sql`${schema.merchants.invoiceSeq} + 1` }).where(eq(schema.merchants.id, ctx.merchantId)).returning({ seq: schema.merchants.invoiceSeq });
   const number = `INV-${String(m!.seq).padStart(4, "0")}`;
   const intent = await createPaymentIntent(
     e, ctx,
-    { amount: formatUsdc(total, { minDecimals: 6 }), currency: "USDC", description: `Invoice ${number}`, order_reference: number, networks: input.networks, checkout_methods: input.checkout_methods, expires_in_seconds: 0, customer_email: input.customer_email } as CreatePaymentIntentInput,
+    { amount: formatAmount(total, TOKEN_DECIMALS, { minDecimals: 6 }), currency, description: `Invoice ${number}`, order_reference: number, networks: input.networks, checkout_methods: input.checkout_methods, expires_in_seconds: 0, customer_email: input.customer_email } as CreatePaymentIntentInput,
     { kind: "INVOICE", expiresAt: dueAt },
   );
   const id = newId("inv");
   await e.db.insert(schema.invoices).values({ id, merchantId: ctx.merchantId, paymentIntentId: intent.id, number, customerName: input.customer_name, customerEmail: input.customer_email, memo: input.memo ?? null, lineItems: input.line_items.map((l) => ({ description: l.description, quantity: l.quantity, unitAmount: l.unit_amount })), dueAt });
-  return { id, object: "invoice", number, customer_name: input.customer_name, customer_email: input.customer_email, memo: input.memo ?? null, total: formatUsdc(total), due_at: dueAt.toISOString(), line_items: input.line_items, payment: intent };
+  return { id, object: "invoice", number, customer_name: input.customer_name, customer_email: input.customer_email, memo: input.memo ?? null, total: formatAmount(total), currency, due_at: dueAt.toISOString(), line_items: input.line_items, payment: intent };
 }
 
 export async function listInvoices(e: Engine, ctx: AuthContext) {

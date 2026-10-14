@@ -14,9 +14,10 @@ const OPEN = ["CREATED", "AWAITING_PAYMENT", "DETECTED", "CONFIRMING"];
  *  - `settled_to_vault`= confirmed inside the merchant vault,
  *  - `pending`         = detected but not yet final.
  */
-export async function overview(e: Engine, ctx: AuthContext, days = 30) {
+export async function overview(e: Engine, ctx: AuthContext, days = 30, currency = "USDC") {
   const since = new Date(e.now().getTime() - days * 86_400_000);
-  const base = and(eq(schema.paymentIntents.merchantId, ctx.merchantId), eq(schema.paymentIntents.environment, ctx.environment), gte(schema.paymentIntents.createdAt, since));
+  // Figures are in ONE token at a time: amounts of different tokens are never added together.
+  const base = and(eq(schema.paymentIntents.merchantId, ctx.merchantId), eq(schema.paymentIntents.environment, ctx.environment), eq(schema.paymentIntents.currency, currency), gte(schema.paymentIntents.createdAt, since));
   const [agg] = await e.db
     .select({
       total: sql<number>`count(*)::int`,
@@ -54,6 +55,7 @@ export async function overview(e: Engine, ctx: AuthContext, days = 30) {
   const money = (v: string | undefined) => ({ amount: formatUsdc(BigInt(v ?? "0")), units: v ?? "0" });
   return {
     window_days: days,
+    currency,
     livemode: ctx.environment === "live",
     received_final: money(agg?.receivedFinal),
     /** Funds that left invoice addresses for the merchant, before the platform fee. Kept under the old key for existing clients. */
@@ -72,6 +74,14 @@ export async function overview(e: Engine, ctx: AuthContext, days = 30) {
   };
 }
 
+/** payment intent id -> the token it is in, for views that mix payments. */
+async function currencies(e: Engine, ids: (string | null)[]): Promise<Map<string, string>> {
+  const want = [...new Set(ids.filter((x): x is string => !!x))];
+  if (want.length === 0) return new Map();
+  const rows = await e.db.select({ id: schema.paymentIntents.id, currency: schema.paymentIntents.currency }).from(schema.paymentIntents).where(inArray(schema.paymentIntents.id, want));
+  return new Map(rows.map((r) => [r.id, r.currency]));
+}
+
 export async function listTransactions(e: Engine, ctx: AuthContext, limit = 100) {
   const rows = await e.db
     .select({ t: schema.transactions })
@@ -80,8 +90,9 @@ export async function listTransactions(e: Engine, ctx: AuthContext, limit = 100)
     .where(and(eq(schema.transactions.merchantId, ctx.merchantId), eq(schema.paymentIntents.environment, ctx.environment)))
     .orderBy(desc(schema.transactions.firstSeenAt))
     .limit(Math.min(limit, 200));
+  const cur = await currencies(e, rows.map(({ t }) => t.paymentIntentId));
   return rows.map(({ t }) => ({
-    id: t.id, kind: t.kind, network: t.networkId, tx_hash: t.txHash, log_index: t.logIndex, payment_intent_id: t.paymentIntentId, status: t.status, official_asset: t.isOfficialAsset,
+    id: t.id, currency: cur.get(t.paymentIntentId ?? "") ?? "USDC", kind: t.kind, network: t.networkId, tx_hash: t.txHash, log_index: t.logIndex, payment_intent_id: t.paymentIntentId, status: t.status, official_asset: t.isOfficialAsset,
     from: t.fromAddress ? getAddress(t.fromAddress) : null, to: t.toAddress ? getAddress(t.toAddress) : null, amount: formatUsdc(t.amount), amount_units: t.amount.toString(), fee_units: t.feeAmount?.toString() ?? null,
     confirmations: t.confirmations, block_number: t.blockNumber?.toString() ?? null, seen_at: t.firstSeenAt.toISOString(),
     explorer_url: `${e.chains.get(t.networkId)?.network.explorerUrl ?? ""}/tx/${t.txHash}`,
@@ -91,10 +102,11 @@ export async function listTransactions(e: Engine, ctx: AuthContext, limit = 100)
 export async function listSettlements(e: Engine, ctx: AuthContext, limit = 100) {
   const rows = await e.db.select().from(schema.settlements).where(eq(schema.settlements.merchantId, ctx.merchantId)).orderBy(desc(schema.settlements.createdAt)).limit(Math.min(limit, 200));
   const ops = rows.length ? await e.db.select().from(schema.relayerOperations).where(inArray(schema.relayerOperations.id, rows.map((r) => r.relayerOperationId).filter((x): x is string => !!x))) : [];
+  const cur = await currencies(e, rows.map((r) => r.paymentIntentId));
   return rows.map((s) => {
     const op = ops.find((o) => o.id === s.relayerOperationId);
     return {
-      id: s.id, object: "settlement", payment_intent_id: s.paymentIntentId, network: s.networkId, kind: s.kind, status: s.status, attempt: s.attemptNo,
+      id: s.id, object: "settlement", currency: cur.get(s.paymentIntentId ?? "") ?? "USDC", payment_intent_id: s.paymentIntentId, network: s.networkId, kind: s.kind, status: s.status, attempt: s.attemptNo,
       vault: s.vaultAddress ? getAddress(s.vaultAddress) : null, destination: getAddress(s.destinationAddress), destination_kind: s.destinationKind,
       fee: s.feeAmount !== null ? formatUsdc(s.feeAmount, { minDecimals: 2 }) : null, net: s.netAmount !== null ? formatUsdc(s.netAmount) : null, expected_amount: formatUsdc(s.expectedAmount), swept_amount: s.sweptAmount !== null ? formatUsdc(s.sweptAmount) : null,
       tx_hash: s.txHash, failure_reason: s.failureReason, created_at: s.createdAt.toISOString(), confirmed_at: s.confirmedAt?.toISOString() ?? null,

@@ -4,6 +4,7 @@ import { connect, type DbHandle } from "@plinth/db";
 import { MockFiatTokenAbi } from "@plinth/blockchain";
 import { startDevChain, type DevChain } from "@plinth/blockchain/dev";
 import type { Address } from "viem";
+import type { TokenSymbol } from "@plinth/shared";
 import pg from "pg";
 import {
   MemoryAlertSink,
@@ -32,6 +33,8 @@ export interface Harness {
   /** One pass of watcher → relayer → webhook delivery. */
   pump(rounds?: number, opts?: { mine?: number }): Promise<void>;
   payUsdc(to: Address, units: bigint, from?: number): Promise<`0x${string}`>;
+  /** Pay any deployed token (USDC or EURC) to an address from an anvil account. */
+  payToken(symbol: TokenSymbol, to: Address, units: bigint, from?: number): Promise<`0x${string}`>;
   stop(): Promise<void>;
 }
 
@@ -54,8 +57,8 @@ function migratedTemplate(adminUrl: string): Promise<string> {
   return templateName;
 }
 
-export async function startHarness(opts: { confirmations?: number } = {}): Promise<Harness> {
-  const chain = await startDevChain({ confirmations: opts.confirmations ?? 3 });
+export async function startHarness(opts: { confirmations?: number; tokens?: TokenSymbol[] } = {}): Promise<Harness> {
+  const chain = await startDevChain({ confirmations: opts.confirmations ?? 3, tokens: opts.tokens });
   // With TEST_DATABASE_URL set, each harness gets its own throwaway database on that Postgres server.
   const pgAdmin = process.env.TEST_DATABASE_URL;
   let dropDb: (() => Promise<void>) | undefined;
@@ -129,6 +132,13 @@ export async function startHarness(opts: { confirmations?: number } = {}): Promi
       const owner = chain.accounts[from]!.address;
       await chain.mintUsdc(owner, units);
       const hash = await chain.walletFor(from).writeContract({ address: chain.usdc, abi: MockFiatTokenAbi, functionName: "transfer", args: [to, units], account: chain.accounts[from]!, chain: undefined });
+      await chain.publicClient.waitForTransactionReceipt({ hash });
+      return hash;
+    },
+    async payToken(symbol, to, units, from = 3) {
+      const owner = chain.accounts[from]!.address;
+      await chain.mintToken(symbol, owner, units);
+      const hash = await chain.walletFor(from).writeContract({ address: chain.tokens[symbol]!, abi: MockFiatTokenAbi, functionName: "transfer", args: [to, units], account: chain.accounts[from]!, chain: undefined });
       await chain.publicClient.waitForTransactionReceipt({ hash });
       return hash;
     },

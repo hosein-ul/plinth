@@ -3,7 +3,7 @@ import { computeFee, formatFeePercent, newId, toBytes32Id, type DestinationKind 
 import type { HeadInfo, ObservedRouterPayment, ObservedSweep, ObservedTransfer } from "@plinth/blockchain";
 import { isAddressEqual, type Address, type Hex } from "viem";
 import { audit } from "./audit";
-import { chainOf, norm, type ChainRuntime, type Engine } from "./context";
+import { chainOf, norm, tokenRuntime, type ChainRuntime, type Engine } from "./context";
 import { committedRoute } from "./payout-route";
 import { recomputeIntent } from "./recompute";
 import { emitEvent } from "./webhooks";
@@ -22,10 +22,16 @@ async function ledger(
   ref: { type: string; id: string },
 ) {
   if (amount === 0n || !row.merchantId) return;
+  // Amounts are in the payment's own token and are never added across tokens, so every entry names its asset.
+  let asset = "USDC";
+  if (row.paymentIntentId) {
+    const [i] = await tx.select({ currency: schema.paymentIntents.currency }).from(schema.paymentIntents).where(eq(schema.paymentIntents.id, row.paymentIntentId));
+    if (i) asset = i.currency;
+  }
   await tx
     .insert(schema.ledgerEntries)
     .values({
-      id: newId("led"), merchantId: row.merchantId, paymentIntentId: row.paymentIntentId, networkId: row.networkId,
+      id: newId("led"), merchantId: row.merchantId, paymentIntentId: row.paymentIntentId, networkId: row.networkId, asset,
       account, direction, amount, refType: ref.type, refId: ref.id, idempotencyKey: `${account}:${ref.id}:${direction}`,
     })
     .onConflictDoNothing();
@@ -96,13 +102,15 @@ export async function ingestIncomingTransfer(e: Engine, chain: ChainRuntime, t: 
     .where(and(eq(schema.invoiceAddresses.networkId, net.id), eq(schema.invoiceAddresses.address, norm(t.to))));
   if (!addr) return;
 
-  const v = await chain.adapter.verifyTransfer(t.txHash, t.logIndex, t.to);
+  // An address accepts ONE token (it is part of what the address commits to): the same contract at another token is not payment.
+  const tr = tokenRuntime(chain, addr.tokenSymbol, { open: false });
+  const v = await tr.adapter.verifyTransfer(t.txHash, t.logIndex, t.to);
   if (!v.ok) {
     e.log.warn("transfer failed independent verification", { network: net.id, txHash: t.txHash, reason: v.reason });
     await audit(e.db, { merchantId: addr.merchantId, actor: { type: "SYSTEM" }, action: "transfer.verification_failed", targetType: "payment_intent", targetId: addr.paymentIntentId, data: { txHash: t.txHash, logIndex: t.logIndex, reason: v.reason } });
     return;
   }
-  const official = v.official && isAddressEqual(v.transfer.token, net.usdc.address);
+  const official = v.official && isAddressEqual(v.transfer.token, tr.config.address);
   const blockTimestamp = new Date(v.blockTimestamp * 1000);
 
   await e.db.transaction(async (tx) => {
@@ -142,7 +150,8 @@ export async function ingestSweep(e: Engine, chain: ChainRuntime, s: ObservedSwe
     .where(and(eq(schema.invoiceAddresses.networkId, net.id), eq(schema.invoiceAddresses.address, norm(s.emitter))));
   if (!addr) return;
   // The event must describe exactly the invoice this address was derived for.
-  if (addr.invoiceId32.toLowerCase() !== s.invoiceId.toLowerCase() || addr.merchantId32.toLowerCase() !== s.merchantId.toLowerCase() || norm(addr.destinationAddress) !== norm(s.destination) || addr.destinationKind !== s.kind || !isAddressEqual(s.token, net.usdc.address)) {
+  const tr = tokenRuntime(chain, addr.tokenSymbol, { open: false });
+  if (addr.invoiceId32.toLowerCase() !== s.invoiceId.toLowerCase() || addr.merchantId32.toLowerCase() !== s.merchantId.toLowerCase() || norm(addr.destinationAddress) !== norm(s.destination) || addr.destinationKind !== s.kind || !isAddressEqual(s.token, tr.config.address)) {
     await audit(e.db, { merchantId: addr.merchantId, actor: { type: "SYSTEM" }, action: "sweep.mismatch", targetType: "invoice_address", targetId: addr.id, data: { txHash: s.txHash } });
     return;
   }
@@ -185,9 +194,11 @@ export async function ingestSweep(e: Engine, chain: ChainRuntime, s: ObservedSwe
 
 export async function ingestRouterPayment(e: Engine, chain: ChainRuntime, p: ObservedRouterPayment, info: HeadInfo): Promise<void> {
   const net = chain.network;
-  if (!isAddressEqual(p.emitter, chain.deployment.paymentRouter)) return;
   const [intent] = await e.db.select().from(schema.paymentIntents).where(eq(schema.paymentIntents.invoiceId32, p.invoiceId.toLowerCase()));
   if (!intent) return;
+  // Only the router of THIS payment's token may report a payment for it.
+  const tr = tokenRuntime(chain, intent.currency, { open: false });
+  if (!isAddressEqual(p.emitter, tr.contracts.paymentRouter)) return;
   // The payment must match the route committed when the intent was created (destination, kind), not the current settings.
   const route = await committedRoute(e.db, intent.id, net.id);
   if (!route || norm(route.destinationAddress) !== norm(p.destination) || route.destinationKind !== p.kind || toBytes32Id(intent.merchantId).toLowerCase() !== p.merchantId.toLowerCase()) {
@@ -201,7 +212,7 @@ export async function ingestRouterPayment(e: Engine, chain: ChainRuntime, p: Obs
   await e.db.transaction(async (tx) => {
     const { row, isNew, revived } = await recordObserved(tx, {
       id: newId("tx"), networkId: net.id, txHash: p.txHash, logIndex: p.logIndex, kind: "WALLET_PAYMENT",
-      merchantId: intent.merchantId, paymentIntentId: intent.id, tokenAddress: norm(net.usdc.address), isOfficialAsset: true,
+      merchantId: intent.merchantId, paymentIntentId: intent.id, tokenAddress: norm(tr.config.address), isOfficialAsset: true,
       fromAddress: norm(p.payer), toAddress: norm(p.destination), amount: p.amount, feeAmount: p.fee, blockNumber: p.blockNumber, blockHash: p.blockHash,
       blockTimestamp: new Date(meta.timestamp * 1000), status: "DETECTED", verifiedAt: e.now(),
     });

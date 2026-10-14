@@ -1,12 +1,12 @@
 import { EvmAdapter, createChainPublicClient, createChainWalletClient, loadDeployment, resolveRpcUrls } from "@plinth/blockchain";
 import { schema, type Database } from "@plinth/db";
-import { DEFAULT_FEE_BPS, NETWORKS, operationalGate, type Deployment, type NetworkConfig } from "@plinth/shared";
+import { contractsFor, DEFAULT_FEE_BPS, NETWORKS, networkTokens, operationalGate, type Deployment, type NetworkConfig, type TokenConfig, type TokenSymbol } from "@plinth/shared";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex, LocalAccount, PublicClient } from "viem";
 import { DefaultAlertSink } from "./alerts";
-import { checkChain } from "./deployment-check";
+import { checkChain, refreshOperational } from "./deployment-check";
 import { createEmailSender, type EmailSender } from "./email";
-import type { AlertSink, ChainRuntime, Engine, EngineConfig, Logger } from "./context";
+import type { AlertSink, ChainRuntime, Engine, EngineConfig, Logger, TokenRuntime } from "./context";
 import { parseSecretKey } from "./crypto";
 import { resolvePolicyDetails } from "./policy";
 
@@ -102,8 +102,19 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
       }
       signer = signers.getSigner(network.id);
     }
+    // One runtime per payment token that has contracts recorded for it. USDC is always there.
+    const tokens = new Map<TokenSymbol, TokenRuntime>();
+    for (const [symbol, config] of Object.entries(networkTokens(network)) as [TokenSymbol, TokenConfig][]) {
+      const contracts = contractsFor(deployment, symbol);
+      if (!contracts) continue;
+      tokens.set(symbol, {
+        symbol, config, contracts, adapter: new EvmAdapter(network, deployment, c, symbol),
+        operational: gate.operational && !policyBlocked && (symbol === "USDC" || contracts.bytecodeVerified === true),
+        baseOperational: symbol === "USDC" || contracts.bytecodeVerified === true, reasons: [],
+      });
+    }
     chains.set(network.id, {
-      network, deployment, adapter: new EvmAdapter(network, deployment, c), client: c, signer,
+      network, deployment, adapter: tokens.get("USDC")!.adapter, tokens, client: c, signer,
       wallet: signer && !client ? createChainWalletClient(network, urls, signer) : undefined, policy,
       operational: gate.operational && !policyBlocked, gateReasons: policyBlocked ? [...gate.reasons, "relayer policy not configured"] : gate.reasons,
       baseOperational: gate.operational && !policyBlocked, baseReasons: policyBlocked ? [...gate.reasons, "relayer policy not configured"] : gate.reasons,
@@ -120,6 +131,7 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
   // Read the deployed contracts back and compare them with the records before any network takes payments.
   for (const chain of chains.values()) {
     if (chain.baseOperational) await checkChain(engine, chain, registryOnly.has(chain.network.id));
+    else refreshOperational(chain);
   }
   await syncNetworks(engine);
   return engine;
@@ -132,9 +144,11 @@ export async function syncNetworks(e: Engine): Promise<void> {
       .insert(schema.networks)
       .values({ id: c.network.id, chainId: c.network.chainId, name: c.network.name, environment: c.network.environment, enabled: c.operational, operational: c.operational, gateReasons: c.gateReasons, deployment: c.deployment as never })
       .onConflictDoUpdate({ target: schema.networks.id, set: { enabled: c.operational, operational: c.operational, gateReasons: c.gateReasons, deployment: c.deployment as never, updatedAt: e.now() } });
-    await e.db
-      .insert(schema.assets)
-      .values({ id: `${c.network.id}:usdc`, networkId: c.network.id, symbol: "USDC", address: c.network.usdc.address.toLowerCase(), decimals: 6, isOfficial: true, supportsReceiveAuthorization: c.network.authorization.receiveWithAuthorization })
-      .onConflictDoNothing();
+    for (const t of c.tokens.values()) {
+      await e.db
+        .insert(schema.assets)
+        .values({ id: `${c.network.id}:${t.symbol.toLowerCase()}`, networkId: c.network.id, symbol: t.symbol, address: t.config.address.toLowerCase(), decimals: t.config.decimals, isOfficial: true, supportsReceiveAuthorization: t.config.authorization.receiveWithAuthorization })
+        .onConflictDoNothing();
+    }
   }
 }

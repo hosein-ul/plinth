@@ -57,13 +57,16 @@ export async function planSettlement(e: Engine, tx: Executor, paymentIntentId: s
 
     const settlementId = newId("stl");
     const opId = newId("rop");
-    const call = chain.adapter.encodeDeployAndSweep(a.merchantId32 as Hex, a.invoiceId32 as Hex, {
+    // New transactions only go to a token whose contracts are verified and open.
+    const tr = chain.tokens.get(a.tokenSymbol as never);
+    if (!tr || !tr.operational) continue;
+    const call = tr.adapter.encodeDeployAndSweep(a.merchantId32 as Hex, a.invoiceId32 as Hex, {
       destination: getAddress(a.destinationAddress),
       kind: a.destinationKind as DestinationKind,
       feeBps: a.feeBps,
     });
     const planned = await tx.insert(schema.relayerOperations).values({
-      id: opId, networkId: a.networkId, kind: "DEPLOY_AND_SWEEP", dedupeKey: `sweep:${a.id}:${incomingFinal}:${attemptNo}`,
+      id: opId, networkId: a.networkId, kind: "DEPLOY_AND_SWEEP", tokenSymbol: a.tokenSymbol, dedupeKey: `sweep:${a.id}:${incomingFinal}:${attemptNo}`,
       toAddress: call.to.toLowerCase(), calldata: call.data, relatedType: "settlement", relatedId: settlementId, nextAttemptAt: e.now(),
     }).onConflictDoNothing().returning({ id: schema.relayerOperations.id });
     if (planned.length === 0) continue; // this exact sweep was already planned

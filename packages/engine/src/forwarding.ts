@@ -20,13 +20,13 @@ export async function forwardTick(e: Engine, networkId: string): Promise<{ forwa
     await e.db.update(schema.merchantVaults).set({ cachedMode: s.mode, cachedDestination: norm(s.destination), cachedBalance: s.balance, cachedAt: e.now() }).where(eq(schema.merchantVaults.id, v.id));
 
     if (s.pending && block.timestamp >= s.pending.effectiveAt) {
-      const call = chain.adapter.encodeApplyPending(s.address);
-      const r = await e.db.insert(schema.relayerOperations).values({ id: newId("rop"), networkId, kind: "APPLY_SETTLEMENT", dedupeKey: `apply:${norm(v.vaultAddress)}:${s.pending.effectiveAt}`, toAddress: norm(call.to), calldata: call.data, relatedType: "merchant_vault", relatedId: v.id }).onConflictDoNothing().returning({ id: schema.relayerOperations.id });
+      const call = chain.adapter.encodeApplyPending(s.address); // vault calls do not depend on the token
+      const r = await e.db.insert(schema.relayerOperations).values({ id: newId("rop"), networkId, kind: "APPLY_SETTLEMENT", tokenSymbol: v.tokenSymbol, dedupeKey: `apply:${norm(v.vaultAddress)}:${s.pending.effectiveAt}`, toAddress: norm(call.to), calldata: call.data, relatedType: "merchant_vault", relatedId: v.id }).onConflictDoNothing().returning({ id: schema.relayerOperations.id });
       if (r.length) res.activated++;
     }
     if (s.mode !== "BALANCE_IN_VAULT" && s.canForward) {
       const call = chain.adapter.encodeForward(s.address);
-      const r = await e.db.insert(schema.relayerOperations).values({ id: newId("rop"), networkId, kind: "FORWARD", dedupeKey: `forward:${norm(v.vaultAddress)}:${s.balance}:${block.number}`.slice(0, 200), toAddress: norm(call.to), calldata: call.data, relatedType: "merchant_vault", relatedId: v.id }).onConflictDoNothing().returning({ id: schema.relayerOperations.id });
+      const r = await e.db.insert(schema.relayerOperations).values({ id: newId("rop"), networkId, kind: "FORWARD", tokenSymbol: v.tokenSymbol, dedupeKey: `forward:${norm(v.vaultAddress)}:${s.balance}:${block.number}`.slice(0, 200), toAddress: norm(call.to), calldata: call.data, relatedType: "merchant_vault", relatedId: v.id }).onConflictDoNothing().returning({ id: schema.relayerOperations.id });
       if (r.length) res.forwarded++;
     }
   }

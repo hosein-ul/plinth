@@ -1,7 +1,7 @@
 import type { LocalAccount, PublicClient, WalletClient } from "viem";
 import type { EvmAdapter } from "@plinth/blockchain";
 import type { Database } from "@plinth/db";
-import type { Deployment, NetworkConfig } from "@plinth/shared";
+import type { Deployment, NetworkConfig, TokenConfig, TokenContracts, TokenSymbol } from "@plinth/shared";
 import type { EmailSender } from "./email";
 
 /** Per-network guardrails on what the relayer may spend and do. Fail-closed on mainnet. */
@@ -25,10 +25,25 @@ export interface RelayerPolicy {
   maxSettlementAttempts: number;
 }
 
+/** One payment token on one chain: its registry entry, its own contract set and an adapter bound to them. */
+export interface TokenRuntime {
+  symbol: TokenSymbol;
+  config: TokenConfig;
+  contracts: TokenContracts;
+  adapter: EvmAdapter;
+  /** Open for NEW payments: the network is operational, this token's contracts are verified and its on-chain check passed. */
+  operational: boolean;
+  /** The static part of `operational` (contracts recorded and verified), before the live deployment check. */
+  baseOperational: boolean;
+  reasons: string[];
+}
+
 export interface ChainRuntime {
   network: NetworkConfig;
   deployment: Deployment;
+  /** The USDC adapter: the network's primary token. Other tokens are in `tokens`. */
   adapter: EvmAdapter;
+  tokens: Map<TokenSymbol, TokenRuntime>;
   client: PublicClient;
   /** Absent when no relayer key is configured: the chain is then observe-only. */
   signer?: LocalAccount;
@@ -41,7 +56,7 @@ export interface ChainRuntime {
   baseOperational: boolean;
   baseReasons: string[];
   /** Latest comparison of the deployed contracts with the deployment record and configuration. */
-  deploymentCheck?: { ok: boolean; reasons: string[]; at: number; registry: boolean };
+  deploymentCheck?: { ok: boolean; reasons: string[]; at: number; registry: boolean; tokenReasons?: Partial<Record<TokenSymbol, string[]>> };
 }
 
 export interface EngineConfig {
@@ -101,6 +116,14 @@ export function chainOf(e: Engine, networkId: string): ChainRuntime {
   const c = e.chains.get(networkId);
   if (!c) throw new EngineError("UNKNOWN_NETWORK", `Network ${networkId} is not configured`, 400);
   return c;
+}
+
+/** A token's runtime on a chain. `open` (default) requires it to accept NEW payments; observing existing funds does not. */
+export function tokenRuntime(chain: ChainRuntime, symbol: string, opts: { open?: boolean } = {}): TokenRuntime {
+  const t = chain.tokens.get(symbol as TokenSymbol);
+  if (!t) throw new EngineError("TOKEN_UNAVAILABLE", `${symbol} is not supported on ${chain.network.name}`, 409);
+  if ((opts.open ?? true) && !t.operational) throw new EngineError("TOKEN_UNAVAILABLE", `${symbol} is not available on ${chain.network.name} right now`, 409, { reasons: t.reasons });
+  return t;
 }
 
 export class EngineError extends Error {
