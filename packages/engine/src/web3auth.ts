@@ -1,5 +1,5 @@
 import * as jose from "jose";
-import { and, eq, isNull, schema } from "@plinth/db";
+import { and, eq, inArray, isNull, schema } from "@plinth/db";
 import { newId, randomToken } from "@plinth/shared";
 import { audit, type Actor } from "./audit";
 import { startSession } from "./auth";
@@ -21,7 +21,14 @@ const SOURCES = [
 ] as const;
 
 export interface Web3AuthIdentity {
+  /** The preferred stable id for this person. */
   subject: string;
+  /**
+   * Every stable id this token can be reduced to, `subject` first. Token shapes differ between SDK versions and
+   * dashboard settings (a wallet address, a provider user id, the plain `sub`), so an account is found by ANY of them
+   * and a returning user never ends up with a second account because the token changed shape.
+   */
+  aliases?: string[];
   email: string | null;
   name: string | null;
   /** True only when the provider vouches that the user controls `email` (Google, Apple, passwordless email OTP). */
@@ -32,8 +39,12 @@ export interface Web3AuthIdentity {
   issuedAt: number | null;
 }
 
-/** Login methods whose email address the user has really proven. Others (X, Discord, ...) may carry unverified emails. */
-const EMAIL_VERIFYING_CONNECTIONS = new Set(["google", "apple", "email_passwordless"]);
+/**
+ * Login methods whose email address the user has really proven. Others (X, Discord, ...) may carry unverified emails.
+ * Matched as whole words against `authConnection` and `groupedAuthConnectionId`, because a Google login can arrive as
+ * authConnection "web3auth" with groupedAuthConnectionId "web3auth-google-sapphire-mainnet".
+ */
+const EMAIL_VERIFYING_WORDS = new Set(["google", "apple", "passwordless"]);
 
 type KeySet = Parameters<typeof jose.jwtVerify>[1];
 const remote = new Map<string, KeySet>();
@@ -67,17 +78,27 @@ export async function verifyWeb3AuthToken(idToken: string, clientId: string, key
 
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const wallets = Array.isArray(payload.wallets) ? (payload.wallets as { address?: unknown; public_key?: unknown }[]) : [];
-  const walletAddress = str(wallets.find((w) => str(w.address))?.address);
+  // An external wallet puts its address in `wallets`; newer tokens always carry a `wallet_address` claim as well.
+  const walletAddress = str(wallets.find((w) => str(w.address))?.address) ?? str(payload.wallet_address);
   const connection = str(payload.authConnection);
-  const userId = str(payload.userId) ?? str(payload.sub);
-  let subject: string | null = null;
-  if (walletAddress && !connection) subject = `wallet:${walletAddress.toLowerCase()}`;
-  else if (userId) subject = `${connection ?? "w3a"}:${userId.toLowerCase()}`;
-  else if (walletAddress) subject = `wallet:${walletAddress.toLowerCase()}`;
+  const providerId = str(payload.userId);
+  const sub = str(payload.sub);
+  const userId = providerId ?? sub;
+
+  // Preferred id first (unchanged rules, so existing accounts keep matching), then every other id the token offers.
+  const candidates: (string | null)[] = [];
+  if (walletAddress && !connection) candidates.push(`wallet:${walletAddress.toLowerCase()}`);
+  if (userId) candidates.push(`${connection ?? "w3a"}:${userId.toLowerCase()}`);
+  if (walletAddress) candidates.push(`wallet:${walletAddress.toLowerCase()}`);
+  if (sub) candidates.push(`w3a:${sub.toLowerCase()}`);
+  const aliases = [...new Set(candidates.filter((c): c is string => !!c))];
+  const subject = aliases[0];
   if (!subject) throw new EngineError("INVALID_TOKEN", `Web3Auth token carries no stable user id (claims: ${Object.keys(payload).join(", ")})`, 401);
+
   const email = str(payload.email)?.toLowerCase() ?? null;
-  const vouched = payload.email_verified === true || (connection !== null && EMAIL_VERIFYING_CONNECTIONS.has(connection.toLowerCase()));
-  return { subject, email, name: str(payload.name), emailVerified: !!email && vouched, connection, issuedAt: typeof payload.iat === "number" ? payload.iat : null };
+  const hints = [connection, str(payload.groupedAuthConnectionId)].filter(Boolean).join(" ").toLowerCase().split(/[^a-z0-9]+/);
+  const vouched = payload.email_verified === true || hints.some((w) => EMAIL_VERIFYING_WORDS.has(w));
+  return { subject, aliases, email, name: str(payload.name), emailVerified: !!email && vouched, connection, issuedAt: typeof payload.iat === "number" ? payload.iat : null };
 }
 
 /** Verify an identity token with the configured client id (or the test override). */
@@ -94,8 +115,17 @@ export async function verifyIdentity(e: Engine, idToken: string): Promise<Web3Au
  */
 export async function signInWithIdentity(e: Engine, id: Web3AuthIdentity, input: { business_name?: string }, actor: Actor) {
   const provider = "web3auth";
-  const [known] = await e.db.select().from(schema.externalIdentities).where(eq(schema.externalIdentities.subject, id.subject));
-  let userId = known?.provider === provider ? known.userId : undefined;
+  const aliases = id.aliases?.length ? id.aliases : [id.subject];
+  const rows = await e.db.select().from(schema.externalIdentities).where(and(eq(schema.externalIdentities.provider, provider), inArray(schema.externalIdentities.subject, aliases)));
+  // The first alias that is already linked decides who this is. If the aliases point at DIFFERENT accounts, nothing
+  // is guessed and nothing is merged: the sign-in is refused until a person looks at it.
+  const owners = new Set(rows.map((r) => r.userId));
+  if (owners.size > 1) {
+    e.log.error("sign-in token is linked to more than one account", { subjects: rows.map((r) => r.subject) });
+    throw new EngineError("IDENTITY_CONFLICT", "This sign-in is linked to more than one account, so it cannot be used safely. Contact support.", 409);
+  }
+  const known = aliases.map((a) => rows.find((r) => r.subject === a)).find(Boolean);
+  let userId = known?.userId;
 
   if (!userId) {
     const email = id.email ?? `${id.subject.replace(/[^a-z0-9]/g, "").slice(0, 48)}@sso.plinth.invalid`;
@@ -108,11 +138,20 @@ export async function signInWithIdentity(e: Engine, id: Web3AuthIdentity, input:
     await e.db.transaction(async (tx) => {
       await tx.insert(schema.merchants).values({ id: merchantId, name });
       await tx.insert(schema.merchantUsers).values({ id: created, merchantId, email, passwordHash: await hashPassword(randomToken("nopw", 24)), role: "OWNER", emailVerifiedAt: id.emailVerified && id.email ? e.now() : null });
-      await tx.insert(schema.externalIdentities).values({ id: newId("ext"), userId: created, provider, subject: id.subject, email: id.email });
+      for (const a of aliases) await tx.insert(schema.externalIdentities).values({ id: newId("ext"), userId: created, provider, subject: a, email: id.email }).onConflictDoNothing();
       await audit(tx, { merchantId, actor, action: "merchant.created", targetType: "merchant", targetId: merchantId, data: { via: provider } });
     });
   }
-  else if (id.emailVerified && id.email) {
+  if (userId) {
+    // Remember every id this token offers, so the next token in a different shape still finds this account.
+    // An id that already belongs to someone else is never moved: two accounts are never merged by a token.
+    const linked = new Set(rows.map((r) => r.subject));
+    for (const a of aliases) {
+      if (linked.has(a)) continue;
+      await e.db.insert(schema.externalIdentities).values({ id: newId("ext"), userId, provider, subject: a, email: id.email }).onConflictDoNothing();
+    }
+  }
+  if (known && id.emailVerified && id.email) {
     // A returning user whose provider now vouches for the address we hold: mark it verified (never overwrite the address).
     await e.db.update(schema.merchantUsers).set({ emailVerifiedAt: e.now() }).where(and(eq(schema.merchantUsers.id, userId), eq(schema.merchantUsers.email, id.email), isNull(schema.merchantUsers.emailVerifiedAt)));
   }

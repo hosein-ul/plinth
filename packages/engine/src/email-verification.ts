@@ -73,7 +73,8 @@ export async function verifyReauth(e: Engine, ctx: AuthContext, reauth: Reauth |
     } catch {
       throw new EngineError("REAUTH_FAILED", "That sign-in could not be verified. Try again.", 403);
     }
-    if (!identities.some((i) => i.subject === identity.subject)) throw new EngineError("REAUTH_FAILED", "That sign-in belongs to a different account.", 403);
+    const offered = new Set(identity.aliases?.length ? identity.aliases : [identity.subject]);
+    if (!identities.some((i) => offered.has(i.subject))) throw new EngineError("REAUTH_FAILED", "That sign-in belongs to a different account.", 403);
     const age = identity.issuedAt === null ? Infinity : e.now().getTime() / 1000 - identity.issuedAt;
     if (age > e.cfg.reauthWindowSeconds || age < -120) throw new EngineError("REAUTH_REQUIRED", "That sign-in is too old. Sign in again to confirm this change.", 403);
     return u;

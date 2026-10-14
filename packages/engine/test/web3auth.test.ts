@@ -63,6 +63,48 @@ describe("Web3Auth identity tokens", () => {
   });
 });
 
+describe("token shapes", () => {
+  it("reads the wallet_address and sub claims of newer tokens and offers every id the token can be reduced to", async () => {
+    const t = await sign({ sub: "usr_abc", wallet_address: "0xAbC0000000000000000000000000000000000003" });
+    const id = await verifyWeb3AuthToken(t, CLIENT, keys);
+    expect(id.subject).toBe("wallet:0xabc0000000000000000000000000000000000003");
+    expect(id.aliases).toEqual(["wallet:0xabc0000000000000000000000000000000000003", "w3a:usr_abc"]);
+    expect(id.email).toBeNull();
+    expect(id.emailVerified).toBe(false);
+  });
+
+  it("a Google login that arrives as authConnection web3auth is recognised through groupedAuthConnectionId", async () => {
+    const google = await verifyWeb3AuthToken(await sign({ authConnection: "web3auth", groupedAuthConnectionId: "web3auth-google-sapphire-mainnet", userId: "gus@example.com", email: "gus@example.com" }), CLIENT, keys);
+    expect(google).toMatchObject({ subject: "web3auth:gus@example.com", emailVerified: true });
+    const twitter = await verifyWeb3AuthToken(await sign({ authConnection: "web3auth", groupedAuthConnectionId: "web3auth-twitter-sapphire-mainnet", userId: "tw1", email: "tw@example.com" }), CLIENT, keys);
+    expect(twitter.emailVerified).toBe(false);
+    // no email in the token (the dashboard setting that adds it is off): still a working identity, just not a verified email
+    const bare = await verifyWeb3AuthToken(await sign({ authConnection: "web3auth", groupedAuthConnectionId: "web3auth-google-sapphire-mainnet", userId: "u1" }), CLIENT, keys);
+    expect(bare).toMatchObject({ email: null, emailVerified: false });
+  });
+});
+
+describe("one person, one account, whatever shape the token has", () => {
+  it("finds the same account when the token shape changes, and never merges two accounts", async () => {
+    const wallet = "wallet:0xabc0000000000000000000000000000000000a01";
+    const first = await signInWithIdentity(h.engine, { subject: wallet, aliases: [wallet], email: null, name: null, emailVerified: false, connection: null, issuedAt: null }, {}, actor);
+    // Later the same person arrives with a token that carries the wallet AND a sub: same account, and the sub is remembered.
+    const later = await signInWithIdentity(h.engine, { subject: wallet, aliases: [wallet, "w3a:usr_a01"], email: null, name: null, emailVerified: false, connection: null, issuedAt: null }, {}, actor);
+    expect(later.user.id).toBe(first.user.id);
+    // Now a token with only the sub (the wallet claim is gone): still the same account.
+    const subOnly = await signInWithIdentity(h.engine, { subject: "w3a:usr_a01", aliases: ["w3a:usr_a01"], email: null, name: null, emailVerified: false, connection: null, issuedAt: null }, {}, actor);
+    expect(subOnly.user.id).toBe(first.user.id);
+
+    // Two existing accounts: a token that links them together is refused, never merged.
+    const b = await signInWithIdentity(h.engine, { subject: "wallet:0xabc0000000000000000000000000000000000a02", aliases: ["wallet:0xabc0000000000000000000000000000000000a02", "w3a:usr_b02"], email: null, name: null, emailVerified: false, connection: null, issuedAt: null }, {}, actor);
+    expect(b.user.id).not.toBe(first.user.id);
+    await expect(signInWithIdentity(h.engine, { subject: wallet, aliases: [wallet, "w3a:usr_b02"], email: null, name: null, emailVerified: false, connection: null, issuedAt: null }, {}, actor)).rejects.toMatchObject({ code: "IDENTITY_CONFLICT" });
+    const rows = await h.handle.db.select().from(schema.externalIdentities).where(eq(schema.externalIdentities.subject, "w3a:usr_b02"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.userId).toBe(b.user.id);
+  });
+});
+
 describe("signing in with an external identity", () => {
   it("creates the merchant on first use and reuses it afterwards", async () => {
     const id = { subject: "google:bob@example.com", email: "bob@example.com", name: "Bob", emailVerified: true, connection: "google", issuedAt: null };
