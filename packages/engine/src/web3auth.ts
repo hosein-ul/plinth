@@ -42,7 +42,17 @@ export async function verifyWeb3AuthToken(idToken: string, clientId: string, key
       break;
     } catch (err) { lastError = err; }
   }
-  if (!payload) throw new EngineError("INVALID_TOKEN", `Web3Auth token rejected: ${lastError instanceof Error ? lastError.message : "invalid"}`, 401);
+  if (!payload) {
+    // Say what the token claims about itself (never the token) so a rejected sign-in can be diagnosed from the error alone.
+    let peek = "unreadable";
+    try {
+      const h = jose.decodeProtectedHeader(idToken);
+      const c = jose.decodeJwt(idToken);
+      peek = JSON.stringify({ alg: h.alg, kid: String(h.kid ?? "").slice(0, 12) || null, iss: c.iss, aud_matches: c.aud === clientId || (Array.isArray(c.aud) && c.aud.includes(clientId)), expired: typeof c.exp === "number" ? c.exp * 1000 < Date.now() : null });
+    } catch { /* keep "unreadable" */ }
+    console.warn(JSON.stringify({ level: "warn", msg: "web3auth token rejected", reason: lastError instanceof Error ? lastError.message : "invalid", token: peek }));
+    throw new EngineError("INVALID_TOKEN", `Web3Auth token rejected: ${lastError instanceof Error ? lastError.message : "invalid"} ${peek}`, 401);
+  }
 
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const wallets = Array.isArray(payload.wallets) ? (payload.wallets as { address?: unknown; public_key?: unknown }[]) : [];
