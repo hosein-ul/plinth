@@ -69,6 +69,8 @@ export async function recomputeIntent(e: Engine, tx: Executor, intentId: string)
       settlementFailed,
       refundRequested,
       refundedAmount,
+      // The platform fee is not refunded: a payment is fully refunded once everything the merchant received has been returned.
+      refundableAmount: settledAmount > 0n ? settledAmount - feeAmount : undefined,
     });
   };
 

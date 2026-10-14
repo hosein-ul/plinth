@@ -4,15 +4,18 @@ import { getAddress, isAddressEqual, parseAbiItem, decodeEventLog, type Hex } fr
 import { audit } from "./audit";
 import { requirePermission, type AuthContext } from "./auth";
 import { EngineError, norm, type Engine } from "./context";
+import { committedRoute } from "./payout-route";
 import { recomputeIntent } from "./recompute";
 import { emitEvent } from "./webhooks";
 
 const transferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 
 /**
- * A refund is a NEW, merchant-authorised transfer out of their vault — never a reversal. The gateway
- * records the request; the merchant sends the USDC from their own wallet (vault.withdraw); the refund
- * completes only after that transfer is verified on-chain.
+ * A refund is a NEW, merchant-authorised transfer out of the account that received the money: their vault (vault
+ * mode, via vault.withdraw) or their own payout wallet (direct mode). Never a reversal, and the gateway never holds
+ * the funds. The gateway records the request; the merchant sends the USDC from their own wallet; the refund
+ * completes only after that transfer is verified on-chain. The platform fee is not refunded, so the most that can
+ * be returned is what the merchant actually received.
  */
 export async function requestRefund(e: Engine, ctx: AuthContext, input: { payment_intent_id: string; amount: string; recipient: string; reason?: string }) {
   requirePermission(ctx, "payments");
@@ -21,7 +24,13 @@ export async function requestRefund(e: Engine, ctx: AuthContext, input: { paymen
   const amount = parseUsdc(input.amount);
   const refunds = await e.db.select().from(schema.refunds).where(eq(schema.refunds.paymentIntentId, intent.id));
   const committed = refunds.filter((r) => r.status === "REQUESTED" || r.status === "COMPLETED").reduce((a, r) => a + r.amount, 0n);
-  if (amount + committed > intent.amountFinal) throw new EngineError("REFUND_EXCEEDS_PAYMENT", `Only ${formatUsdc(intent.amountFinal - committed)} USDC remains refundable`, 422);
+  // What the merchant received after the platform fee (the fee is not refunded). Nothing has reached them until a sweep or wallet payment is final.
+  const refundable = intent.netAmount;
+  if (refundable <= 0n) throw new EngineError("NOTHING_TO_REFUND", "Nothing has been delivered to you yet, so there is nothing to refund. Funds can be refunded once they have settled.", 422);
+  if (amount + committed > refundable) {
+    const left = refundable > committed ? refundable - committed : 0n;
+    throw new EngineError("REFUND_EXCEEDS_PAYMENT", `Only ${formatUsdc(left)} USDC remains refundable. The platform fee is not refunded.`, 422);
+  }
 
   // Refunds go to the network the funds arrived on.
   const [firstTx] = await e.db.select().from(schema.transactions).where(and(eq(schema.transactions.paymentIntentId, intent.id), eq(schema.transactions.status, "FINAL"), eq(schema.transactions.isOfficialAsset, true))).orderBy(desc(schema.transactions.finalizedAt));
@@ -45,8 +54,15 @@ export async function submitRefundProof(e: Engine, ctx: AuthContext, refundId: s
   if (r.status !== "REQUESTED") throw new EngineError("INVALID_STATE", `Refund is ${r.status}`, 409);
   const chain = e.chains.get(r.networkId);
   if (!chain) throw new EngineError("UNKNOWN_NETWORK", "Network unavailable", 400);
-  const [vault] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, r.networkId)));
-  if (!vault) throw new EngineError("NOT_FOUND", "Vault not found", 404);
+  // The refund must leave the account the money was delivered to: the destination committed for this payment.
+  const route = await committedRoute(e.db, r.paymentIntentId, r.networkId);
+  let source: string;
+  if (route) source = route.destinationAddress;
+  else {
+    const [vault] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, ctx.merchantId), eq(schema.merchantVaults.networkId, r.networkId)));
+    if (!vault) throw new EngineError("NOT_FOUND", "Vault not found", 404);
+    source = vault.vaultAddress;
+  }
 
   const receipt = await chain.client.getTransactionReceipt({ hash: txHash }).catch(() => null);
   if (!receipt || receipt.status !== "success") throw new EngineError("PROOF_INVALID", "Transaction not found or reverted", 422);
@@ -57,12 +73,12 @@ export async function submitRefundProof(e: Engine, ctx: AuthContext, refundId: s
     if (!isAddressEqual(l.address, chain.network.usdc.address)) return false;
     try {
       const d = decodeEventLog({ abi: [transferEvent], data: l.data, topics: l.topics });
-      return isAddressEqual(d.args.from, vault.vaultAddress as Hex) && isAddressEqual(d.args.to, r.recipient as Hex) && d.args.value === r.amount;
+      return isAddressEqual(d.args.from, source as Hex) && isAddressEqual(d.args.to, r.recipient as Hex) && d.args.value === r.amount;
     } catch {
       return false;
     }
   });
-  if (!match) throw new EngineError("PROOF_INVALID", "No matching USDC transfer from your vault to the recipient for this amount was found in that transaction", 422);
+  if (!match) throw new EngineError("PROOF_INVALID", `No matching USDC transfer from ${route?.destinationKind === "DIRECT" ? "your payout wallet" : "your vault"} to the recipient for this amount was found in that transaction`, 422);
 
   await e.db.transaction(async (tx) => {
     const updated = await tx.update(schema.refunds).set({ status: "COMPLETED", txHash, logIndex: match.logIndex, completedAt: e.now() }).where(and(eq(schema.refunds.id, r.id), eq(schema.refunds.status, "REQUESTED"))).returning();
@@ -88,19 +104,30 @@ export async function rejectRefund(e: Engine, ctx: AuthContext, refundId: string
   return getRefund(e, ctx, refundId);
 }
 
-const view = (e: Engine, r: typeof schema.refunds.$inferSelect) => ({
-  id: r.id, object: "refund_request", payment_intent_id: r.paymentIntentId, network: r.networkId, status: r.status, amount: formatUsdc(r.amount), amount_units: r.amount.toString(),
+const view = (e: Engine, r: typeof schema.refunds.$inferSelect, pay: { kind: string; address: string } | null = null) => ({
+  id: r.id, object: "refund_request",
+  /** Where the merchant must send the refund from: the vault or the payout wallet the money was delivered to. */
+  pay_from: pay ? { kind: pay.kind, address: getAddress(pay.address) } : null, payment_intent_id: r.paymentIntentId, network: r.networkId, status: r.status, amount: formatUsdc(r.amount), amount_units: r.amount.toString(),
   recipient: getAddress(r.recipient), reason: r.reason, tx_hash: r.txHash, explorer_url: r.txHash ? `${e.chains.get(r.networkId)?.network.explorerUrl}/tx/${r.txHash}` : null,
   created_at: r.createdAt.toISOString(), completed_at: r.completedAt?.toISOString() ?? null,
 });
 
+async function sourceOf(e: Engine, r: typeof schema.refunds.$inferSelect) {
+  const route = await committedRoute(e.db, r.paymentIntentId, r.networkId);
+  if (route) return { kind: route.destinationKind, address: route.destinationAddress };
+  const [vault] = await e.db.select().from(schema.merchantVaults).where(and(eq(schema.merchantVaults.merchantId, r.merchantId), eq(schema.merchantVaults.networkId, r.networkId)));
+  return vault ? { kind: "VAULT", address: vault.vaultAddress } : null;
+}
+
 export async function getRefund(e: Engine, ctx: AuthContext, id: string) {
   const [r] = await e.db.select().from(schema.refunds).where(and(eq(schema.refunds.id, id), eq(schema.refunds.merchantId, ctx.merchantId)));
   if (!r) throw new EngineError("NOT_FOUND", "Refund not found", 404);
-  return view(e, r);
+  return view(e, r, await sourceOf(e, r));
 }
 
 export async function listRefunds(e: Engine, ctx: AuthContext) {
   const rows = await e.db.select().from(schema.refunds).where(eq(schema.refunds.merchantId, ctx.merchantId)).orderBy(desc(schema.refunds.createdAt)).limit(100);
-  return rows.map((r) => view(e, r));
+  const out = [];
+  for (const r of rows) out.push(view(e, r, await sourceOf(e, r)));
+  return out;
 }

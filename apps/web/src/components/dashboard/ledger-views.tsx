@@ -97,11 +97,11 @@ export function RefundsView() {
   const hashValid = /^0x[0-9a-fA-F]{64}$/.test(hash);
   return (
     <>
-      <PageHeader title="Refund requests" description="A refund is a new transfer from your vault, sent by you. It completes only once that transfer is verified on-chain." />
+      <PageHeader title="Refund requests" description="A refund is a new transfer from your vault or payout wallet, sent by you. It completes only once that transfer is verified on-chain. The platform fee is not refunded." />
       <Ledger<any>
         caption="Refund requests" rows={q.data?.data} loading={q.isLoading} error={q.error} retry={() => q.refetch()} rowKey={(r) => r.id}
         filter={{ status: (r) => r.status, text: (r) => `${r.id} ${r.payment_intent_id} ${r.recipient}`, placeholder: "Search refund, payment or recipient" }}
-        empty={{ title: "No refund requests", body: "Request one from a payment's detail page. You then send the USDC from your vault and paste the transaction hash here as proof.", action: <Button variant="primary" asChild><Link href={href("/dashboard/payments")}>Open a payment</Link></Button> }}
+        empty={{ title: "No refund requests", body: "Request one from a payment's detail page. You then send the USDC from the account that received the payment and paste the transaction hash here as proof.", action: <Button variant="primary" asChild><Link href={href("/dashboard/payments")}>Open a payment</Link></Button> }}
         columns={[
           {
             key: "id", header: "Refund",
@@ -130,14 +130,15 @@ export function RefundsView() {
         ]}
       />
       <Dialog open={!!proofFor} onOpenChange={(v) => { if (!v) { setProofFor(null); setHash(""); } }}>
-        <DialogContent title="Add refund proof" description="Send the refund from your vault with vault.withdraw, then paste the transaction hash.">
+        <DialogContent title="Add refund proof" description={proofFor?.pay_from?.kind === "DIRECT" ? "Send the refund from your payout wallet, then paste the transaction hash." : "Send the refund from your vault with vault.withdraw, then paste the transaction hash."}>
           {proofFor && (
             <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (hashValid) proof.mutate(proofFor.id); }}>
               <dl className="divide-y divide-line rounded-ctl border border-line px-4">
                 <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Send</dt><dd><Amount value={proofFor.amount} size="md" /></dd></div>
                 <div className="grid gap-1.5 py-3 text-sm"><dt className="text-ink-3">To</dt><dd><CopyField value={proofFor.recipient} /></dd></div>
+                {proofFor.pay_from && <div className="grid gap-1.5 py-3 text-sm"><dt className="text-ink-3">{proofFor.pay_from.kind === "DIRECT" ? "From your payout wallet" : "From your vault"}</dt><dd><CopyField value={proofFor.pay_from.address} /></dd></div>}
               </dl>
-              <Field label="Transaction hash" htmlFor="proof-hash" error={hash && !hashValid ? "A transaction hash is 0x followed by 64 hexadecimal characters." : null} hint="We check the receipt for a USDC transfer from your vault to the recipient for exactly this amount.">
+              <Field label="Transaction hash" htmlFor="proof-hash" error={hash && !hashValid ? "A transaction hash is 0x followed by 64 hexadecimal characters." : null} hint={`We check the receipt for a USDC transfer from your ${proofFor?.pay_from?.kind === "DIRECT" ? "payout wallet" : "vault"} to the recipient for exactly this amount.`}>
                 <Input id="proof-hash" className="font-mono" value={hash} onChange={(e) => setHash(e.target.value.trim())} placeholder="0x…" aria-invalid={!!hash && !hashValid} autoFocus />
               </Field>
               <Button type="submit" variant="primary" loading={proof.isPending} disabled={!hashValid}>Verify on-chain</Button>

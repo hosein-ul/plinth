@@ -251,7 +251,7 @@ function RefundDialog({ payment }: { payment: any }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button disabled={!can}>Request refund</Button></DialogTrigger>
-      <DialogContent title="Request a refund" description="A refund is a new transfer out of your vault. You send it from your own wallet; it is marked complete only after the transfer is verified on-chain.">
+      <DialogContent title="Request a refund" description="A refund is a new transfer out of your vault or payout wallet, whichever received the payment. You send it yourself; it is marked complete only after the transfer is verified on-chain. The platform fee is not refunded.">
         <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (ok) m.mutate(undefined); }}>
           <Field label="Amount (USDC)" htmlFor="rf-amount" hint={`${payment.amount_received} USDC received so far.`} error={amount !== "" && !/^\d+(\.\d{1,6})?$/.test(amount) ? "Use digits with up to 6 decimals." : null}>
             <Input id="rf-amount" value={amount} onChange={(e) => setAmount(e.target.value)} className="font-mono" inputMode="decimal" />

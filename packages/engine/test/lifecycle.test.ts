@@ -355,7 +355,10 @@ describe("refunds and vault authority", () => {
     expect(await status(pi.id)).toBe("SETTLED");
 
     const customerWallet = h.chain.accounts[6]!.address;
-    const r = await requestRefund(h.engine, m, { payment_intent_id: pi.id, amount: "30.00", recipient: customerWallet });
+    // The platform fee (0.20% = 0.06) is not refunded: the most that can go back is what the merchant received.
+    await expect(requestRefund(h.engine, m, { payment_intent_id: pi.id, amount: "30.00", recipient: customerWallet })).rejects.toMatchObject({ code: "REFUND_EXCEEDS_PAYMENT", message: expect.stringContaining("29.94") });
+    const r = await requestRefund(h.engine, m, { payment_intent_id: pi.id, amount: "29.94", recipient: customerWallet });
+    expect(r.pay_from).toMatchObject({ kind: "VAULT" });
     expect(r.status).toBe("REQUESTED");
     expect(await status(pi.id)).toBe("REFUND_REQUESTED");
     await expect(submitRefundProof(h.engine, m, r.id, ("0x" + "ab".repeat(32)) as `0x${string}`)).rejects.toMatchObject({ code: "PROOF_INVALID" });
@@ -363,7 +366,7 @@ describe("refunds and vault authority", () => {
 
     // Merchant owner sends the refund from THEIR vault; the gateway cannot.
     const [v] = await h.engine.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, m.merchantId));
-    const hash = await h.chain.walletFor(2).sendTransaction({ to: getAddress(v!.vaultAddress), data: encodeFunctionData({ abi: MerchantVaultAbi, functionName: "withdraw", args: [customerWallet, parseUsdc("30")] }), account: h.chain.accounts[2]!, chain: undefined });
+    const hash = await h.chain.walletFor(2).sendTransaction({ to: getAddress(v!.vaultAddress), data: encodeFunctionData({ abi: MerchantVaultAbi, functionName: "withdraw", args: [customerWallet, parseUsdc("29.94")] }), account: h.chain.accounts[2]!, chain: undefined });
     await h.chain.publicClient.waitForTransactionReceipt({ hash });
     await h.chain.mine(4);
     const done = await submitRefundProof(h.engine, m, r.id, hash);

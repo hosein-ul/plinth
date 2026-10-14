@@ -66,6 +66,11 @@ export interface DeriveInput {
   settlementFailed: boolean;
   refundRequested: boolean;
   refundedAmount: bigint;
+  /**
+   * What can be returned to the customer: the amount that reached the merchant after the platform fee, which is
+   * not refunded. When omitted, all final funds are refundable (no fee).
+   */
+  refundableAmount?: bigint;
 }
 
 export interface DerivedState {
@@ -114,7 +119,7 @@ export function deriveIntentStatus(i: DeriveInput): DerivedState {
   const out = (status: IntentStatus): DerivedState => ({ status, ...base });
 
   // Refunds dominate once any funds were returned or requested.
-  if (i.refundedAmount > 0n) return out(i.refundedAmount >= finalAmount ? "REFUNDED" : "PARTIALLY_REFUNDED");
+  if (i.refundedAmount > 0n) return out(i.refundedAmount >= (i.refundableAmount ?? finalAmount) ? "REFUNDED" : "PARTIALLY_REFUNDED");
   if (i.refundRequested && finalAmount > 0n) return out("REFUND_REQUESTED");
 
   // Fully paid (within policy) by FINAL funds received in time.

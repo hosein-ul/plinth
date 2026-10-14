@@ -108,6 +108,15 @@ describe("deriveIntentStatus", () => {
     );
     expect(s.status).toBe("SETTLEMENT_PENDING");
   });
+  it("the platform fee is not refundable: returning everything the merchant received is a full refund", () => {
+    const paid = [tr("100", "FINAL")];
+    const net = parseUsdc("99.8"); // 100 minus a 0.20% fee
+    expect(deriveIntentStatus(base({ transfers: paid, refundedAmount: net, refundableAmount: net })).status).toBe("REFUNDED");
+    expect(deriveIntentStatus(base({ transfers: paid, refundedAmount: parseUsdc("50"), refundableAmount: net })).status).toBe("PARTIALLY_REFUNDED");
+    // without a stated refundable amount all final funds count (no fee)
+    expect(deriveIntentStatus(base({ transfers: paid, refundedAmount: net })).status).toBe("PARTIALLY_REFUNDED");
+  });
+
   it("refund states dominate", () => {
     const paid = [tr("100", "FINAL")];
     expect(deriveIntentStatus(base({ transfers: paid, refundRequested: true })).status).toBe("REFUND_REQUESTED");
