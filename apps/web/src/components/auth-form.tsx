@@ -11,14 +11,14 @@ import { Logo } from "@/components/logo";
 import { Notice } from "@/components/page";
 import { ShaderField } from "@/components/marketing/shader-field";
 import { SHADER_COLORS } from "@/components/marketing/shader-colors";
-import { WEB3AUTH_CLIENT_ID, getWeb3AuthIdToken } from "@/lib/web3auth-client";
+import { SignInCancelled, WEB3AUTH_CLIENT_ID, getWeb3AuthIdToken } from "@/lib/web3auth-client";
 import { cn } from "@/lib/cn";
 
 /** Turn the SDK's technical errors into something a person can act on. */
-function friendly(message: string): string {
+function friendly(message: string, cancelled = false): string {
+  if (cancelled) return "Sign-in was cancelled.";
   if (/failed to fetch project configuration|not ready yet/i.test(message)) return "Wallet and social sign-in is not switched on for this address yet. Use email and password below, or try again later.";
-  if (/cancel|closed|denied|rejected/i.test(message)) return "Sign-in was cancelled.";
-  return message || "Could not sign in";
+  return message ? `Could not sign in: ${message.slice(0, 160)}` : "Could not sign in";
 }
 
 const rise = (i: number) => ({ animation: `slide-up-in 0.7s var(--ease-out) ${0.05 + i * 0.09}s both` });
@@ -51,7 +51,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       if (res.ok) return done();
       setError(friendly(json?.error?.message ?? ""));
     } catch (err) {
-      setError(friendly(err instanceof Error ? err.message : ""));
+      setError(friendly(err instanceof Error ? err.message : "", err instanceof SignInCancelled));
     }
     setBusy(null);
   }
