@@ -1,5 +1,5 @@
 import { and, eq, schema } from "@plinth/db";
-import { newId, toBytes32Id } from "@plinth/shared";
+import { NETWORKS, newId, operationalGate, toBytes32Id } from "@plinth/shared";
 import { encodeFunctionData, getAddress, type Address } from "viem";
 import { MerchantVaultAbi } from "@plinth/blockchain";
 import { audit } from "./audit";
@@ -108,7 +108,7 @@ export function buildSettlementPolicyTx(
 
 export async function listNetworks(e: Engine, ctx: AuthContext) {
   const vaults = await e.db.select().from(schema.merchantVaults).where(eq(schema.merchantVaults.merchantId, ctx.merchantId));
-  return [...e.chains.values()].map((c) => {
+  const live = [...e.chains.values()].map((c) => {
     const v = vaults.find((x) => x.networkId === c.network.id);
     return {
       id: c.network.id, chain_id: c.network.chainId, name: c.network.name, environment: c.network.environment,
@@ -124,6 +124,21 @@ export async function listNetworks(e: Engine, ctx: AuthContext) {
       vault: v ? vaultSummary(c.network.explorerUrl, v) : null,
     };
   });
+  // Networks in the registry whose contracts are not deployed yet are still listed, so the page says what exists and why it is off.
+  const pending = Object.values(NETWORKS)
+    .filter((n) => !e.chains.has(n.id))
+    .map((n) => ({
+      id: n.id, chain_id: n.chainId, name: n.name, environment: n.environment,
+      operational: false, not_operational_reasons: operationalGate(n, undefined, { enabledNetworks: [], allowMainnet: false }).reasons, explorer_url: n.explorerUrl, public_rpc_urls: n.rpcUrls, chain_native: n.nativeCurrency,
+      native_currency: n.nativeCurrency.symbol, gas_model: n.gas.model,
+      usdc: { address: n.usdc.address, decimals: 6 },
+      payment_methods: { address: false, wallet: false },
+      authorization: { receive_with_authorization: n.authorization.receiveWithAuthorization, transfer_with_authorization: n.authorization.transferWithAuthorization, verified_at: n.authorization.verifiedAt },
+      finality: { strategy: n.finality.strategy, confirmations: n.finality.confirmations },
+      circle: n.circle,
+      contracts: null, relayer_address: null, vault: null,
+    }));
+  return [...live, ...pending];
 }
 
 export async function updateMerchantSettings(e: Engine, ctx: AuthContext, patch: { name?: string; underpayment_tolerance_bps?: number; overpayment_policy?: "ACCEPT" | "FLAG"; default_expiry_seconds?: number }) {
