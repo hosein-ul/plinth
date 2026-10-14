@@ -60,18 +60,18 @@ float sdCurve7(vec2 p) {
 
 // Height of the glass; q is in canvas units, y down.
 float height(vec2 q, float t) {
-  vec2 w = q + (vec2(vnoise(q * 1.3 + vec2(1.7, 9.2) + t * 0.010), vnoise(q * 1.3 + vec2(8.3, 2.8) - t * 0.008)) - 0.5) * 0.46
+  vec2 w = q + (vec2(vnoise(q * 1.3 + vec2(1.7, 9.2) + t * 0.060), vnoise(q * 1.3 + vec2(8.3, 2.8) - t * 0.050)) - 0.5) * 0.46
              + (vec2(vnoise(q * 4.3 + vec2(4.1, 1.3)), vnoise(q * 4.3 + vec2(7.7, 5.5))) - 0.5) * 0.05;
   float d1 = sdCurve9(w), d2 = sdCurve7(w);
-  float ph = vnoise(w * 1.7 + 3.0) * 2.2;
+  float ph = vnoise(w * 1.7 + 3.0 + vec2(t * 0.045, -t * 0.03)) * 2.2;
   float h = 0.0;
   // broad folds that follow the boundary
-  h += 0.85 * sin(d1 * 11.0 + ph + t * 0.04);
+  h += 0.85 * sin(d1 * 11.0 + ph - t * 0.55);
   // creases: narrow, pinched ridges
-  float c = 1.0 - abs(sin(d1 * 21.0 + ph * 1.6 + 1.3));
+  float c = 1.0 - abs(sin(d1 * 21.0 + ph * 1.6 + 1.3 - t * 0.32));
   h += 0.42 * c * c * c * (0.3 + vnoise(w * 2.4 + 9.0));
   // a crossing family
-  h += 0.55 * sin(d2 * 9.5 + ph * 0.7 + 2.0 - t * 0.03) * (0.2 + vnoise(w * 1.8 + 5.0));
+  h += 0.55 * sin(d2 * 9.5 + ph * 0.7 + 2.0 - t * 0.45) * (0.2 + vnoise(w * 1.8 + 5.0));
   h += 0.05 * sin(d1 * 33.0 + d2 * 14.0 + ph * 2.0);
   return h * 0.03;
 }
@@ -84,8 +84,8 @@ vec3 film(float t) {
 vec3 env(vec2 r) {
   float g = smoothstep(-1.1, 1.0, r.y * 0.8 + r.x * 0.4);
   vec3 c = mix(vec3(0.30, 0.33, 0.42), vec3(0.88, 0.89, 0.94), g);
-  float bandA = exp(-pow((r.x * 0.9 + r.y * 0.5 - 0.10) * 4.2, 2.0));
-  float bandB = exp(-pow((r.x * 0.5 - r.y * 0.9 + 0.30) * 4.5, 2.0));
+  float bandA = exp(-pow((r.x * 0.9 + r.y * 0.5 - 0.10 + 0.22 * sin(uTime * 0.35)) * 4.2, 2.0));
+  float bandB = exp(-pow((r.x * 0.5 - r.y * 0.9 + 0.30 + 0.2 * cos(uTime * 0.27)) * 4.5, 2.0));
   c = mix(c, vec3(1.0), bandA * 0.95);
   c = mix(c, vec3(0.34, 0.40, 0.52), bandB * 0.55);
   c = mix(c, vec3(1.0, 0.74, 0.90), smoothstep(0.05, 0.6, -r.x - r.y * 0.4) * 0.36);
@@ -106,18 +106,18 @@ void main() {
   vec3 N = normalize(vec3(-g * 2.9, 1.0));
 
   float ndv = N.z;
-  vec2 r = N.xy * 2.0 * ndv + uLook * 0.1;
+  vec2 r = N.xy * 2.0 * ndv + uLook * 0.22;
   vec3 col = env(r);
 
   float graze = 1.0 - ndv;
-  float hue = graze * 1.4 + h0 * 2.5 + dot(q, vec2(0.9, -0.5)) * 0.8 + t * 0.004;
+  float hue = graze * 1.4 + h0 * 2.5 + dot(q, vec2(0.9, -0.5)) * 0.8 + t * 0.05;
   col = mix(col, film(hue), smoothstep(0.0, 0.3, graze) * 0.22);
   vec3 Hh = normalize(vec3(-0.3, 0.5, 1.0));
   col = mix(col, vec3(1.0), pow(max(dot(N, Hh), 0.0), 140.0) * 0.8);
   col *= mix(0.90, 1.03, smoothstep(-0.035, 0.03, h0));
 
   // Silhouette: the glass lies beyond the boundary curve, with soft, uneven edges.
-  float dd = sdCurve9(q + (vec2(vnoise(q * 3.0 + 2.0), vnoise(q * 3.0 + 7.0)) - 0.5) * 0.05);
+  float dd = sdCurve9(q + (vec2(vnoise(q * 3.0 + 2.0 + vec2(t * 0.07, 0.0)), vnoise(q * 3.0 + 7.0 - vec2(0.0, t * 0.05))) - 0.5) * 0.05);
   float m = smoothstep(0.0, 0.09, dd);
   // The far right, below the upper sheet, falls back to white.
   float notch = smoothstep(0.86, 0.95, frag.x) * smoothstep(0.40, 0.55, 1.0 - frag.y);
@@ -130,7 +130,7 @@ void main() {
   // Sparkle.
   vec2 sp = frag * uSize * 200.0;
   float hs = hash(floor(sp));
-  float spark = step(0.9965, hs) * smoothstep(0.5, 0.0, length(fract(sp) - 0.5)) * (0.6 + 0.4 * sin(t * 0.8 + hs * 60.0));
+  float spark = step(0.9965, hs) * smoothstep(0.5, 0.0, length(fract(sp) - 0.5)) * (0.6 + 0.4 * sin(t * 1.8 + hs * 60.0));
   col += spark * 0.8 * m;
 
   col = mix(vec3(0.988, 0.988, 0.992), col, m);
