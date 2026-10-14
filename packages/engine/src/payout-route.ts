@@ -1,6 +1,7 @@
 import { and, desc, eq, lte, schema, type Executor } from "@plinth/db";
 import { assertValidFeeBps, resolveFeeBps, type DestinationKind } from "@plinth/shared";
-import { getAddress, type Address } from "viem";
+import { getAddress, isAddressEqual, recoverMessageAddress, type Address, type Hex } from "viem";
+import { parseSiweMessage } from "viem/siwe";
 import type { ChainRuntime, Engine } from "./context";
 import { norm } from "./context";
 
@@ -40,6 +41,26 @@ export async function activePayoutConfig(e: Engine, tx: Executor, merchantId: st
   return row ?? null;
 }
 
+/**
+ * Check that a payout config is still what the wallet signed: the stored EIP-4361 message names this merchant, this chain
+ * and this address, and the stored signature recovers to that address. A database row that was edited (a new address
+ * written in by someone who does not hold the wallet's key) fails here, so a payment address is never derived for it.
+ * This stops tampering with the database alone. It does not stop an attacker who controls this process.
+ */
+export async function payoutProofHolds(cfg: PayoutConfig, merchantId: string, chain: ChainRuntime): Promise<boolean> {
+  if (!cfg.address || !cfg.proofMessage || !cfg.proofSignature) return false;
+  try {
+    const m = parseSiweMessage(cfg.proofMessage);
+    if (!m.address || !isAddressEqual(m.address, cfg.address as Address)) return false;
+    if (m.chainId !== chain.network.chainId || m.requestId !== merchantId) return false;
+    if (!m.statement?.includes("receive stablecoin payouts directly")) return false;
+    const signer = await recoverMessageAddress({ message: cfg.proofMessage, signature: cfg.proofSignature as Hex });
+    return isAddressEqual(signer, cfg.address as Address);
+  } catch {
+    return false;
+  }
+}
+
 /** The fee for a merchant on a chain: their override or the platform default, never above the cap deployed on that chain. */
 export function feeBpsFor(e: Engine, merchantFeeBps: number | null | undefined, chain: ChainRuntime): number {
   const cap = chain.deployment.maxFeeBps;
@@ -65,6 +86,15 @@ export async function resolveRoute(
   const treasury = getAddress(chain.deployment.treasury);
   const cfg = await activePayoutConfig(e, tx, merchant.id, networkId);
   if (cfg?.mode === "DIRECT" && cfg.address) {
+    if (!(await payoutProofHolds(cfg, merchant.id, chain))) {
+      // Fail closed: no address is issued for a payout wallet the wallet did not sign for.
+      await e.alerts.raise({
+        key: `payout-proof-invalid:${cfg.id}`, severity: "critical",
+        title: "A payout wallet no longer matches the signature stored for it; no payment address was issued",
+        detail: { merchantId: merchant.id, network: networkId, payoutConfigId: cfg.id },
+      });
+      return null;
+    }
     return { networkId, kind: "DIRECT", destination: getAddress(cfg.address), feeBps, treasury, payoutConfigId: cfg.id };
   }
   const vault = vaults.find((v) => v.networkId === networkId && v.tokenSymbol === token && v.status === "ACTIVE");

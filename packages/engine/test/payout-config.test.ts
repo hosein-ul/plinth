@@ -196,6 +196,25 @@ describe("what a stolen dashboard session cannot do", () => {
   });
 });
 
+describe("a payout row that was edited in the database", () => {
+  it("is not used: no payment address is issued for a wallet that did not sign for it, and an alert is raised", async () => {
+    const m = await merchant();
+    await request(m);
+    await confirmPayoutLink(h.engine, tokenFrom(h.mail.linkTo(m.email)!));
+    expect(await routeKind(m)).toMatchObject({ kind: "DIRECT", destination: wallet(6).address.toLowerCase() });
+
+    // Someone with database access (but not the wallet's key) points the confirmed row at their own address.
+    const [row] = await h.engine.db.select().from(schema.merchantPayoutConfigs).where(eq(schema.merchantPayoutConfigs.merchantId, m.merchantId));
+    await h.engine.db.update(schema.merchantPayoutConfigs).set({ address: wallet(7).address.toLowerCase() }).where(eq(schema.merchantPayoutConfigs.id, row!.id));
+    await expect(createPaymentIntent(h.engine, m.ctx, input("1.00"))).rejects.toMatchObject({ code: "NO_NETWORK_AVAILABLE" });
+    expect(h.alerts.alerts.some((a) => a.key === `payout-proof-invalid:${row!.id}`)).toBe(true);
+
+    // Put the real address back and the same merchant can be paid again.
+    await h.engine.db.update(schema.merchantPayoutConfigs).set({ address: row!.address }).where(eq(schema.merchantPayoutConfigs.id, row!.id));
+    expect(await routeKind(m)).toMatchObject({ kind: "DIRECT", destination: wallet(6).address.toLowerCase() });
+  });
+});
+
 describe("wallet checks", () => {
   it("only plain wallets are accepted: a contract address is refused", async () => {
     const m = await merchant();
