@@ -60,9 +60,9 @@ export interface Scenario { id: string; label: string; blurb: string; extra: str
 
 /** One master prompt, specialised by what the existing project is. Nothing here asks an assistant to build a project from scratch. */
 export const SCENARIOS: Scenario[] = [
-  { id: "bot", label: "Chat bot or Mini App", blurb: "A bot or Mini App that sells something.", extra: "This is a chat bot or Mini App. When a user taps buy, the bot's SERVER creates the payment (order_reference = chat or user id + item) and replies with a button that opens checkout_url. On payment.confirmed, deliver the item or grant access and message the buyer." },
   { id: "store", label: "Online store", blurb: "An existing shop with a cart or checkout.", extra: "This is an online store. The payment is created when the customer clicks the final pay or place-order button, with the cart total computed from the product prices stored on the server." },
   { id: "saas", label: "SaaS or membership", blurb: "Plans, upgrades or paid access.", extra: "This is a SaaS or membership product. The payment is created when someone buys or renews a plan; after payment.confirmed, activate the plan and store its expiry." },
+  { id: "bot", label: "Chat bot or Mini App", blurb: "A bot or Mini App that sells something.", extra: "This is a chat bot or Mini App. When a user taps buy, the bot's SERVER creates the payment (order_reference = chat or user id + item) and replies with a button that opens checkout_url. On payment.confirmed, deliver the item or grant access and message the buyer." },
   { id: "booking", label: "Bookings", blurb: "Appointments, tickets, classes.", extra: "This is a booking product. Hold the slot as pending when the payment is created; confirm it on payment.confirmed, and release it if the payment expires." },
 ];
 

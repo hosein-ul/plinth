@@ -84,7 +84,7 @@ export function SiteHeader() {
     <header className="sticky top-3 z-30 px-3 sm:px-5">
       <div ref={wrap} onMouseLeave={leave} onMouseEnter={() => clearTimeout(timer.current)} className="relative mx-auto max-w-[70rem]">
         <div className={cn("flex h-14 items-center gap-2 rounded-full border bg-raised pl-5 pr-2 md:bg-raised/90 md:backdrop-blur-md transition-[box-shadow,border-color,background-color] duration-[var(--duration-slow)]", scrolled ? "border-line-strong shadow-float" : "border-line shadow-low")}>
-          <span className="mr-2 flex items-center gap-2"><Logo /><span className="rounded-md bg-sunk px-1.5 py-0.5 text-xs font-medium text-ink-2">Chat</span></span>
+          <Logo className="mr-2" />
           <LayoutGroup id="nav">
             <nav aria-label="Primary" className="hidden items-center md:flex">
               {MEGAS.map((m) => (

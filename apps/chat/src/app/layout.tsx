@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: { default: "Plinth Chat: get paid in USDC right inside the chat", template: "%s · Plinth Chat" },
-  description: "Add a pay button to your bot, Mini App or paid channel. Customers pay in USDC on any network that has it, and the money lands in a vault only you can open.",
+  title: { default: "Plinth: get paid in USDC where your customers already are", template: "%s · Plinth" },
+  description: "A non-custodial USDC payment gateway for Mini Apps, shops and resellers. Every order is charged automatically on any network that has USDC, and the money lands in a vault only you can open.",
 };
 
 export const viewport: Viewport = { themeColor: "#f3f5f8", width: "device-width", initialScale: 1 };

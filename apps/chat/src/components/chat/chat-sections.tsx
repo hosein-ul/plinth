@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Check, Code2, Copy, LayoutGrid, Link2, Megaphone, Sparkles, Store } from "lucide-react";
+import { Check, LayoutGrid, Megaphone, Package, Store } from "lucide-react";
 import { ChainIcon, TokenIcon } from "@/components/brand";
 import { Band } from "@/components/marketing/band";
 import { Reveal, RevealHeading } from "@/components/marketing/motion/reveal";
@@ -9,10 +9,10 @@ import { cn } from "@/lib/cn";
 
 /* ── who it is for ─────────────────────────────────────────────────────────────────────────── */
 const WHO = [
-  { icon: Bot, title: "Bot builders", text: "Add a pay button to any bot. Deliver the moment the payment is confirmed, not when someone sends a screenshot." },
-  { icon: LayoutGrid, title: "Mini App developers", text: "Open a checkout from your Mini App. When it is paid, your server gets a signed message and unlocks the order." },
-  { icon: Megaphone, title: "Channel and community owners", text: "Charge for private channels, groups and courses. Access can follow the payment automatically." },
-  { icon: Store, title: "Resellers and small shops", text: "Sell goods and services in chat with a payment link, so you are paid before you ship." },
+  { icon: LayoutGrid, title: "Mini Apps", text: "Games, tools and stores that already have users and need a clean way to charge them. Open the checkout from the app and unlock the order when it is paid." },
+  { icon: Store, title: "Independent shops", text: "Sellers of goods and services who take orders in chat today and chase screenshots afterwards. Every order is charged at its real total and confirmed on its own." },
+  { icon: Package, title: "Resellers", text: "People who buy and resell, often across borders. Dollars on the network the buyer already uses, with the money in the reseller's own vault." },
+  { icon: Megaphone, title: "Creators and communities", text: "Paid access, tips and one-off sales for people with an audience, from a single link or built into their own tools." },
 ];
 
 export function ChatWho() {
@@ -21,8 +21,8 @@ export function ChatWho() {
       <div className={wrap}>
         <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
           <div className="lg:sticky lg:top-28 lg:self-start">
-            <RevealHeading id="who-h" as="h2" mode="line" className="t-1 text-ink" parts={[["Made for people who sell in chats.", ""], ["Where your customers already are.", "text-ink-4"]]} />
-            <Reveal delay={0.1}><p className="mt-6 max-w-md text-lg text-ink-2">Your audience already lives in a messenger. Taking their money should not mean sending them somewhere strange.</p></Reveal>
+            <RevealHeading id="who-h" as="h2" mode="line" className="t-1 text-ink" parts={[["Made for the people who sell here.", ""], ["Every kind of seller, one gateway.", "text-ink-4"]]} />
+            <Reveal delay={0.1}><p className="mt-6 max-w-md text-lg text-ink-2">Telegram is full of very different sellers. They share one problem: getting paid, automatically, without handing over control of the money.</p></Reveal>
           </div>
           <ul className="border-b border-line">
             {WHO.map((w, i) => (

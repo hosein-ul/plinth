@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Bot, LayoutGrid, Megaphone, Store, Vault } from "lucide-react";
+import { ArrowRight, ArrowUpRight, LayoutGrid, Megaphone, Package, Store, Vault } from "lucide-react";
 import { ChainIcon, LogoMark, TokenIcon } from "@/components/brand";
 import { Band } from "@/components/marketing/band";
 import { Reveal, RevealHeading } from "@/components/marketing/motion/reveal";
@@ -51,9 +51,9 @@ export function ChatAudience() {
 /* ── the gap, and where Plinth sits ────────────────────────────────────────────────────────── */
 const SELLERS = [
   { icon: LayoutGrid, label: "Mini Apps" },
-  { icon: Bot, label: "Bots" },
-  { icon: Megaphone, label: "Channels" },
-  { icon: Store, label: "Resellers" },
+  { icon: Store, label: "Shops" },
+  { icon: Package, label: "Resellers" },
+  { icon: Megaphone, label: "Creators" },
 ];
 const NETS: [string, string][] = [["base-mainnet", "Base"], ["arbitrum-mainnet", "Arbitrum"], ["optimism-mainnet", "OP"], ["polygon-mainnet", "Polygon"], ["ethereum-mainnet", "Ethereum"], ["arc-mainnet", "Arc"]];
 
@@ -92,7 +92,7 @@ export function ChatGap() {
 /* ── where we are, honestly ────────────────────────────────────────────────────────────────── */
 const COLS: { title: string; tone: "ok" | "info" | "neutral"; label: string; items: string[] }[] = [
   { title: "Built and tested", tone: "ok", label: "Now", items: ["Gateway API with idempotent, per-order payments", "Hosted checkout: wallet or address, gasless where the network allows", "Non-custodial vaults and invoice contracts, tested with fuzzing and real-bytecode forks", "Signed, retried webhooks and a merchant dashboard", "An MCP server and an AI kit for adding it to an existing project"] },
-  { title: "Next, in this order", tone: "info", label: "Gates", items: ["A live run on a public testnet, end to end", "The API hosted, so sign-in and the dashboard work on this site", "Design partners among Telegram builders, to learn what they actually need", "An independent audit of the contracts", "A checkout made for Mini Apps: theme, back button, haptics"] },
+  { title: "Next, in this order", tone: "info", label: "Gates", items: ["A live run on a public testnet, end to end", "The API hosted, so sign-in and the dashboard work on this site", "Design partners among Telegram sellers and Mini App developers, to learn what they actually need", "An independent audit of the contracts", "A checkout made for Mini Apps: theme, back button, haptics"] },
   { title: "Only after the gates", tone: "neutral", label: "Later", items: ["Mainnet, switched on network by network with a recorded approval", "A published package for the MCP server, and SDKs", "More networks, each probed before it is enabled"] },
 ];
 
@@ -127,13 +127,13 @@ export function ChatClosing() {
         <div className="max-w-3xl">
           <TelegramMark size={44} tone="current" className="text-white/80" />
           <h2 id="cta-h" className="t-display mt-6 text-[clamp(2.5rem,6vw,5.5rem)] text-on-ink">
-            <span className="block">Building in Telegram,</span>
-            <span className="block text-white/45">or investing around it?</span>
+            <span className="block">Start in minutes.</span>
+            <span className="block text-white/45">Test it for free.</span>
           </h2>
-          <p className="mt-6 max-w-lg text-lg text-white/65">We are early and we say so. If you sell to people inside Telegram, or back the teams that do, we would like to talk.</p>
+          <p className="mt-6 max-w-lg text-lg text-white/65">Create an account, send a test payment and see an order get paid. It runs on test networks, so nothing real moves.</p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
-            <Link href="/contact" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "h-12 border-transparent px-6")}>Talk to us<ArrowRight className="size-4" aria-hidden /></Link>
-            <Link href="/signup" className="inline-flex h-12 items-center rounded-ctl border border-white/20 px-5 text-[0.9375rem] font-medium text-white transition-colors hover:bg-white/10">Try the sandbox</Link>
+            <Link href="/signup" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "h-12 border-transparent px-6")}>Create a free test account<ArrowRight className="size-4" aria-hidden /></Link>
+            <Link href="/build-with-ai" className="inline-flex h-12 items-center rounded-ctl border border-white/20 px-5 text-[0.9375rem] font-medium text-white transition-colors hover:bg-white/10">Add it with your AI assistant</Link>
           </div>
         </div>
       </div>
