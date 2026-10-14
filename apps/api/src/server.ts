@@ -39,6 +39,13 @@ export async function buildServer(engine: Engine, opts: ServerOptions = {}): Pro
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.trustProxy ?? false, bodyLimit: 100 * 1024, genReqId: () => newId("evt").replace("evt_", "req_"), disableRequestLogging: true });
   const routes = buildRoutes(engine);
 
+  // Browsers and HTTP clients often send `content-type: application/json` with no body (for example a button that only POSTs).
+  // Treat that as an empty object instead of failing with a parser error.
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    const text = typeof body === "string" ? body : "";
+    if (text.trim() === "") return done(null, {});
+    try { done(null, JSON.parse(text)); } catch { const err = new Error("Request body is not valid JSON") as Error & { statusCode: number }; err.statusCode = 400; done(err, undefined); }
+  });
   if (opts.corsOrigins?.length) await app.register(cors, { origin: opts.corsOrigins, methods: ["GET", "POST", "PATCH", "DELETE"], allowedHeaders: ["authorization", "content-type", "idempotency-key", "x-plinth-environment"] });
   if (!opts.rateLimitDisabled) {
     await app.register(rateLimit, {

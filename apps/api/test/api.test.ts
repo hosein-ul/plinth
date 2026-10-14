@@ -214,6 +214,16 @@ describe("payment links and invoices over HTTP", () => {
     expect((await call("POST", `/public/links/${slug}/checkout`)).status).toBe(404);
   });
 
+  it("opening a link works when the browser sends a JSON content-type with an empty body", async () => {
+    const link = await call("POST", "/v1/payment-links", { token: apiKey, body: { name: "Empty body", amount: "1.50" } });
+    const slug = link.body.url.split("/l/")[1];
+    const r = await app.inject({ method: "POST", url: `/public/links/${slug}/checkout`, headers: { "content-type": "application/json" } });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().amount).toBe("1.50");
+    const bad = await app.inject({ method: "POST", url: `/v1/payment-intents`, headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, payload: "{not json" });
+    expect(bad.statusCode).toBe(400);
+  });
+
   it("creates an invoice with exact totals", async () => {
     const inv = await call("POST", "/v1/invoices", { token: apiKey, body: { customer_name: "Initech", customer_email: "ap@initech.test", line_items: [{ description: "Audit", quantity: 2, unit_amount: "1500.50" }], checkout_methods: ["ADDRESS"] } });
     expect(inv.status).toBe(201);
