@@ -3,15 +3,24 @@ pragma solidity 0.8.28;
 
 import {Fixture} from "./Base.t.sol";
 import {PaymentRouter} from "../src/PaymentRouter.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IFiatToken} from "../src/interfaces/IFiatToken.sol";
+import {DestinationKind} from "../src/DestinationKind.sol";
 
 contract PaymentRouterTest is Fixture {
     uint256 internal customerKey = 0xC0FFEE;
     address internal customer;
 
     event InvoicePaid(
-        bytes32 indexed invoiceId, bytes32 indexed merchantId, address indexed vault, address payer, uint256 amount, bytes32 nonce
+        bytes32 indexed invoiceId,
+        bytes32 indexed merchantId,
+        address indexed destination,
+        DestinationKind kind,
+        address payer,
+        uint256 amount,
+        uint256 fee,
+        bytes32 nonce
     );
+    event FeeSkipped(bytes32 indexed invoiceId, uint16 feeBps, uint256 amount);
 
     function setUp() public override {
         super.setUp();
@@ -23,7 +32,9 @@ contract PaymentRouterTest is Fixture {
     function _payment(string memory inv, uint256 value) internal view returns (PaymentRouter.Payment memory p) {
         p = PaymentRouter.Payment({
             from: customer,
-            vault: address(vaultA),
+            destination: address(vaultA),
+            kind: DestinationKind.VAULT,
+            feeBps: FEE,
             merchantId: MERCHANT_A,
             invoiceId: invoiceId(inv),
             value: value,
@@ -31,6 +42,12 @@ contract PaymentRouterTest is Fixture {
             validBefore: block.timestamp + 1 hours,
             salt: keccak256("salt-1")
         });
+    }
+
+    function _direct(string memory inv, uint256 value) internal view returns (PaymentRouter.Payment memory p) {
+        p = _payment(inv, value);
+        p.destination = merchantAWallet;
+        p.kind = DestinationKind.DIRECT;
     }
 
     /// Sign exactly what a wallet would sign over the token's EIP-712 domain.
@@ -49,19 +66,65 @@ contract PaymentRouterTest is Fixture {
         (v, r, s) = vm.sign(key, digest);
     }
 
-    function test_gaslessWalletPaymentReachesVault() public {
+    function test_gaslessWalletPaymentReachesVaultAndTreasury() public {
         PaymentRouter.Payment memory p = _payment("INV-W1", 250e6);
         (uint8 v, bytes32 r, bytes32 s) = _sign(p, customerKey, address(router));
+        uint256 fee = feeOf(250e6, FEE);
 
         vm.expectEmit(true, true, true, true, address(router));
-        emit InvoicePaid(p.invoiceId, MERCHANT_A, address(vaultA), customer, 250e6, router.paymentNonce(p));
-        vm.prank(relayer); // relayer pays gas, the customer holds no native token operations
+        emit InvoicePaid(
+            p.invoiceId, MERCHANT_A, address(vaultA), DestinationKind.VAULT, customer, 250e6, fee, router.paymentNonce(p)
+        );
+        vm.prank(relayer); // relayer pays gas, the customer holds no native token
         router.pay(p, v, r, s);
 
-        assertEq(usdc.balanceOf(address(vaultA)), 250e6);
+        assertEq(usdc.balanceOf(address(vaultA)), 250e6 - fee);
+        assertEq(usdc.balanceOf(treasury), fee);
         assertEq(usdc.balanceOf(customer), 750e6);
         assertEq(usdc.balanceOf(address(router)), 0, "router never retains funds");
         assertTrue(usdc.authorizationState(customer, router.paymentNonce(p)));
+    }
+
+    function test_directWalletPaymentReachesTheMerchantWallet() public {
+        PaymentRouter.Payment memory p = _direct("INV-WD", 100e6);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(p, customerKey, address(router));
+        router.pay(p, v, r, s);
+        assertEq(usdc.balanceOf(merchantAWallet), 100e6 - feeOf(100e6, FEE));
+        assertEq(usdc.balanceOf(treasury), feeOf(100e6, FEE));
+        assertEq(usdc.balanceOf(address(vaultA)), 0);
+        assertEq(usdc.balanceOf(address(router)), 0);
+    }
+
+    function test_splitConservesValue_fuzz(uint96 valueRaw, uint16 bpsRaw, bool direct) public {
+        uint256 value = bound(uint256(valueRaw), 1, 1_000e6);
+        uint16 bps = uint16(bound(bpsRaw, 0, MAX_FEE));
+        PaymentRouter.Payment memory p = direct ? _direct("INV-FZ", value) : _payment("INV-FZ", value);
+        p.feeBps = bps;
+        (uint8 v, bytes32 r, bytes32 s) = _sign(p, customerKey, address(router));
+        router.pay(p, v, r, s);
+        uint256 fee = feeOf(value, bps);
+        assertEq(usdc.balanceOf(treasury), fee);
+        assertEq(usdc.balanceOf(p.destination), value - fee);
+        assertEq(usdc.balanceOf(address(router)), 0, "no residual balance");
+    }
+
+    function test_feeAboveTheCapIsRefused() public {
+        PaymentRouter.Payment memory p = _payment("INV-CAP", 100e6);
+        p.feeBps = MAX_FEE + 1;
+        (uint8 v, bytes32 r, bytes32 s) = _sign(p, customerKey, address(router));
+        vm.expectRevert(abi.encodeWithSelector(PaymentRouter.FeeTooHigh.selector, MAX_FEE + 1, MAX_FEE));
+        router.pay(p, v, r, s);
+    }
+
+    function test_blacklistedTreasuryDoesNotBlockTheMerchantPayment() public {
+        usdc.blacklist(treasury);
+        PaymentRouter.Payment memory p = _direct("INV-BL", 100e6);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(p, customerKey, address(router));
+        vm.expectEmit(true, false, false, true, address(router));
+        emit FeeSkipped(p.invoiceId, FEE, 100e6);
+        router.pay(p, v, r, s);
+        assertEq(usdc.balanceOf(merchantAWallet), 100e6);
+        assertEq(usdc.balanceOf(treasury), 0);
     }
 
     function test_replayFails() public {
@@ -94,12 +157,13 @@ contract PaymentRouterTest is Fixture {
         router.pay(p, v, r, s);
     }
 
+    /// Every field is bound into the nonce the customer signs, including destination, kind and fee.
     function test_tamperedFieldsInvalidateSignature() public {
         PaymentRouter.Payment memory p = _payment("INV-W5", 100e6);
         (uint8 v, bytes32 r, bytes32 s) = _sign(p, customerKey, address(router));
 
         PaymentRouter.Payment memory t = _payment("INV-W5", 100e6);
-        t.invoiceId = invoiceId("OTHER-INVOICE"); // misattribute to another invoice
+        t.invoiceId = invoiceId("OTHER-INVOICE");
         vm.expectRevert("FiatTokenV2: invalid signature");
         router.pay(t, v, r, s);
 
@@ -109,12 +173,23 @@ contract PaymentRouterTest is Fixture {
         router.pay(t, v, r, s);
 
         t = _payment("INV-W5", 100e6);
-        t.vault = address(vaultB); // redirect to a different (registered) vault
+        t.destination = address(vaultB); // redirect to a different (registered) vault
         vm.expectRevert("FiatTokenV2: invalid signature");
         router.pay(t, v, r, s);
 
         t = _payment("INV-W5", 100e6);
         t.merchantId = MERCHANT_B;
+        vm.expectRevert("FiatTokenV2: invalid signature");
+        router.pay(t, v, r, s);
+
+        t = _payment("INV-W5", 100e6);
+        t.feeBps = FEE - 1; // a lower fee is a different payment
+        vm.expectRevert("FiatTokenV2: invalid signature");
+        router.pay(t, v, r, s);
+
+        t = _payment("INV-W5", 100e6);
+        t.kind = DestinationKind.DIRECT;
+        t.destination = merchantAWallet;
         vm.expectRevert("FiatTokenV2: invalid signature");
         router.pay(t, v, r, s);
     }
@@ -124,7 +199,7 @@ contract PaymentRouterTest is Fixture {
         (uint8 v, bytes32 r, bytes32 s) = _sign(p, customerKey, address(router));
         vm.prank(attacker); // attacker submits the exact same parameters first
         router.pay(p, v, r, s);
-        assertEq(usdc.balanceOf(address(vaultA)), 75e6);
+        assertEq(usdc.balanceOf(address(vaultA)), 75e6 - feeOf(75e6, FEE));
         assertEq(usdc.balanceOf(attacker), 0);
     }
 
@@ -144,12 +219,21 @@ contract PaymentRouterTest is Fixture {
         usdc.receiveWithAuthorization(customer, relayer, 10e6, p.validAfter, p.validBefore, nonce, v, r, s);
     }
 
-    function test_unregisteredVaultAndZeroValueRejected() public {
+    function test_unregisteredVaultUnsafeDirectAndZeroValueRejected() public {
         PaymentRouter.Payment memory p = _payment("INV-W8", 10e6);
-        p.vault = attacker;
+        p.destination = attacker;
         (uint8 v, bytes32 r, bytes32 s) = _sign(p, customerKey, address(router));
         vm.expectRevert(abi.encodeWithSelector(PaymentRouter.UnknownVault.selector, attacker));
         router.pay(p, v, r, s);
+
+        address[4] memory bad = [address(0), treasury, address(usdc), address(router)];
+        for (uint256 i = 0; i < bad.length; ++i) {
+            p = _direct("INV-W8", 10e6);
+            p.destination = bad[i];
+            (v, r, s) = _sign(p, customerKey, address(router));
+            vm.expectRevert(abi.encodeWithSelector(PaymentRouter.InvalidDestination.selector, bad[i]));
+            router.pay(p, v, r, s);
+        }
 
         p = _payment("INV-W8", 0);
         vm.expectRevert(PaymentRouter.ZeroValue.selector);
@@ -165,15 +249,25 @@ contract PaymentRouterTest is Fixture {
         p2.salt = keccak256("salt-2");
         (v, r, s) = _sign(p2, customerKey, address(router));
         router.pay(p2, v, r, s);
-        assertEq(usdc.balanceOf(address(vaultA)), 20e6);
+        assertEq(usdc.balanceOf(address(vaultA)) + usdc.balanceOf(treasury), 20e6);
     }
 
-    function test_nonceBindsChainAndRouter() public {
+    function test_nonceBindsChainRouterAndTreasury() public {
         PaymentRouter.Payment memory p = _payment("INV-W10", 10e6);
         bytes32 n1 = router.paymentNonce(p);
-        PaymentRouter other = new PaymentRouter(router.TOKEN(), vaults);
+        PaymentRouter other = new PaymentRouter(router.TOKEN(), vaults, treasury, MAX_FEE);
         assertTrue(other.paymentNonce(p) != n1, "router address bound");
+        PaymentRouter otherTreasury = new PaymentRouter(router.TOKEN(), vaults, attacker, MAX_FEE);
+        assertTrue(otherTreasury.paymentNonce(p) != n1, "treasury bound");
         vm.chainId(4242);
         assertTrue(router.paymentNonce(p) != n1, "chain id bound");
+    }
+
+    function test_constructorChecks() public {
+        IFiatToken token = router.TOKEN();
+        vm.expectRevert(PaymentRouter.ZeroAddress.selector);
+        new PaymentRouter(token, vaults, address(0), MAX_FEE);
+        vm.expectRevert(abi.encodeWithSelector(PaymentRouter.FeeTooHigh.selector, 10_001, 10_000));
+        new PaymentRouter(token, vaults, treasury, 10_001);
     }
 }

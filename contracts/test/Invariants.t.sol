@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {Fixture} from "./Base.t.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {InvoiceDeposit} from "../src/InvoiceDeposit.sol";
+import {DestinationKind} from "../src/DestinationKind.sol";
 
 /// @dev Random sequence of deposits, deploys and sweeps by arbitrary callers.
 contract Handler is Fixture {
@@ -15,10 +16,17 @@ contract Handler is Fixture {
         setUp();
     }
 
+    function _route(uint8 which) internal view returns (bytes32 m, address dest, DestinationKind kind) {
+        if (which % 4 == 0) return (MERCHANT_A, address(vaultA), DestinationKind.VAULT);
+        if (which % 4 == 1) return (MERCHANT_B, address(vaultB), DestinationKind.VAULT);
+        if (which % 4 == 2) return (MERCHANT_A, merchantAWallet, DestinationKind.DIRECT);
+        return (MERCHANT_B, merchantBOwner, DestinationKind.DIRECT);
+    }
+
     function deposit(uint8 which, uint96 amount) external {
         bytes32 inv = keccak256(abi.encode("inv", which % 6));
-        (bytes32 m, address v) = which % 2 == 0 ? (MERCHANT_A, address(vaultA)) : (MERCHANT_B, address(vaultB));
-        address a = invoices.predict(m, inv, v);
+        (bytes32 m, address v, DestinationKind k) = _route(which);
+        address a = invoices.predict(m, inv, v, k, FEE);
         usdc.mint(a, amount);
         totalMinted += amount;
         if (!seen[a]) {
@@ -30,18 +38,30 @@ contract Handler is Fixture {
     function settle(uint8 which, address caller) external {
         vm.assume(caller != address(0));
         bytes32 inv = keccak256(abi.encode("inv", which % 6));
-        (bytes32 m, address v) = which % 2 == 0 ? (MERCHANT_A, address(vaultA)) : (MERCHANT_B, address(vaultB));
+        (bytes32 m, address v, DestinationKind k) = _route(which);
         vm.prank(caller);
-        invoices.deployAndSweep(m, inv, v);
+        invoices.deployAndSweep(m, inv, v, k, FEE);
     }
 
     function directSweep(uint8 which, address caller) external {
         bytes32 inv = keccak256(abi.encode("inv", which % 6));
-        (bytes32 m, address v) = which % 2 == 0 ? (MERCHANT_A, address(vaultA)) : (MERCHANT_B, address(vaultB));
-        address a = invoices.predict(m, inv, v);
+        (bytes32 m, address v, DestinationKind k) = _route(which);
+        address a = invoices.predict(m, inv, v, k, FEE);
         if (a.code.length == 0) return;
         vm.prank(caller);
         InvoiceDeposit(a).sweep();
+    }
+
+    function merchantAWalletAddr() external view returns (address) {
+        return merchantAWallet;
+    }
+
+    function merchantBOwnerAddr() external view returns (address) {
+        return merchantBOwner;
+    }
+
+    function maxFeeBps() external pure returns (uint16) {
+        return MAX_FEE;
     }
 
     function touchedLength() external view returns (uint256) {
@@ -63,9 +83,10 @@ contract InvariantsTest is StdInvariant, Fixture {
         targetSelector(FuzzSelector({addr: address(h), selectors: sels}));
     }
 
-    /// Conservation: every minted unit sits in an invoice address or a merchant vault.
+    /// Conservation: every minted unit sits in an invoice address, a merchant vault or wallet, or the treasury.
     function invariant_noLeakage() public view {
         uint256 held = h.usdc().balanceOf(address(h.vaultA())) + h.usdc().balanceOf(address(h.vaultB()));
+        held += h.usdc().balanceOf(h.treasury()) + h.usdc().balanceOf(h.merchantAWalletAddr()) + h.usdc().balanceOf(h.merchantBOwnerAddr());
         uint256 n = h.touchedLength();
         for (uint256 i = 0; i < n; ++i) {
             held += h.usdc().balanceOf(h.touched(i));
@@ -78,5 +99,10 @@ contract InvariantsTest is StdInvariant, Fixture {
         assertEq(h.usdc().balanceOf(h.relayer()), 0);
         assertEq(h.usdc().balanceOf(h.attacker()), 0);
         assertEq(h.usdc().balanceOf(address(h.invoices())), 0);
+    }
+
+    /// The treasury never holds more than the maximum fee share of everything ever minted.
+    function invariant_treasuryShareIsCapped() public view {
+        assertLe(h.usdc().balanceOf(h.treasury()), (h.totalMinted() * h.maxFeeBps()) / 10_000);
     }
 }

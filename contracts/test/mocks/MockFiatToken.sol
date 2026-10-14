@@ -19,8 +19,24 @@ contract MockFiatToken is ERC20("USDC", "USDC") {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     mapping(address => mapping(bytes32 => bool)) public authorizationState;
+    /// @dev Circle-style blacklist: a blacklisted account can neither send nor receive.
+    mapping(address => bool) public isBlacklisted;
 
     event AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce);
+
+    function blacklist(address account) external {
+        isBlacklisted[account] = true;
+    }
+
+    function unBlacklist(address account) external {
+        isBlacklisted[account] = false;
+    }
+
+    function _update(address from, address to, uint256 value) internal override {
+        require(!isBlacklisted[from], "Blacklistable: account is blacklisted");
+        require(!isBlacklisted[to], "Blacklistable: account is blacklisted");
+        super._update(from, to, value);
+    }
 
     function decimals() public pure override returns (uint8) {
         return 6;

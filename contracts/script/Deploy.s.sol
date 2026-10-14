@@ -17,7 +17,10 @@ interface IDecimals {
 ///
 ///   USDC_ADDRESS        official USDC for the target chain (taken from Circle's list, NOT from this repo's cache)
 ///   EXPECTED_CHAIN_ID   must equal the RPC's chain id — stops "right key, wrong network" mistakes
-///   CONTRACT_VERSION    optional, default 1 (part of every invoice address)
+///   TREASURY            platform fee recipient for this chain (immutable in the implementation). Rotating it later
+///                       means deploying a new implementation version, which only affects NEW invoices.
+///   MAX_FEE_BPS         optional, default 100 (1%): the immutable cap on any invoice's fee
+///   CONTRACT_VERSION    optional, default 2 (part of every invoice address)
 ///   ALLOW_MAINNET_DEPLOY=true   required on any production chain id; absent => the script reverts
 ///
 /// Sign with a keystore/hardware wallet, never a private key on the command line:
@@ -29,11 +32,19 @@ contract Deploy is Script {
     function run() external {
         address usdc = vm.envAddress("USDC_ADDRESS");
         uint256 expectedChainId = vm.envUint("EXPECTED_CHAIN_ID");
-        uint16 version = uint16(vm.envOr("CONTRACT_VERSION", uint256(1)));
+        address treasury = vm.envAddress("TREASURY");
+        uint16 maxFeeBps = uint16(vm.envOr("MAX_FEE_BPS", uint256(100)));
+        uint16 version = uint16(vm.envOr("CONTRACT_VERSION", uint256(2)));
 
         require(block.chainid == expectedChainId, "Deploy: RPC chain id != EXPECTED_CHAIN_ID");
         require(usdc.code.length > 0, "Deploy: USDC_ADDRESS has no code on this chain");
         require(IDecimals(usdc).decimals() == 6, "Deploy: token is not 6-decimals USDC");
+        require(treasury != address(0), "Deploy: TREASURY is the zero address");
+        require(maxFeeBps <= 1000, "Deploy: MAX_FEE_BPS above 10% is not allowed by this script");
+        if (treasury.code.length > 0) {
+            // The treasury is assumed to be a plain EOA. A contract is allowed (it may be a multisig) but must be a deliberate choice.
+            console2.log("WARNING: TREASURY has code on this chain. It is assumed to be an EOA; confirm it can receive USDC.");
+        }
         if (_isProduction(block.chainid)) {
             require(vm.envOr("ALLOW_MAINNET_DEPLOY", false), "Deploy: production chain requires ALLOW_MAINNET_DEPLOY=true");
         }
@@ -41,15 +52,18 @@ contract Deploy is Script {
         uint256 startBlock = block.number;
         vm.startBroadcast();
         VaultFactory vaults = new VaultFactory(IERC20(usdc));
-        InvoiceDeposit implementation = new InvoiceDeposit();
-        InvoiceFactory invoices = new InvoiceFactory(address(implementation), IERC20(usdc), vaults, version);
-        PaymentRouter router = new PaymentRouter(IFiatToken(usdc), vaults);
+        InvoiceDeposit implementation = new InvoiceDeposit(IERC20(usdc), treasury, maxFeeBps, version);
+        InvoiceFactory invoices = new InvoiceFactory(address(implementation), vaults);
+        PaymentRouter router = new PaymentRouter(IFiatToken(usdc), vaults, treasury, maxFeeBps);
         vm.stopBroadcast();
 
         string memory k = "deployment";
         vm.serializeUint(k, "chainId", block.chainid);
         vm.serializeUint(k, "version", version);
         vm.serializeAddress(k, "usdc", usdc);
+        vm.serializeAddress(k, "treasury", treasury);
+        vm.serializeUint(k, "maxFeeBps", maxFeeBps);
+        vm.serializeBool(k, "treasuryHasCode", treasury.code.length > 0);
         vm.serializeAddress(k, "vaultFactory", address(vaults));
         vm.serializeAddress(k, "invoiceImplementation", address(implementation));
         vm.serializeAddress(k, "invoiceFactory", address(invoices));

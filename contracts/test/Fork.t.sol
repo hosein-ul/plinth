@@ -8,6 +8,7 @@ import {VaultFactory} from "../src/VaultFactory.sol";
 import {InvoiceDeposit} from "../src/InvoiceDeposit.sol";
 import {InvoiceFactory} from "../src/InvoiceFactory.sol";
 import {PaymentRouter} from "../src/PaymentRouter.sol";
+import {DestinationKind} from "../src/DestinationKind.sol";
 
 /// @notice Opt-in checks against the REAL USDC bytecode on a live network (read-only fork).
 ///         Run with:  FORK_URL=<rpc> FORK_USDC=<official usdc> forge test --match-contract ForkTest
@@ -41,16 +42,17 @@ contract ForkTest is Test {
         (bool ok, IFiatToken token) = _fork();
         if (!ok) return;
         VaultFactory vf = new VaultFactory(IERC20(address(token)));
-        InvoiceDeposit impl = new InvoiceDeposit();
-        InvoiceFactory f = new InvoiceFactory(address(impl), IERC20(address(token)), vf, 1);
+        address treasury = address(0x7EA5);
+        InvoiceDeposit impl = new InvoiceDeposit(IERC20(address(token)), treasury, 100, 2);
+        InvoiceFactory f = new InvoiceFactory(address(impl), vf);
         address vault = vf.createVault(keccak256("fork-merchant"), address(0xBEEF), 0);
         bytes32 inv = keccak256("fork-invoice");
-        address predicted = f.predict(keccak256("fork-merchant"), inv, vault);
+        address predicted = f.predict(keccak256("fork-merchant"), inv, vault, DestinationKind.VAULT, 20);
         assertEq(predicted.code.length, 0);
-        (address deployed, uint256 amount) = f.deployAndSweep(keccak256("fork-merchant"), inv, vault);
+        (address deployed, uint256 amount) = f.deployAndSweep(keccak256("fork-merchant"), inv, vault, DestinationKind.VAULT, 20);
         assertEq(deployed, predicted);
         assertEq(amount, 0);
-        PaymentRouter router = new PaymentRouter(token, vf);
+        PaymentRouter router = new PaymentRouter(token, vf, treasury, 100);
         assertEq(address(router.TOKEN()), address(token));
     }
 }
