@@ -8,7 +8,7 @@ import { checkChain, refreshOperational } from "./deployment-check";
 import { createEmailSender, type EmailSender } from "./email";
 import type { AlertSink, ChainRuntime, Engine, EngineConfig, Logger, TokenRuntime } from "./context";
 import { parseSecretKey } from "./crypto";
-import { resolvePolicyDetails } from "./policy";
+import { policyNeedsOperator, resolvePolicyDetails } from "./policy";
 
 export const consoleLogger: Logger = {
   info: (m, c) => console.log(JSON.stringify({ level: "info", msg: m, ...c })),
@@ -109,7 +109,7 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
       c = createChainPublicClient(network, urls);
     }
     let signer: LocalAccount | undefined;
-    const policyBlocked = false;
+    const policyBlocked = policyNeedsOperator(network, resolved);
     if (gate.operational) {
       if (network.environment === "mainnet" && resolved.source === "default") {
         log.warn("mainnet relayer is using the default spending limits for its tier; review RELAYER_POLICY_<NETWORK>", { network: network.id, tier: resolved.tier });

@@ -1,17 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { NETWORKS } from "@plinth/shared";
-import { resolvePolicyDetails, resolveRelayerPolicy } from "../src";
+import { policyNeedsOperator, resolvePolicyDetails, resolveRelayerPolicy } from "../src";
 
 describe("relayer spending policy defaults", () => {
   it("every registry network resolves a policy without any configuration", () => {
     for (const net of Object.values(NETWORKS)) {
       const r = resolvePolicyDetails(net, {});
       expect(r.source).toBe("default");
+      if (r.tier === "explicit") continue; // no safe default exists: see the test below
       expect(r.policy.maxFeePerTxWei).toBeGreaterThan(0n);
       expect(r.policy.maxDailyGasWei).toBeGreaterThanOrEqual(r.policy.maxFeePerTxWei);
       expect(r.policy.lowBalanceAlertWei).toBeGreaterThanOrEqual(r.policy.minBalanceWei);
       expect(r.policy.maxOpsPerDay).toBeGreaterThan(0);
     }
+  });
+
+  it("a mainnet whose native token is not ETH has no default spending limit: it stays closed until the operator sets one", () => {
+    const explicit = Object.values(NETWORKS).filter((n) => resolvePolicyDetails(n, {}).tier === "explicit");
+    expect(explicit.length).toBeGreaterThan(10);
+    for (const net of explicit) {
+      expect(net.nativeCurrency.symbol).not.toBe("ETH");
+      expect(policyNeedsOperator(net, resolvePolicyDetails(net, {}))).toBe(true);
+      const key = `RELAYER_POLICY_${net.id.toUpperCase().replace(/-/g, "_")}`;
+      const set = resolvePolicyDetails(net, { [key]: JSON.stringify({ maxFeePerTxWei: "1000000000000000", maxDailyGasWei: "50000000000000000", maxOpsPerDay: 500 }) });
+      expect(policyNeedsOperator(net, set)).toBe(false);
+    }
+    // ETH-priced L2s keep their defaults, and Ethereum, Polygon and Arc are unchanged.
+    for (const id of ["base-mainnet", "linea-mainnet", "ink-mainnet", "unichain-mainnet"] as const) expect(policyNeedsOperator(NETWORKS[id], resolvePolicyDetails(NETWORKS[id], {}))).toBe(false);
   });
 
   it("L2 mainnets are capped low and Ethereum mainnet is allowed more", () => {

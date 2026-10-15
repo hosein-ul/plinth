@@ -3,7 +3,7 @@ import type { RelayerPolicy } from "./context";
 
 const E18 = 10n ** 18n;
 
-type Tier = "testnet" | "l2" | "ethereum" | "polygon" | "arc";
+type Tier = "testnet" | "l2" | "ethereum" | "polygon" | "arc" | "explicit";
 
 /** Which spending tier a network belongs to. The numbers differ because the native token and fee level differ. */
 function tierOf(net: NetworkConfig): Tier {
@@ -11,6 +11,8 @@ function tierOf(net: NetworkConfig): Tier {
   if (net.gas.model === "usdc-native") return "arc";
   if (net.id === "ethereum-mainnet") return "ethereum";
   if (net.id === "polygon-mainnet") return "polygon";
+  // Limits are in the native token. Where it is not ETH-priced (AVAX, CELO, SEI, ...), no default is safe: the operator must set them.
+  if (net.nativeCurrency.symbol !== "ETH") return "explicit";
   return "l2";
 }
 
@@ -24,6 +26,11 @@ function tierOf(net: NetworkConfig): Tier {
  * far more. Override any field per network with RELAYER_POLICY_<NETWORK> (JSON, wei as decimal strings).
  */
 const DEFAULTS: Record<Tier, RelayerPolicy> = {
+  // Placeholder values for a native token we cannot price: tiny, so nothing is spent until RELAYER_POLICY_<NETWORK> is set (see policyNeedsOperator).
+  explicit: {
+    maxDailyGasWei: 0n, maxFeePerTxWei: 0n, maxOpsPerDay: 0, minBalanceWei: E18, lowBalanceAlertWei: E18,
+    replaceAfterSeconds: 60, maxReplacements: 4, minSweepUnits: 1_000_000n, maxSettlementAttempts: 5,
+  },
   // Generous: test tokens are free.
   testnet: {
     maxDailyGasWei: E18 / 2n, maxFeePerTxWei: E18 / 100n, maxOpsPerDay: 5000, minBalanceWei: E18 / 1000n, lowBalanceAlertWei: E18 / 50n,
@@ -87,4 +94,9 @@ export function resolvePolicyDetails(net: NetworkConfig, env: Record<string, str
 
 export function resolveRelayerPolicy(net: NetworkConfig, env: Record<string, string | undefined> = process.env): RelayerPolicy {
   return resolvePolicyDetails(net, env).policy;
+}
+
+/** A mainnet whose native token is not ETH-priced has no safe default: it stays closed until the operator sets RELAYER_POLICY_<NETWORK>. */
+export function policyNeedsOperator(net: NetworkConfig, resolved: ResolvedPolicy): boolean {
+  return net.environment === "mainnet" && resolved.tier === "explicit" && resolved.source === "default";
 }

@@ -14,13 +14,13 @@ import { cn } from "@/lib/cn";
 import { TokenIcon, type TokenSymbol } from "./token-icon";
 
 type Mark = { Icon: ComponentType<{ variant?: "branded" | "mono" | "background"; size?: number | string; className?: string }>; variant: "branded" | "background"; tile: boolean };
-type Family = "arc" | "base" | "ethereum" | "arbitrum" | "optimism" | "polygon" | "avalanche" | "local";
+type Family = "arc" | "base" | "ethereum" | "arbitrum" | "optimism" | "polygon" | "avalanche" | "other" | "local";
 
 /**
  * Arc and Polygon use the "background" variant: their branded variants are white on transparent and
  * vanish on light surfaces. Background variants are square tiles, so they are rounded to match the others.
  */
-const marks: Record<Exclude<Family, "local">, Mark> = {
+const marks: Record<Exclude<Family, "local" | "other">, Mark> = {
   arc: { Icon: NetworkArc, variant: "background", tile: true },
   base: { Icon: NetworkBase, variant: "branded", tile: true },
   ethereum: { Icon: NetworkEthereum, variant: "branded", tile: false },
@@ -40,9 +40,27 @@ const registry: Record<NetworkId, { family: Family; name: string; testnet: boole
   "optimism-mainnet": { family: "optimism", name: "OP Mainnet", testnet: false },
   "polygon-mainnet": { family: "polygon", name: "Polygon PoS", testnet: false },
   "ethereum-mainnet": { family: "ethereum", name: "Ethereum", testnet: false },
+  "avalanche-mainnet": { family: "avalanche", name: "Avalanche C-Chain", testnet: false },
+  "celo-mainnet": { family: "other", name: "Celo", testnet: false },
+  "codex-mainnet": { family: "other", name: "Codex", testnet: false },
+  "cronos-mainnet": { family: "other", name: "Cronos", testnet: false },
+  "hyperevm-mainnet": { family: "other", name: "HyperEVM", testnet: false },
+  "injective-mainnet": { family: "other", name: "Injective", testnet: false },
+  "ink-mainnet": { family: "other", name: "Ink", testnet: false },
+  "linea-mainnet": { family: "other", name: "Linea", testnet: false },
+  "monad-mainnet": { family: "other", name: "Monad", testnet: false },
+  "morph-mainnet": { family: "other", name: "Morph", testnet: false },
+  "plasma-mainnet": { family: "other", name: "Plasma", testnet: false },
+  "plume-mainnet": { family: "other", name: "Plume", testnet: false },
+  "sei-mainnet": { family: "other", name: "Sei", testnet: false },
+  "sonic-mainnet": { family: "other", name: "Sonic", testnet: false },
+  "unichain-mainnet": { family: "other", name: "Unichain", testnet: false },
+  "worldchain-mainnet": { family: "other", name: "World Chain", testnet: false },
+  "xlayer-mainnet": { family: "other", name: "X Layer", testnet: false },
+  "xdc-mainnet": { family: "other", name: "XDC", testnet: false },
 };
 
-const familyNames: Record<Family, string> = { arc: "Arc", base: "Base", ethereum: "Ethereum", arbitrum: "Arbitrum One", optimism: "OP Mainnet", polygon: "Polygon PoS", avalanche: "Avalanche", local: "Local dev chain" };
+const familyNames: Record<Family, string> = { arc: "Arc", base: "Base", ethereum: "Ethereum", arbitrum: "Arbitrum One", optimism: "OP Mainnet", polygon: "Polygon PoS", avalanche: "Avalanche", other: "Network", local: "Local dev chain" };
 
 export interface ChainMeta { family: Family; name: string; testnet: boolean }
 
@@ -71,14 +89,14 @@ export function networkIdForChainId(chainId: number): NetworkId | "local-dev" {
 export function ChainIcon({ id, size = 20, testnet, className }: { id: NetworkId | (string & {}); size?: number; testnet?: boolean; className?: string }) {
   const meta = chainMeta(id);
   const label = `${meta.name}${(testnet ?? meta.testnet) && !/testnet|sepolia/i.test(meta.name) ? " (testnet)" : ""}`;
-  if (meta.family === "local") {
+  if (meta.family === "local" || meta.family === "other") {
     return (
       <span role="img" aria-label={label} className={cn("inline-grid shrink-0 place-items-center bg-sunk text-ink-2", className)} style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}>
         <Boxes style={{ width: size * 0.62, height: size * 0.62 }} strokeWidth={1.75} aria-hidden />
       </span>
     );
   }
-  const m = marks[meta.family];
+  const m = marks[meta.family as Exclude<Family, "local" | "other">];
   return (
     <span role="img" aria-label={label} className={cn("inline-flex shrink-0", m.tile && "overflow-hidden", className)} style={{ width: size, height: size, borderRadius: m.tile ? Math.round(size * 0.28) : undefined }}>
       <m.Icon variant={m.variant} size={size} />

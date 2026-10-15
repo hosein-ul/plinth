@@ -82,6 +82,14 @@ async function probe(net: NetworkConfig): Promise<Check[]> {
   const out: Check[] = [{ name: "chain id", ok: chainId === net.chainId, detail: `rpc=${chainId} registry=${net.chainId}` }];
   if (chainId !== net.chainId) return out;
   for (const tok of Object.values(networkTokens(net))) out.push(...(await probeToken(client, net, tok!)));
+  // The watcher asks for logs in windows of `maxLogRange` blocks: the public RPC must answer a window that size.
+  try {
+    const head = await client.getBlockNumber();
+    await client.getLogs({ address: net.usdc.address, fromBlock: head - BigInt(net.maxLogRange - 1), toBlock: head });
+    out.push({ name: "log range", ok: true, detail: `eth_getLogs over ${net.maxLogRange} blocks answered` });
+  } catch (e) {
+    out.push({ name: "log range", ok: false, detail: String((e as { shortMessage?: string }).shortMessage ?? (e as Error).message).slice(0, 100) });
+  }
   return out;
 }
 
