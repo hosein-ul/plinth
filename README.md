@@ -37,7 +37,7 @@ key that can move merchant funds.
 * **Payment engine** — status is *derived* from verified facts (transfers, settlements, refunds); partial / repeated / late /
   over / wrong-token payments are handled and reorgs are reversed. Webhooks are signed, retried and idempotent.
 
-Full design: [docs/architecture.md](docs/architecture.md) · Threats: [docs/threat-model.md](docs/threat-model.md)
+Full design: [docs/architecture.md](docs/architecture.md) · Threats: [docs/threat-model.md](docs/threat-model.md) · All documents: [docs/README.md](docs/README.md) · MCP server: [docs/mcp.md](docs/mcp.md) · Networks: [docs/networks.md](docs/networks.md) · Internal review: [docs/security-review.md](docs/security-review.md)
 
 **What a compromised backend can and cannot do.** It cannot move funds out of a vault or redirect funds sent to an address that has
 already been issued. It **can** hand out new checkout addresses that pay an attacker, because a customer cannot verify an address. See

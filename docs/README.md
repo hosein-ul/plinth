@@ -1,0 +1,17 @@
+# Documentation
+
+| Document | For | What is in it |
+| --- | --- | --- |
+| [architecture.md](architecture.md) | engineers | Contracts and trust boundaries, counterfactual addresses, payment lifecycle, relayer, networks, fee and tokens, payout modes, custody |
+| [api-guide.md](api-guide.md) + [openapi.json](openapi.json) | integrators | Authentication, idempotency, payments, webhooks, refunds, payout methods, custody, settlement policy |
+| [mcp.md](mcp.md) | integrators using an AI assistant | The MCP server: install, tools, inputs, errors, safety |
+| [networks.md](networks.md) | operators | All 26 registry networks, how each fact was verified, what is pending and why, spending limits |
+| [operations.md](operations.md) | operators | Processes, secrets, every configuration variable, alerts, emergency stop, procedures (treasury rotation, adding a token) |
+| [threat-model.md](threat-model.md) | security | Assets, actors, mitigations, what a compromised backend can and cannot do, payout and custody trade-offs |
+| [security-review.md](security-review.md) | security, launch | The internal review of 2026-10-15 (not an audit): tools, results, findings, what an audit must cover |
+| [verification.md](verification.md) | everyone | What was tested, with real counts, and what was **not** done |
+| [mainnet-launch-checklist.md](mainnet-launch-checklist.md) | launch | The gate before any mainnet |
+| [deploy-testnet.md](deploy-testnet.md) | operators | Deploying to a testnet |
+| [circle-integrations.md](circle-integrations.md) | engineers | CCTP, Gateway, Gas Station: verified facts and status |
+
+Status in one line: **pre-audit, testnet only.** Mainnet is disabled by default and nothing has been deployed to one.

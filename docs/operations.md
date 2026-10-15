@@ -22,6 +22,7 @@
 | --- | --- | --- |
 | `PLATFORM_FEE_BPS` | 20 | Default fee for new invoice addresses (never above the contract's immutable cap of 100). A merchant's own rate is set with `POST /admin/merchants/:id/fee` (operator token). |
 | `RESEND_API_KEY`, `EMAIL_FROM` | none | Resend credentials and the verified sender (for example `Plinth <no-reply@your-domain>`). Without a key the API prints emails to the console in development; in production the flows that need email (verification, payout wallet confirmation) answer `503 EMAIL_UNAVAILABLE` instead of pretending to work. |
+| `REQUIRE_EMAIL_CONFIRMATION` | false | When true, a new payout or withdrawal wallet needs a verified email and a link emailed to the account. When false (the default for now), the signed proof, a fresh re-authentication and the cooldown are the protections and no email address is needed. Turn it on once Resend is configured. |
 | `PAYOUT_COOLDOWN_SECONDS` | 0 (dev), 86400 (production) | Wait between confirming a payout wallet and it taking effect. |
 | `REQUIRE_VAULT_OWNER_PROOF` | on in production | A vault owner must sign a challenge, so a mistyped owner address can never own a vault. |
 | `RELAYER_POLICY_<NETWORK>` | tier default | JSON override of `perTxFeeCap`, `dailyBudget`, `opCap`, `minBalance` for one network. Defaults are low on L2s and higher on Ethereum mainnet. |
