@@ -19,7 +19,7 @@ const NETS: [string, string][] = [
 const THREAD = ["Detected", "Verified", "Final", "Swept", "In vault"];
 
 /** The same checkout in a desktop browser: summary on the left, the payment card on the right. Its status thread follows the phone. */
-function CheckoutWindow({ phase }: { phase: number }) {
+export function CheckoutWindow({ phase }: { phase: number }) {
   const lit = phase >= 3 ? 5 : phase + 1; // steps lit so far
   return (
     <div className="w-[468px] overflow-hidden rounded-[20px] border border-line-strong bg-ground shadow-float">

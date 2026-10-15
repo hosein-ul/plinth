@@ -40,7 +40,7 @@ export function AssetsNetworks() {
           </div>
           <RevealHeading as="h2" id="assets-h" className="t-1 mt-6 text-ink" parts={[["One token.", ""], ["Official contracts only.", "text-ink-4"]]} />
           <Reveal delay={0.1}>
-            <p className="mt-5 max-w-md text-lg text-ink-2">{testnets.length} testnets in the registry, {mainnets.length} mainnets recorded but switched off.</p>
+            <p className="mt-5 max-w-md text-lg text-ink-2">Built for {mainnets.length} networks with native USDC. {testnets.length} testnets run today; each mainnet opens after its own on-chain check and the audit.</p>
             <p className="mt-3 max-w-md text-[0.9375rem] text-ink-3">
               Each network&apos;s USDC address comes from Circle&apos;s published list and is probed on-chain before the network can be enabled. A look-alike token is recorded and ignored, never credited.
             </p>
@@ -71,25 +71,29 @@ export function AssetsNetworks() {
               </Tilt>
             </ClipReveal>
           ))}
-          <Reveal delay={0.1} className="sm:col-span-2">
-            <div className="rounded-card border border-dashed border-line-strong p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-ink-2">{mainnets.length} mainnets, recorded and switched off</p>
-                <Chip dot={false} className="shrink-0">Not enabled</Chip>
-              </div>
-              <ul className="mt-4 flex flex-wrap gap-2">
-                {mainnets.map((n) => (
-                  <li key={n.id} className="inline-flex items-center gap-2 rounded-full border border-line bg-raised py-1 pl-1.5 pr-3 text-xs font-medium text-ink-2">
-                    <ChainIcon id={n.id} size={18} className="opacity-70 grayscale" />{n.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Reveal>
         </div>
       </div>
 
-      <div className="mt-24 sm:mt-28">
+      <div className="mt-20 sm:mt-24">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <p className="max-w-lg text-lg font-medium tracking-[-0.02em] text-ink">Every network where Circle issues USDC natively <span className="text-ink-4">is on the list.</span></p>
+          <Link href="/networks" className="text-sm font-medium text-ink-2 underline decoration-line-strong underline-offset-4 hover:text-ink hover:decoration-ink">See each network</Link>
+        </div>
+        <div className="space-y-3">
+          {[mainnets.slice(0, Math.ceil(mainnets.length / 2)), mainnets.slice(Math.ceil(mainnets.length / 2))].map((row, r) => (
+            <Marquee key={r} seconds={r === 0 ? 70 : 84} reverse={r === 1}>
+              {row.map((n) => (
+                <span key={n.id} className="inline-flex h-14 items-center gap-3 rounded-card border border-line bg-raised px-4 pr-5 shadow-low">
+                  <ChainIcon id={n.id} size={30} />
+                  <span className="whitespace-nowrap text-[0.9375rem] font-medium text-ink">{n.name}</span>
+                </span>
+              ))}
+            </Marquee>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-20 sm:mt-24">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <p className="max-w-md text-lg font-medium tracking-[-0.02em] text-ink">Wallets the checkout can connect to <span className="text-ink-4">for one-signature payments.</span></p>
           <p className="text-xs text-ink-3">Marks belong to their owners and show compatibility, not partnership.</p>

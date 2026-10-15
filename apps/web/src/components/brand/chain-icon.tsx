@@ -9,12 +9,28 @@ import {
   NetworkEthereum,
   NetworkOptimism,
   NetworkPolygon,
+  NetworkCelo,
+  NetworkCronos,
+  NetworkLinea,
+  NetworkSeiNetwork,
+  NetworkSonic,
+  NetworkUnichain,
+  NetworkWorld,
+  NetworkXdc,
+  NetworkInk,
+  NetworkPlume,
+  NetworkMonad,
+  NetworkInjective,
+  NetworkHyperEvm,
+  NetworkXLayer,
+  NetworkPlasma,
+  NetworkCodex,
 } from "@web3icons/react";
 import { cn } from "@/lib/cn";
 import { TokenIcon, type TokenSymbol } from "./token-icon";
 
 type Mark = { Icon: ComponentType<{ variant?: "branded" | "mono" | "background"; size?: number | string; className?: string }>; variant: "branded" | "background"; tile: boolean };
-type Family = "arc" | "base" | "ethereum" | "arbitrum" | "optimism" | "polygon" | "avalanche" | "other" | "local";
+type Family = "arc" | "base" | "ethereum" | "arbitrum" | "optimism" | "polygon" | "avalanche" | "celo" | "cronos" | "linea" | "sei" | "sonic" | "unichain" | "world" | "xdc" | "ink" | "plume" | "monad" | "injective" | "hyperevm" | "xlayer" | "plasma" | "codex" | "other" | "local";
 
 /**
  * Arc and Polygon use the "background" variant: their branded variants are white on transparent and
@@ -28,6 +44,22 @@ const marks: Record<Exclude<Family, "local" | "other">, Mark> = {
   optimism: { Icon: NetworkOptimism, variant: "branded", tile: false },
   polygon: { Icon: NetworkPolygon, variant: "background", tile: true },
   avalanche: { Icon: NetworkAvalanche, variant: "branded", tile: false },
+  celo: { Icon: NetworkCelo, variant: "background", tile: true },
+  cronos: { Icon: NetworkCronos, variant: "background", tile: true },
+  linea: { Icon: NetworkLinea, variant: "background", tile: true },
+  sei: { Icon: NetworkSeiNetwork, variant: "background", tile: true },
+  sonic: { Icon: NetworkSonic, variant: "background", tile: true },
+  unichain: { Icon: NetworkUnichain, variant: "background", tile: true },
+  world: { Icon: NetworkWorld, variant: "background", tile: true },
+  xdc: { Icon: NetworkXdc, variant: "background", tile: true },
+  ink: { Icon: NetworkInk, variant: "background", tile: true },
+  plume: { Icon: NetworkPlume, variant: "background", tile: true },
+  monad: { Icon: NetworkMonad, variant: "background", tile: true },
+  injective: { Icon: NetworkInjective, variant: "background", tile: true },
+  hyperevm: { Icon: NetworkHyperEvm, variant: "background", tile: true },
+  xlayer: { Icon: NetworkXLayer, variant: "background", tile: true },
+  plasma: { Icon: NetworkPlasma, variant: "background", tile: true },
+  codex: { Icon: NetworkCodex, variant: "background", tile: true },
 };
 
 /** Names and environments mirror packages/shared/src/networks.ts. Record<NetworkId, ...> makes tsc flag a new registry id. */
@@ -41,26 +73,26 @@ const registry: Record<NetworkId, { family: Family; name: string; testnet: boole
   "polygon-mainnet": { family: "polygon", name: "Polygon PoS", testnet: false },
   "ethereum-mainnet": { family: "ethereum", name: "Ethereum", testnet: false },
   "avalanche-mainnet": { family: "avalanche", name: "Avalanche C-Chain", testnet: false },
-  "celo-mainnet": { family: "other", name: "Celo", testnet: false },
-  "codex-mainnet": { family: "other", name: "Codex", testnet: false },
-  "cronos-mainnet": { family: "other", name: "Cronos", testnet: false },
-  "hyperevm-mainnet": { family: "other", name: "HyperEVM", testnet: false },
-  "injective-mainnet": { family: "other", name: "Injective", testnet: false },
-  "ink-mainnet": { family: "other", name: "Ink", testnet: false },
-  "linea-mainnet": { family: "other", name: "Linea", testnet: false },
-  "monad-mainnet": { family: "other", name: "Monad", testnet: false },
+  "celo-mainnet": { family: "celo", name: "Celo", testnet: false },
+  "codex-mainnet": { family: "codex", name: "Codex", testnet: false },
+  "cronos-mainnet": { family: "cronos", name: "Cronos", testnet: false },
+  "hyperevm-mainnet": { family: "hyperevm", name: "HyperEVM", testnet: false },
+  "injective-mainnet": { family: "injective", name: "Injective", testnet: false },
+  "ink-mainnet": { family: "ink", name: "Ink", testnet: false },
+  "linea-mainnet": { family: "linea", name: "Linea", testnet: false },
+  "monad-mainnet": { family: "monad", name: "Monad", testnet: false },
   "morph-mainnet": { family: "other", name: "Morph", testnet: false },
-  "plasma-mainnet": { family: "other", name: "Plasma", testnet: false },
-  "plume-mainnet": { family: "other", name: "Plume", testnet: false },
-  "sei-mainnet": { family: "other", name: "Sei", testnet: false },
-  "sonic-mainnet": { family: "other", name: "Sonic", testnet: false },
-  "unichain-mainnet": { family: "other", name: "Unichain", testnet: false },
-  "worldchain-mainnet": { family: "other", name: "World Chain", testnet: false },
-  "xlayer-mainnet": { family: "other", name: "X Layer", testnet: false },
-  "xdc-mainnet": { family: "other", name: "XDC", testnet: false },
+  "plasma-mainnet": { family: "plasma", name: "Plasma", testnet: false },
+  "plume-mainnet": { family: "plume", name: "Plume", testnet: false },
+  "sei-mainnet": { family: "sei", name: "Sei", testnet: false },
+  "sonic-mainnet": { family: "sonic", name: "Sonic", testnet: false },
+  "unichain-mainnet": { family: "unichain", name: "Unichain", testnet: false },
+  "worldchain-mainnet": { family: "world", name: "World Chain", testnet: false },
+  "xlayer-mainnet": { family: "xlayer", name: "X Layer", testnet: false },
+  "xdc-mainnet": { family: "xdc", name: "XDC", testnet: false },
 };
 
-const familyNames: Record<Family, string> = { arc: "Arc", base: "Base", ethereum: "Ethereum", arbitrum: "Arbitrum One", optimism: "OP Mainnet", polygon: "Polygon PoS", avalanche: "Avalanche", other: "Network", local: "Local dev chain" };
+const familyNames: Record<Family, string> = { arc: "Arc", base: "Base", ethereum: "Ethereum", arbitrum: "Arbitrum One", optimism: "OP Mainnet", polygon: "Polygon PoS", avalanche: "Avalanche", other: "Network", local: "Local dev chain", celo: "Celo", cronos: "Cronos", linea: "Linea", sei: "Sei", sonic: "Sonic", unichain: "Unichain", world: "World Chain", xdc: "XDC", ink: "Ink", plume: "Plume", monad: "Monad", injective: "Injective", hyperevm: "HyperEVM", xlayer: "X Layer", plasma: "Plasma", codex: "Codex" };
 
 export interface ChainMeta { family: Family; name: string; testnet: boolean }
 

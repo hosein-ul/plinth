@@ -21,8 +21,8 @@ export function ChatWho() {
       <div className={wrap}>
         <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
           <div className="lg:sticky lg:top-28 lg:self-start">
-            <RevealHeading id="who-h" as="h2" mode="line" className="t-1 text-ink" parts={[["Made for the people who sell here.", ""], ["Every kind of seller, one gateway.", "text-ink-4"]]} />
-            <Reveal delay={0.1}><p className="mt-6 max-w-md text-lg text-ink-2">Telegram is full of very different sellers. They share one problem: getting paid, automatically, without handing over control of the money.</p></Reveal>
+            <RevealHeading id="who-h" as="h2" mode="line" className="t-1 text-ink" parts={[["Made for people who sell in chats, apps and shops.", ""], ["Every kind of seller, one gateway.", "text-ink-4"]]} />
+            <Reveal delay={0.1}><p className="mt-6 max-w-md text-lg text-ink-2">Telegram is where we start, and it is full of very different sellers. They share one problem: getting paid, automatically, without handing over control of the money. The same gateway works anywhere you can show a button or send a link.</p></Reveal>
           </div>
           <ul className="border-b border-line">
             {WHO.map((w, i) => (

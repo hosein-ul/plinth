@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: { default: "Plinth: get paid in USDC where your customers already chat", template: "%s · Plinth" },
-  description: "A non-custodial USDC payment gateway for Mini Apps, shops and resellers selling in Telegram. Every order gets its own address and is charged automatically; the money lands in a vault only you can open.",
+  title: { default: "Plinth: get paid in USDC wherever you already sell", template: "%s · Plinth" },
+  description: "A non-custodial USDC payment gateway for Telegram bots and Mini Apps, web shops and payment links. Every order gets its own address and is charged automatically; the money lands in a vault only you can open.",
 };
 
 export const viewport: Viewport = { themeColor: "#f3f5f8", width: "device-width", initialScale: 1 };

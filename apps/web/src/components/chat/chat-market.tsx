@@ -16,7 +16,7 @@ export function ChatAudience() {
   return (
     <Band tone="dark" labelledBy="aud-h">
       <div className={wrap}>
-        <div className="flex items-center gap-3 text-sm font-medium text-white/60"><TelegramMark size={20} tone="current" className="text-white/80" />The audience is already there</div>
+        <div className="flex items-center gap-3 text-sm font-medium text-white/60"><TelegramMark size={20} tone="current" className="text-white/80" />Where we start: the audience is already there</div>
         <RevealHeading id="aud-h" as="h2" mode="line" className="t-1 mt-4 max-w-3xl text-on-ink" parts={[["A billion people. One missing layer.", ""], ["They chat, shop and play in the same app.", "text-white/45"]]} />
 
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
