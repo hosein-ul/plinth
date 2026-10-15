@@ -103,7 +103,7 @@ SSRF guard (https only, private ranges rejected, re-resolved at delivery, redire
 
 A merchant settles either to a **vault** (default; owner-only, delayed policy changes) or **directly** to a payout wallet (`merchant_payout_configs`).
 The route a payment uses is **committed** when its address is issued (`payment_intent_routes`, `invoice_addresses.destination_*`), so a later
-change affects only new payments. Choosing Direct needs: a verified email (Google sign-in counts; a wallet-only account must add and verify one), a
+change affects only new payments. Choosing Direct needs: a fresh re-authentication, an EIP-4361 signature from the payout wallet and the cooldown; when `REQUIRE_EMAIL_CONFIRMATION` is on (off by default) it also needs a verified email (Google sign-in counts; a wallet-only account must add and verify one) and a
 fresh re-authentication, an EIP-4361 signature from the payout wallet, and a single-use link emailed to the account; the newest confirmed config whose
 `activeFrom` has passed wins. `EmailSender` has Resend, console (development) and in-memory (tests) implementations. Deployment self-check: the engine reads
 TOKEN, CHAIN_ID, VERSION, TREASURY and MAX_FEE_BPS back from every deployed contract and closes the network or token on any mismatch, rechecked every 5 minutes.
@@ -127,8 +127,8 @@ nobody should set without the owner's explicit approval.
 * **Ledger.** A final payment on a custodial route credits `SETTLED_TO_CUSTODY` and `CUSTODY_BALANCE` with the net amount (amount minus fee). The balance of a merchant, network
   and token is the sum of `CUSTODY_BALANCE` credits minus debits. Reorgs reverse the credits by reference, as for every other account.
 * **Withdrawal wallet.** The merchant's `payout wallet` row has `mode = CUSTODIAL` and its `address` is the **withdrawal** wallet. It uses the same flow as a direct payout wallet:
-  verified email, fresh re-authentication, an EIP-4361 proof with its own statement ("withdraw your Plinth custody balance", purpose `CUSTODY_WITHDRAWAL`), an emailed single-use
-  link and the cooldown. The proof is re-verified before every address is issued and before every withdrawal. Withdrawals go only to the newest confirmed custodial
+  fresh re-authentication, an EIP-4361 proof with its own statement ("withdraw your Plinth custody balance", purpose `CUSTODY_WITHDRAWAL`), the cooldown and, when email confirmation is on, an emailed single-use
+  link. The proof is re-verified before every address is issued and before every withdrawal. Withdrawals go only to the newest confirmed custodial
   wallet whose cooldown has passed, even if the active mode has changed since. The custody wallet, the relayer and the treasury can never be named as a withdrawal wallet.
 * **Withdrawals** (`custody_withdrawals`: REQUESTED, SUBMITTED, CONFIRMED, FAILED; MANUAL or SCHEDULED). A request needs a fresh sign-in, is idempotent per key, and debits the
   ledger in the same transaction that creates it (serialised per merchant). `custodyTick` (called by the worker) reconciles sent withdrawals by receipt, sends **one withdrawal in flight per

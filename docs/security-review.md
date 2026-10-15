@@ -9,9 +9,9 @@ Scope: the six Solidity contracts (`contracts/src`, 717 lines), the settlement a
 
 | Check | Result |
 | --- | --- |
-| Foundry suite | **86 tests passed**: unit, fuzz, invariants, fee split and fail-open fee, vault and direct kinds, router nonce binding, two-token deployments |
+| Foundry suite | **87 tests passed**: unit, fuzz, invariants, fee split and fail-open fee, vault and direct kinds, router nonce binding, two-token deployments |
 | Heavy campaign | The same suite with **20,000 fuzz runs per test** and **1,000 invariant runs at depth 100** (about 34,000 handler calls per invariant): all passed, no counterexample |
-| Slither (80 detectors) | 12 results, **no high or medium finding**. Details below |
+| Slither (80 detectors) | 12 results, **no high or medium finding**. Details below (run before the two hardening changes listed under Findings; the changes only add address checks) |
 | TypeScript | typecheck clean in all packages; engine 120 tests, api 27, blockchain 23, shared 23, db 6, mcp 6, all passing |
 | End-to-end on a local chain | vault, address payment, wallet payment, direct payout, EURC, with merchant and treasury balances checked on-chain |
 | Read-only probes of 26 networks | chain id, token identity, EIP-712 domain, EIP-3009 and permit selectors, log window |
@@ -40,7 +40,7 @@ Scope: the six Solidity contracts (`contracts/src`, 717 lines), the settlement a
 | Stuck funds | If the issuer blocks the destination, the sweep reverts and funds wait at the address until it is unblocked. Anyone can retry the sweep |
 | Admin or upgrade paths | None. No proxy, no owner on the factories or router, no `selfdestruct` |
 
-The gas-griefing row is an argument from the EVM's 63/64 gas rule, checked by reading, not by a dedicated test.
+The gas-griefing row is the EVM's 63/64 gas rule, and it is now **proven by a fuzz test** (`test_callerCannotMakeTheFeeBeSkippedByChoosingGas_fuzz`): for 30,000 random gas limits between 20,000 and 400,000, a sweep either reverts (nothing moved, a retry settles) or it succeeded **and paid the exact fee**; it never succeeded with the fee skipped.
 
 ## Off-chain review (engine)
 
@@ -54,9 +54,17 @@ The gas-griefing row is an argument from the EVM's 63/64 gas rule, checked by re
 
 ## Findings
 
-No critical, high or medium finding was identified in this review. Observations to keep in view:
+**Fixed during this review**
 
-1. **Direct and custodial modes have no vault timelock** (by design). A stolen payout or withdrawal wallet is spent at once.
+| # | Severity | Finding | Fix |
+| --- | --- | --- | --- |
+| F1 | Medium (misleading security claim, not a code bug) | The dashboard, the risk disclosure and the threat model said the vault's `CONFIG_DELAY` gives time to react to a stolen owner key. It does not: `withdraw` is owner-only and **immediate**, so a stolen owner key drains the vault whatever the delay. The delay only governs forwarding rules | Wording corrected everywhere (dashboard dialog, risk disclosure, Terms, FAQ, Security page, README, threat model). The only real defence is a multisig or hardware-wallet owner |
+| F2 | Low (hardening) | A DIRECT destination could be set to the `VaultFactory` address (an address that cannot send tokens on), in `InvoiceFactory` and `PaymentRouter`. Not exploitable (the destination is committed by the backend into the address) but cheap to forbid | Both contracts now reject it; test extended. Nothing was deployed with the earlier bytecode |
+| F3 | Informational | `MerchantVault` periodic forwarding is due immediately after it is first scheduled (`lastForwardAt` starts at 0) | Left as is: it forwards only to the owner-set destination |
+
+No critical or high finding was identified. Observations to keep in view:
+
+1. **The vault's `CONFIG_DELAY` is not a defence against a stolen owner key** (see F1). `withdraw` is owner-only and immediate, so a stolen owner key drains the vault regardless. The delay only governs forwarding rules. Earlier wording in the dashboard, the risk disclosure and the threat model implied otherwise; it was **corrected during this review**. A stolen payout or withdrawal wallet is likewise spent at once. Use a multisig or hardware-wallet owner.
 2. **A compromised backend can hand out new payment addresses** that pay an attacker (see `threat-model.md`). The stored-proof check stops database-only tampering, not a compromised API process.
 3. **Finality values on the 18 chains added on 2026-10-15 are our choice** and need confirming against each chain's documentation.
 4. **Custody key and relayer key are environment keys.** A KMS/HSM `SignerProvider` is not built.

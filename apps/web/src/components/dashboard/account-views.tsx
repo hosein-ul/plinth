@@ -313,7 +313,7 @@ function VaultCard({ net }: { net: NetInfo }) {
       )}
 
       <Dialog open={dialog === "policy"} onOpenChange={(o) => !o && setDialog(null)}>
-        <DialogContent title="Change settlement rules" description="Signed by your wallet. Rules that forward funds activate after the vault's delay so a stolen key cannot redirect money instantly.">
+        <DialogContent title="Change settlement rules" description="Signed by your wallet. Rules that forward funds activate after the vault's delay. The owner key can always withdraw at once, so protect it as you would the funds.">
           <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); policy.mutate(undefined); }}>
             <Field label="Mode" htmlFor="sp-mode">
               <Select id="sp-mode" value={mode} onValueChange={setMode} options={[{ value: "BALANCE_IN_VAULT", label: "Keep in vault (default)" }, { value: "INSTANT_FORWARD", label: "Instant forward" }, { value: "THRESHOLD_OR_PERIODIC", label: "Threshold or periodic" }]} />
