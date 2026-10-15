@@ -9,7 +9,7 @@ import { SITE_URL } from "@/lib/site";
 export { API_FACTS };
 
 /** The hosted MCP server. It is part of the Plinth API, so it lives next to it; override with NEXT_PUBLIC_MCP_URL for another deployment. */
-export const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? "https://plinth-api.onrender.com/mcp";
+export const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? "https://plinth-api.zerolayer.online/mcp";
 
 export const LLMS_TXT = `# Plinth
 

@@ -12,8 +12,8 @@ Read it top to bottom; every command is copy-paste. Repository: `github.com/hose
 | Piece | State |
 | --- | --- |
 | Code | Everything is committed and pushed. Tests: shared 23, mcp 8, db 6, blockchain 23, engine 120, api 28, Foundry 87, all passing |
-| Web (Vercel project `plinth`, Root Directory `apps/web`) | **Live** at https://plinth-rouge.vercel.app with the new landing (deployed from branch `super-landing`, now merged into `master`). Deploy from `master` is safe |
-| API (Render service `plinth-api`, `srv-db7nb1q5b2lc738io42g`, https://plinth-api.onrender.com) | **Live**, and `POST /mcp` answers (401 without a key), so the release that added the hosted MCP server is deployed |
+| Web (Vercel project `plinth`, Root Directory `apps/web`) | **Live** at https://plinth.zerolayer.online with the new landing (deployed from branch `super-landing`, now merged into `master`). Deploy from `master` is safe |
+| API (Render service `plinth-api`, `srv-db7nb1q5b2lc738io42g`, https://plinth-api.zerolayer.online) | **Live**, and `POST /mcp` answers (401 without a key), so the release that added the hosted MCP server is deployed |
 | Database | Neon Postgres. **Unverified: whether migrations 0002 to 0006 were applied.** Check (section 2) |
 | Keepalive | Cloudflare worker `infra/keepalive` pings `/readyz` every 5 minutes |
 | `plinth-pay` (Vercel, the Telegram fork `apps/telegram`) | **Stale and redundant**: the landing now serves both audiences. Do not deploy it; the owner decides whether to delete it |
@@ -45,9 +45,9 @@ pnpm verify:networks arc-mainnet            # expect every line PASS for USDC an
 Check the production API and database:
 
 ```bash
-curl -s https://plinth-api.onrender.com/readyz
-curl -s https://plinth-api.onrender.com/public/status
-curl -s -o /dev/null -w "%{http_code}\n" -X POST https://plinth-api.onrender.com/mcp   # 401 means the hosted MCP route exists
+curl -s https://plinth-api.zerolayer.online/readyz
+curl -s https://plinth-api.zerolayer.online/public/status
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://plinth-api.zerolayer.online/mcp   # 401 means the hosted MCP route exists
 ```
 
 Migrations: the Render service must have `RUN_MIGRATIONS=true` for the release that contains migrations 0002 to 0006 (expiry default, fee and payout tables, verified email, token columns, custody). Open the Render logs of the latest deploy and confirm
@@ -129,18 +129,18 @@ On the Render service that runs the API (and worker, if separate), set:
 | `RUN_MIGRATIONS` | `true` for one deploy if migrations were not applied (section 2) |
 
 Already set and unchanged: `DATABASE_URL`, `APP_SECRET_KEY`, `PUBLIC_WEB_URL`, `ADMIN_API_TOKEN`, CORS and the rest. After saving, redeploy the service and confirm in the logs that `arc-mainnet` is operational:
-`curl -s https://plinth-api.onrender.com/public/status` must list `arc-mainnet` as operational with both tokens. If it says why not (`gateReasons`), fix that reason; common ones: missing record, not approved, missing signer, no RPC.
+`curl -s https://plinth-api.zerolayer.online/public/status` must list `arc-mainnet` as operational with both tokens. If it says why not (`gateReasons`), fix that reason; common ones: missing record, not approved, missing signer, no RPC.
 
 The relayer address (print it from the key with `cast wallet address`) must hold a few USDC on Arc mainnet. Alerts fire at the low-balance threshold.
 
 ## 6. Web app (Vercel `plinth`)
 
 No contract addresses are needed in Vercel: the web app talks to the API. The existing environment already works (`API_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`, Web3Auth and WalletConnect ids). Optional: `NEXT_PUBLIC_MCP_URL` if the MCP URL ever differs from
-`https://plinth-api.onrender.com/mcp`. To redeploy after changes: `vercel deploy --prod --yes` from the repository root (linked to project `plinth`).
+`https://plinth-api.zerolayer.online/mcp`. To redeploy after changes: `vercel deploy --prod --yes` from the repository root (linked to project `plinth`).
 
 ## 7. Canary on mainnet (small, real, before telling anyone)
 
-1. Sign in to the dashboard (`https://plinth-rouge.vercel.app/login`) in **live** mode (the Testnet/Mainnet switch, bottom left), create the vault for Arc (USDC), and confirm the vault owner address is the owner's own wallet.
+1. Sign in to the dashboard (`https://plinth.zerolayer.online/login`) in **live** mode (the Testnet/Mainnet switch, bottom left), create the vault for Arc (USDC), and confirm the vault owner address is the owner's own wallet.
 2. Create a payment of `0.50` USDC, pay it from a normal wallet through the checkout (wallet flow) and again through the address flow.
 3. Confirm: status `SETTLED`, the vault balance is `0.50` minus the fee (`0.0010`), the treasury received the fee, the invoice address never held gas, webhooks arrived signed.
 4. Repeat once in EURC. Then run the owner withdraw from the vault.

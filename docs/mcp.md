@@ -6,7 +6,7 @@ English: read the integration playbook, create and read payments, payment links 
 **It is hosted. You add one URL and your key; you install nothing.**
 
 ```
-https://plinth-api.onrender.com/mcp
+https://plinth-api.zerolayer.online/mcp
 ```
 
 The URL is where the production API runs (the MCP server is served by the same service, at `/mcp`). For another deployment, use `https://<your-api-host>/mcp`.
@@ -21,7 +21,7 @@ You need a Plinth **secret key**: dashboard, Developers, API keys. Use an `sk_te
 **Claude Code**
 
 ```bash
-claude mcp add --transport http plinth https://plinth-api.onrender.com/mcp --header "Authorization: Bearer sk_test_..."
+claude mcp add --transport http plinth https://plinth-api.zerolayer.online/mcp --header "Authorization: Bearer sk_test_..."
 ```
 
 **Cursor, Claude Desktop, and any client with a remote-server config**
@@ -30,7 +30,7 @@ claude mcp add --transport http plinth https://plinth-api.onrender.com/mcp --hea
 {
   "mcpServers": {
     "plinth": {
-      "url": "https://plinth-api.onrender.com/mcp",
+      "url": "https://plinth-api.zerolayer.online/mcp",
       "headers": { "Authorization": "Bearer sk_test_..." }
     }
   }
