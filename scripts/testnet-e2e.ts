@@ -232,14 +232,10 @@ try {
   }
 
   // ---- C. direct payout: verified email, signed wallet proof, emailed link, then a payment settles straight to the payout wallet
-  const tokenFromLink = (link: string) => new URL(link).searchParams.get("token")!;
-  await requestEmailVerification(engine, ctx);
-  await confirmEmailLink(engine, tokenFromLink(mail.linkTo(email)!));
   const challenge = await createPayoutChallenge(engine, ctx, { network: networkId, address: owner.address, purpose: "PAYOUT_WALLET" });
   const proof = await owner.signMessage({ message: challenge.message });
-  await requestPayoutWallet(engine, ctx, { network: networkId, address: owner.address, nonce: challenge.nonce, signature: proof, reauth: { password: PASSWORD } as never });
-  const confirmed = await confirmPayoutLink(engine, tokenFromLink(mail.linkTo(email)!));
-  step("payout wallet registered: verified email, signed proof, emailed link", { status: confirmed.status, wallet: owner.address });
+  const confirmed = await requestPayoutWallet(engine, ctx, { network: networkId, address: owner.address, nonce: challenge.nonce, signature: proof, reauth: { password: PASSWORD } as never });
+  step("payout wallet registered: signed proof and fresh sign-in (email confirmation is off)", { status: confirmed.status, wallet: owner.address });
   const AMOUNT_DIRECT = "0.04";
   const walletBefore = await bal(owner.address);
   const vaultBeforeC = await bal(vault);

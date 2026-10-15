@@ -49,13 +49,9 @@ for (let i = 0; i < 4; i++) {
 // CUSTODY_ENABLED=true pnpm dev:stack: the demo merchant is also set up for custodial payouts (withdrawal wallet: anvil #6) with one paid payment.
 if (process.env.CUSTODY_ENABLED === "true") {
   const uctx = { ...ctx, actor: { type: "USER" as const, id: userId } };
-  const tokenOf = (to: string) => new URL(mail.linkTo(to)!).searchParams.get("token")!;
-  await requestEmailVerification(engine, uctx);
-  await confirmEmailLink(engine, tokenOf(demo.email));
   const payee = chain.accounts[6]!;
   const ch = await createPayoutChallenge(engine, uctx, { network: chain.network.id, address: payee.address, purpose: "CUSTODY_WITHDRAWAL" });
   await requestPayoutWallet(engine, uctx, { network: chain.network.id, mode: "CUSTODIAL", address: payee.address, nonce: ch.nonce, signature: await payee.signMessage({ message: ch.message }), reauth: { password: demo.password } });
-  await confirmPayoutLink(engine, tokenOf(demo.email));
   const pi = await createPaymentIntent(engine, uctx, { amount: "120.00", currency: "USDC", checkout_methods: ["ADDRESS"], expires_in_seconds: 3600, order_reference: "CUSTODY-DEMO" } as never);
   await chain.mintUsdc(chain.accounts[3]!.address, parseUsdc("200"));
   const w = chain.walletFor(3);

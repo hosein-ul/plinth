@@ -87,6 +87,11 @@ export interface EngineConfig {
   requireVaultOwnerProof: boolean;
   /** Time a newly confirmed payout wallet waits before new invoices use it (0 in development). */
   payoutCooldownSeconds: number;
+  /**
+   * A new payout or withdrawal wallet must be confirmed by a link emailed to the account (default off for now). When off, a signed proof,
+   * a fresh re-authentication and the cooldown are the protections; no email address is needed.
+   */
+  requireEmailConfirmation: boolean;
   /** The custodial payout mode exists at all (default off). */
   custodyEnabled: boolean;
   /** Custody may be used on a mainnet (default off; needs the owner's explicit approval). */

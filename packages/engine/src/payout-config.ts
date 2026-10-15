@@ -141,7 +141,8 @@ const cooldownHours = (e: Engine) => Math.round((e.cfg.payoutCooldownSeconds / 3
 
 export async function requestPayoutWallet(e: Engine, ctx: AuthContext, input: { network: string; mode?: "DIRECT" | "CUSTODIAL"; address: string; nonce: string; signature: string; reauth?: Reauth }) {
   requirePermission(ctx, "wallets");
-  const user = await requireVerifiedEmail(e, ctx); // a second factor by email must exist
+  const emailRequired = e.cfg.requireEmailConfirmation;
+  const user = emailRequired ? await requireVerifiedEmail(e, ctx) : await userOf(e, ctx); // with email confirmation on, a second factor by email must exist
   await verifyReauth(e, ctx, input.reauth);
   const chain = chainOf(e, input.network);
   const mode = input.mode ?? "DIRECT";
@@ -159,21 +160,29 @@ export async function requestPayoutWallet(e: Engine, ctx: AuthContext, input: { 
   const id = newId("pco");
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(e.now().getTime() + e.cfg.emailLinkTtlSeconds * 1000);
-  if (!e.email.available) throw new EngineError("EMAIL_UNAVAILABLE", "Email is not configured on this server, so a payout wallet cannot be confirmed.", 503);
+  if (emailRequired && !e.email.available) throw new EngineError("EMAIL_UNAVAILABLE", "Email is not configured on this server, so a payout wallet cannot be confirmed.", 503);
+  const auto = !emailRequired;
+  const now = e.now();
 
   await e.db.transaction(async (tx) => {
     await consumeChallenge(e, tx, ch.nonce);
     // A newer request replaces any earlier one that was still waiting for its email link.
     await tx.update(schema.merchantPayoutConfigs).set({ status: "SUPERSEDED", confirmationTokenHash: null }).where(and(eq(schema.merchantPayoutConfigs.merchantId, ctx.merchantId), eq(schema.merchantPayoutConfigs.networkId, input.network), eq(schema.merchantPayoutConfigs.status, "PENDING_CONFIRMATION")));
     await tx.insert(schema.merchantPayoutConfigs).values({
-      id, merchantId: ctx.merchantId, networkId: input.network, mode, address: norm(address), status: "PENDING_CONFIRMATION",
-      proofMessage: ch.message, proofSignature: input.signature, proofSignedAt: e.now(), requestedByUserId: user.id,
-      confirmationTokenHash: sha256Hex(token), confirmationExpiresAt: expiresAt,
+      id, merchantId: ctx.merchantId, networkId: input.network, mode, address: norm(address), status: auto ? "CONFIRMED" : "PENDING_CONFIRMATION",
+      proofMessage: ch.message, proofSignature: input.signature, proofSignedAt: now, requestedByUserId: user.id,
+      ...(auto ? { confirmedAt: now, activeFrom: new Date(now.getTime() + e.cfg.payoutCooldownSeconds * 1000) } : { confirmationTokenHash: sha256Hex(token), confirmationExpiresAt: expiresAt }),
     });
     await audit(tx, { merchantId: ctx.merchantId, actor: ctx.actor, action: "payout.requested", targetType: "merchant_payout_config", targetId: id, data: { network: input.network, mode, address } });
   });
 
   const details: PayoutChangeDetails = { network: chain.network.name, mode, address, cooldownHours: cooldownHours(e) };
+  if (auto) {
+    // No email step: the proof, the fresh sign-in and the cooldown already stand. Tell the owners if they have an address.
+    await notify(e, ctx.merchantId, (to) => payoutChangedNotice(to, { ...details, event: "confirmed" }));
+    await emitPayoutEvent(e, ctx, chain, "payout.confirmed", { id, network: input.network, mode, address, active_from: (await e.db.select().from(schema.merchantPayoutConfigs).where(eq(schema.merchantPayoutConfigs.id, id)))[0]!.activeFrom?.toISOString() ?? null }, id);
+    return viewNow(e, (await e.db.select().from(schema.merchantPayoutConfigs).where(eq(schema.merchantPayoutConfigs.id, id)))[0]!);
+  }
   const link = `${e.cfg.publicWebUrl.replace(/\/$/, "")}/confirm-payout?token=${token}`;
   try {
     await e.email.send(payoutConfirmMessage(user.email, link, details, Math.round(e.cfg.emailLinkTtlSeconds / 3600), `payout:${id}`));
@@ -321,6 +330,7 @@ export async function listPayoutMethods(e: Engine, ctx: AuthContext) {
       fee: { bps: fee, percent: formatFeePercent(fee), treasury: getAddress(chain.deployment.treasury) },
       vault: vault ? { status: vault.status, address: getAddress(vault.vaultAddress), owner: getAddress(vault.ownerAddress) } : null,
       pending: waiting ? payoutView(e, waiting, active?.id ?? null) : null,
+      email_confirmation_required: e.cfg.requireEmailConfirmation,
       cooldown_hours: cooldownHours(e),
     });
   }

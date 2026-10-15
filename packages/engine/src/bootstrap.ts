@@ -89,6 +89,7 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
     // Development and tests: no waiting. Production: 24 hours unless an operator chooses otherwise.
     payoutCooldownSeconds: Number(env.PAYOUT_COOLDOWN_SECONDS ?? (production ? 24 * 3600 : 0)),
     requireVaultOwnerProof: (env.REQUIRE_VAULT_OWNER_PROOF ?? (production ? "true" : "false")) === "true",
+    requireEmailConfirmation: env.REQUIRE_EMAIL_CONFIRMATION === "true",
     custodyEnabled: env.CUSTODY_ENABLED === "true",
     allowCustodyMainnet: env.ALLOW_CUSTODY_MAINNET === "true",
     web3authClientId: env.WEB3AUTH_CLIENT_ID ?? env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID,

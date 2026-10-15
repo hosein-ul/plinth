@@ -215,6 +215,29 @@ describe("a payout row that was edited in the database", () => {
   });
 });
 
+describe("without email confirmation (the default setting)", () => {
+  it("a signed proof and a fresh sign-in are enough: no email address, no link, the wallet is confirmed at once", async () => {
+    const off = await startHarness({ confirmations: 2, emailConfirmation: false });
+    try {
+      const { merchantId, userId } = await signup(off.engine, { business_name: "No Email Co", email: "noemail@example.com", password: PASSWORD }, { type: "SYSTEM" });
+      const ctx: AuthContext = { merchantId, environment: "test", actor: { type: "USER", id: userId }, role: "OWNER", via: "session" };
+      const who = off.chain.accounts[6]!;
+      const ch = await createPayoutChallenge(off.engine, ctx, { network: off.net, address: who.address, purpose: "PAYOUT_WALLET" });
+      const sig = await who.signMessage({ message: ch.message });
+      await expect(requestPayoutWallet(off.engine, ctx, { network: off.net, address: who.address, nonce: ch.nonce, signature: sig, reauth: { password: "wrong-password-entirely" } })).rejects.toBeTruthy();
+      const ch2 = await createPayoutChallenge(off.engine, ctx, { network: off.net, address: who.address, purpose: "PAYOUT_WALLET" });
+      const done = await requestPayoutWallet(off.engine, ctx, { network: off.net, address: who.address, nonce: ch2.nonce, signature: await who.signMessage({ message: ch2.message }), reauth: { password: PASSWORD } });
+      expect(done).toMatchObject({ mode: "DIRECT", status: "ACTIVE" });
+      expect(off.mail.sent).toHaveLength(0);
+      const pi = await createPaymentIntent(off.engine, ctx, input("1.00"));
+      const [a] = await off.engine.db.select().from(schema.invoiceAddresses).where(eq(schema.invoiceAddresses.paymentIntentId, pi.id));
+      expect(a).toMatchObject({ destinationKind: "DIRECT", destinationAddress: who.address.toLowerCase() });
+    } finally {
+      await off.stop();
+    }
+  });
+});
+
 describe("wallet checks", () => {
   it("only plain wallets are accepted: a contract address is refused", async () => {
     const m = await merchant();

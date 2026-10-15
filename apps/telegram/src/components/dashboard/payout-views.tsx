@@ -32,6 +32,8 @@ export interface PayoutRow {
   vault: { status: string; address: string; owner: string } | null;
   pending: { id: string; mode: string; address: string | null; status: string; confirmation_expires_at: string | null; active_from: string | null } | null;
   cooldown_hours: number;
+  /** A new wallet must be confirmed by an emailed link (off by default). */
+  email_confirmation_required?: boolean;
 }
 
 const FEE_NOTE = "In the same transaction as the payment. Each payment shows its fee.";
@@ -91,7 +93,7 @@ function PayoutCard({ row, email, walletReady, chainId }: { row: PayoutRow; emai
           <div className="mt-2">{row.destination ? <Hash value={row.destination} lead={10} tail={6} /> : <span className="text-sm text-ink-3">Create a vault or register a wallet to start accepting payments here.</span>}</div>
           <p className="mt-4 text-sm text-ink-3">
             {custodial
-              ? "Plinth keeps the money in its custody wallet and credits your balance when a payment is final. You withdraw it to the wallet you confirmed. Unlike every other mode, Plinth holds this money, so you rely on it to pay out."
+              ? "Managed payouts: each payment is credited to your balance when it is final, and you withdraw to the wallet you confirmed, any time or on a schedule."
               : direct
               ? "The money lands in your wallet when the payment is final. There is no vault delay: anyone who gets into this wallet's keys can move it at once."
               : "The money waits in a vault only your owner wallet can withdraw from, and forwarding rules take effect after a delay."}
@@ -103,7 +105,7 @@ function PayoutCard({ row, email, walletReady, chainId }: { row: PayoutRow; emai
               { k: "Platform fee", v: <span><span className="font-medium text-ink">{row.fee.percent}</span> <span className="text-ink-3">of each payment</span></span> },
               { k: "How it is taken", v: <span className="text-ink-3">{FEE_NOTE}</span> },
               { k: "Fee goes to", v: <Hash value={row.fee.treasury} lead={10} tail={6} /> },
-              { k: "Changes take effect", v: <span className="text-ink-3">{row.cooldown_hours > 0 ? `${row.cooldown_hours} hours after you confirm by email` : "right after you confirm by email"}</span> },
+              { k: "Changes take effect", v: <span className="text-ink-3">{row.email_confirmation_required ? (row.cooldown_hours > 0 ? `${row.cooldown_hours} hours after you confirm by email` : "right after you confirm by email") : row.cooldown_hours > 0 ? `${row.cooldown_hours} hours after you save them` : "right away"}</span> },
             ]}
           />
         </div>
@@ -203,12 +205,13 @@ function DirectWalletDialog({ row, email, chainId, mode, onClose }: { row: Payou
     }
   }
 
+  const needEmail = row.email_confirmation_required ?? false;
   const submit = useAction(
     () => apiFetch<any>("/v1/payout-methods/wallet", { method: "POST", body: { network: row.network, mode, address: proof!.address, nonce: proof!.nonce, signature: proof!.signature, reauth: reauth.value() } }),
-    { invalidate: ["/v1/payout-methods"], onSuccess: () => setSentTo(email?.email ?? "your email") },
+    { invalidate: ["/v1/payout-methods"], ...(needEmail ? { onSuccess: () => setSentTo(email?.email ?? "your email") } : { success: custodial ? "Withdrawal wallet saved" : "Payout wallet saved", onSuccess: onClose }) },
   );
 
-  const emailOk = !!email?.email && email.verified;
+  const emailOk = !needEmail || (!!email?.email && email.verified);
   const walletOk = isConnected && !!address;
   const signedOk = !!proof;
   return (
@@ -223,28 +226,30 @@ function DirectWalletDialog({ row, email, chainId, mode, onClose }: { row: Payou
         ) : (
           <div className="space-y-6">
             <ol className="space-y-5">
+              {needEmail && (
               <Step n={1} title={emailOk ? "Your email is confirmed" : "Confirm your email"} done={emailOk}>
                 {!email?.email && <><p>Direct payouts are confirmed by email. Add one first.</p><Button size="sm" onClick={() => setEmailOpen(true)}>Add email</Button></>}
                 {email?.email && !email.verified && (
                   <><p><span className="font-mono text-xs">{email.email}</span> is not confirmed yet.</p><div className="flex gap-2"><Button size="sm" loading={resend.isPending} onClick={() => resend.mutate(undefined)}>Send confirmation link</Button><Button size="sm" variant="ghost" onClick={() => setEmailOpen(true)}>Use another address</Button></div><p>Open the link, then come back to this window.</p></>
                 )}
               </Step>
-              <Step n={2} title={custodial ? "Connect the wallet you will withdraw to" : "Connect the wallet that should be paid"} done={walletOk} locked={!emailOk}>
+              )}
+              <Step n={needEmail ? 2 : 1} title={custodial ? "Connect the wallet you will withdraw to" : "Connect the wallet that should be paid"} done={walletOk} locked={!emailOk}>
                 <div className="flex flex-wrap items-center gap-3"><WalletButton chainId={chainId} size="sm" label="Connect wallet" /></div>{walletOk && <p className="break-all font-mono text-xs text-ink-2">{address}</p>}
                 <p>Plain wallets such as MetaMask or Rabby work. Smart-contract wallets such as Safe are not supported yet.</p>
               </Step>
-              <Step n={3} title="Sign a message to prove it is yours" done={signedOk} locked={!emailOk || !walletOk}>
+              <Step n={needEmail ? 3 : 2} title="Sign a message to prove it is yours" done={signedOk} locked={!emailOk || !walletOk}>
                 <p>The message names your business, this network and this address, and expires in ten minutes. Signing it sends no transaction.</p>
                 {!signedOk && <Button size="sm" onClick={sign} loading={signing} disabled={!emailOk || !walletOk}>Sign message</Button>}
                 {signError && <p className="text-bad-ink" role="alert">{signError}</p>}
               </Step>
-              <Step n={4} title="Confirm it is you" locked={!signedOk}>
+              <Step n={needEmail ? 4 : 3} title="Confirm it is you" locked={!signedOk}>
                 {signedOk && email && reauth.field}
               </Step>
             </ol>
-            <div className="flex items-start gap-2 rounded-ctl bg-wash px-3.5 py-3 text-sm text-ink-3"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn-ink" aria-hidden /><span>{custodial ? "Plinth will hold your balance, so you rely on it to pay out, and the contracts are not independently audited. This wallet only receives your withdrawals; a hardware wallet is the safest choice." : "Paying straight to a wallet has no vault delay. If this wallet's keys are ever stolen, the money in it can be moved at once. A hardware wallet is the safest choice."}</span></div>
+            <div className="flex items-start gap-2 rounded-ctl bg-wash px-3.5 py-3 text-sm text-ink-3"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn-ink" aria-hidden /><span>{custodial ? "This wallet receives your withdrawals. A hardware wallet is the safest choice." : "Paying straight to a wallet has no vault delay. If this wallet's keys are ever stolen, the money in it can be moved at once. A hardware wallet is the safest choice."}</span></div>
             <div className="flex justify-end">
-              <Button variant="primary" loading={submit.isPending} disabled={!emailOk || !signedOk || !reauth.ready} onClick={() => submit.mutate(undefined)}>Email me the confirmation link</Button>
+              <Button variant="primary" loading={submit.isPending} disabled={!emailOk || !signedOk || !reauth.ready} onClick={() => submit.mutate(undefined)}>{needEmail ? "Email me the confirmation link" : custodial ? "Save withdrawal wallet" : "Save payout wallet"}</Button>
             </div>
           </div>
         )}

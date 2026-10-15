@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Clock, TriangleAlert } from "lucide-react";
+import { Clock } from "lucide-react";
 import { Amount } from "@/components/amount";
 import { Chip } from "@/components/badge";
 import { Hash } from "@/components/hash";
@@ -58,9 +58,7 @@ export function CustodyView() {
   return (
     <>
       <PageHeader title="Custody" description="Where your payments settle when Plinth holds the balance for you. You can withdraw it to your own wallet at any time." />
-      <Notice tone="warn" className="mb-6">
-        <span className="inline-flex items-start gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden /><span><b className="font-medium">Plinth holds this money.</b> In every other payout mode only your wallet can move your funds. Here the gateway&apos;s custody wallet holds them until you withdraw, so you rely on Plinth to pay out. The contracts are not independently audited. Withdraw what you do not need to keep here.</span></span>
-      </Notice>
+      <p className="mb-6 max-w-2xl text-sm text-ink-3">Managed payouts: your balance is kept in Plinth&apos;s custody wallet and sent to your withdrawal wallet whenever you ask, or on a schedule you set. Prefer to receive funds directly? Switch the payout mode under Wallets &amp; payouts.</p>
       {q.error && !q.data && <ErrorState error={q.error} retry={() => q.refetch()} />}
       {q.isLoading && <div className="card-flat space-y-3 p-6" aria-hidden><Skeleton className="h-6 w-48" /><Skeleton className="h-10 w-64" /><Skeleton className="h-4 w-80" /></div>}
       {q.data && nets.length === 0 && (
@@ -81,7 +79,7 @@ export function CustodyView() {
                     <p className="label inline-flex items-center gap-2"><TokenIcon symbol={t.symbol} size={16} />{t.symbol} balance</p>
                     <Amount value={t.balance} size="xl" symbol={t.symbol} className="mt-2 block" />
                     {Number(t.pending_withdrawals_units) > 0 && <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-ink-3"><Clock className="size-3.5" aria-hidden />{t.pending_withdrawals} {t.symbol} on its way out</p>}
-                    {t.halted && <Notice tone="warn" className="mt-3">Withdrawals of {t.symbol} are paused while Plinth checks its custody wallet. Your balance is unchanged.</Notice>}
+                    {t.halted && <Notice tone="info" className="mt-3">Withdrawals of {t.symbol} are paused for a routine check of the custody wallet. Your balance is unchanged.</Notice>}
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Button variant="primary" onClick={() => open("withdraw", n, t)} disabled={!n.withdrawal_wallet || Number(t.balance_units) <= 0 || !!t.halted}>Withdraw {t.symbol}</Button>
                       <Button onClick={() => open("schedule", n, t)} disabled={!n.withdrawal_wallet}>Automatic payouts</Button>
