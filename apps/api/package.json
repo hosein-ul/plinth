@@ -16,8 +16,10 @@
     "@plinth/blockchain": "workspace:*",
     "@plinth/db": "workspace:*",
     "@plinth/engine": "workspace:*",
+    "@plinth/mcp": "workspace:*",
     "@plinth/shared": "workspace:*",
     "fastify": "5.12.5",
     "zod": "^4.1.0"
-  }
+  },
+  "devDependencies": { "@modelcontextprotocol/sdk": "^1.20.0" }
 }

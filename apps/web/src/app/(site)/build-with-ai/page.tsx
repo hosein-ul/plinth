@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Check, CreditCard, ShoppingCart, Webhook, Wallet } from "lucide-react";
 import { PageIntro } from "@/components/marketing/chrome";
+import { MCP_URL } from "@/lib/ai-kit";
 import { AiKitPicker } from "@/components/marketing/pages/ai-kit-picker";
 import { CopyCode } from "@/components/marketing/pages/copy-code";
 import { Chip } from "@/components/badge";
@@ -19,7 +20,7 @@ const FLOW = [
 ];
 
 const STEPS: [string, string][] = [
-  ["Connect your assistant", "Add the Plinth MCP server, or skip this and use the prompt. The server lets your assistant create and check test payments itself."],
+  ["Connect your assistant", "Add the Plinth MCP server with one URL and your key, or skip this and use the prompt. The server lets your assistant create and check payments, links, invoices and webhooks itself."],
   ["Ask in plain English", "Paste the prompt for the kind of project you have. It tells the assistant to work inside your existing code."],
   ["Check four results", "A real total is charged, the order turns paid from the webhook only, a forged webhook is rejected, a replayed one is ignored."],
 ];
@@ -27,22 +28,19 @@ const STEPS: [string, string][] = [
 const MCP_CONFIG = `{
   "mcpServers": {
     "plinth": {
-      "command": "pnpm",
-      "args": ["--dir", "/path/to/plinth/packages/mcp", "start"],
-      "env": {
-        "PLINTH_API_URL": "http://localhost:4000",
-        "PLINTH_API_KEY": "sk_test_..."
-      }
+      "url": "${MCP_URL}",
+      "headers": { "Authorization": "Bearer sk_test_..." }
     }
   }
 }`;
 
+const MCP_CLAUDE_CODE = `claude mcp add --transport http plinth ${MCP_URL} --header "Authorization: Bearer sk_test_..."`;
+
 const KIT: { name: string; text: string; ok: boolean }[] = [
-  { name: "MCP server", text: "Tools: create_payment, get_payment, list_payments, create_payment_link, list_networks, plus the integration playbook. Test keys only.", ok: true },
+  { name: "MCP server (hosted)", text: "One URL, your key in a header. 29 tools: payments, payment links, invoices, refunds, webhooks and reports, plus the integration playbook, a ready prompt and resources. It cannot change where money goes.", ok: true },
   { name: "Plain-text docs for assistants", text: "/llms.txt and /llms-full.txt, generated from the same playbook the MCP server serves.", ok: true },
   { name: "Copy-and-paste prompts", text: "One prompt, tuned for a store, a SaaS, a bot or bookings. Each ends with a checklist.", ok: true },
   { name: "Test networks and sandbox", text: "Try everything with test USDC. No real money moves.", ok: true },
-  { name: "One-line install of the MCP server", text: "It runs from the repository today. A published package is not out yet.", ok: false },
   { name: "SDKs and framework starters", text: "Not published. The REST API works from any language today.", ok: false },
 ];
 
@@ -88,8 +86,8 @@ export default function BuildWithAiPage() {
 
       <section className={`${wrap} py-16`} aria-labelledby="ai-connect">
         <H2 id="ai-connect">1. Connect your assistant (optional).</H2>
-        <p className="mt-3 max-w-2xl text-[0.9375rem] text-ink-2">Works with any assistant that supports MCP. Add this to its MCP settings. Use a test key from your dashboard.</p>
-        <div className="mt-6 max-w-2xl"><CopyCode label="mcp settings · json">{MCP_CONFIG}</CopyCode></div>
+        <p className="mt-3 max-w-2xl text-[0.9375rem] text-ink-2">Works with any assistant that supports MCP over HTTP (Claude, Cursor, and others). The server URL is <span className="font-mono text-[0.8125rem] text-ink">{MCP_URL}</span>. Send your secret key as a Bearer token; create a test key in your dashboard under Developers, API keys.</p>
+        <div className="mt-6 grid max-w-2xl gap-4"><CopyCode label="mcp settings · json">{MCP_CONFIG}</CopyCode><CopyCode label="claude code · one line">{MCP_CLAUDE_CODE}</CopyCode></div>
       </section>
 
       <section className="bg-sunk/60 py-16" aria-labelledby="ai-prompts">

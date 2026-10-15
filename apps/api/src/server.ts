@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import { eq, and, schema } from "@plinth/db";
 import { newId } from "@plinth/shared";
 import { authenticate, EngineError, type AuthContext, type Engine } from "@plinth/engine";
+import { handleMcpHttp } from "@plinth/mcp/http";
 import type { RouteDef } from "./define";
 import { buildRoutes } from "./routes";
 
@@ -136,5 +137,31 @@ export async function buildServer(engine: Engine, opts: ServerOptions = {}): Pro
       },
     });
   }
+  // ---- the hosted MCP server (Streamable HTTP, stateless). Same API, same key, same rights: every tool call goes through this app's own routes.
+  const mcpFetch = (async (url: string | URL, init?: RequestInit) => {
+    const u = new URL(String(url));
+    const r = await app.inject({ method: (init?.method ?? "GET") as "GET", url: u.pathname + u.search, headers: init?.headers as Record<string, string>, payload: init?.body as string | undefined });
+    return new Response(r.body, { status: r.statusCode, headers: r.headers as Record<string, string> });
+  }) as typeof fetch;
+  const rpcError = (code: number, message: string) => ({ jsonrpc: "2.0", error: { code, message }, id: null });
+  app.post("/mcp", async (req, reply) => {
+    const auth = req.headers.authorization;
+    const key = typeof auth === "string" ? auth.replace(/^Bearer\s+/i, "").trim() : "";
+    if (!/^sk_(test|live)_/.test(key)) {
+      return reply.status(401).header("www-authenticate", 'Bearer realm="plinth-mcp"').send(rpcError(-32001, "Send your Plinth secret key as the header 'Authorization: Bearer sk_...'. Create one in the dashboard under Developers, API keys."));
+    }
+    reply.hijack();
+    try {
+      await handleMcpHttp(req.raw, reply.raw, req.body, { apiUrl: "http://plinth.internal", apiKey: key, fetchImpl: mcpFetch });
+    } catch (err) {
+      app.log.error({ err: err instanceof Error ? err.message : String(err) }, "mcp request failed");
+      if (!reply.raw.headersSent) reply.raw.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify(rpcError(-32603, "Internal error")));
+    }
+  });
+  // Stateless server: there is no session to stream from or to close.
+  for (const method of ["GET", "DELETE"] as const) {
+    app.route({ method, url: "/mcp", handler: async (_req, reply) => reply.status(405).header("allow", "POST").send(rpcError(-32000, "This MCP server is stateless: send JSON-RPC requests with POST.")) });
+  }
+
   return { app, routes };
 }

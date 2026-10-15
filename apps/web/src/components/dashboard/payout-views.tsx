@@ -95,7 +95,7 @@ function PayoutCard({ row, email, walletReady, chainId }: { row: PayoutRow; emai
             {custodial
               ? "Managed payouts: each payment is credited to your balance when it is final, and you withdraw to the wallet you confirmed, any time or on a schedule."
               : direct
-              ? "The money lands in your wallet when the payment is final. There is no vault delay: anyone who gets into this wallet's keys can move it at once."
+              ? "The money lands in your wallet when the payment is final. Whoever holds that wallet's keys can move it at once."
               : "The money waits in a vault only your owner wallet can withdraw from, and forwarding rules take effect after a delay."}
           </p>
         </div>
@@ -247,7 +247,7 @@ function DirectWalletDialog({ row, email, chainId, mode, onClose }: { row: Payou
                 {signedOk && email && reauth.field}
               </Step>
             </ol>
-            <div className="flex items-start gap-2 rounded-ctl bg-wash px-3.5 py-3 text-sm text-ink-3"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn-ink" aria-hidden /><span>{custodial ? "This wallet receives your withdrawals. A hardware wallet is the safest choice." : "Paying straight to a wallet has no vault delay. If this wallet's keys are ever stolen, the money in it can be moved at once. A hardware wallet is the safest choice."}</span></div>
+            <div className="flex items-start gap-2 rounded-ctl bg-wash px-3.5 py-3 text-sm text-ink-3"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn-ink" aria-hidden /><span>{custodial ? "This wallet receives your withdrawals. A hardware wallet is the safest choice." : "If this wallet's keys are ever stolen, the money in it can be moved at once. A hardware wallet is the safest choice."}</span></div>
             <div className="flex justify-end">
               <Button variant="primary" loading={submit.isPending} disabled={!emailOk || !signedOk || !reauth.ready} onClick={() => submit.mutate(undefined)}>{needEmail ? "Email me the confirmation link" : custodial ? "Save withdrawal wallet" : "Save payout wallet"}</Button>
             </div>

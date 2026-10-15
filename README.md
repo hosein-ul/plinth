@@ -26,8 +26,8 @@ key that can move merchant funds.
   recipient. The address is computable before deployment and commits to every input.
 * **Fee** — default 20 bps, rounded down, taken in the settlement transaction. The contract caps any fee at 100 bps (1%). If the treasury
   transfer fails the merchant gets the full amount (`FeeSkipped`). The fee is not refunded.
-* **Payout modes** — vault (owner-only, delayed policy changes) or direct to a payout wallet, which needs a verified email, a wallet
-  signature, an emailed confirmation link and a cooldown. Direct mode has no vault timelock: the payout wallet is a hot destination.
+* **Payout modes** — vault (owner-only, delayed policy changes) or direct to a payout wallet, which needs a signed wallet proof, a fresh sign-in and a cooldown (and, when
+  `REQUIRE_EMAIL_CONFIRMATION` is on, a verified email and an emailed confirmation link). In direct mode the payout wallet's key controls the money directly.
   A third, **custodial** mode (the platform holds the balance and the merchant withdraws) exists in the code but is **off by default** and must not be
   used on a mainnet without the owner's explicit approval; in that mode the gateway does hold a key that can move funds.
 * **Merchant vault** — non-upgradeable; the only authority is its `owner`. Settlement modes `BALANCE_IN_VAULT` (default),

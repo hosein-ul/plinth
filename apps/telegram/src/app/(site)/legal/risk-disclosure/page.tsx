@@ -40,11 +40,11 @@ export default function RiskPage() {
       <h2>5. Wallet and key security</h2>
       <ul>
         <li>The vault owner key is the only key that can move your funds. If it is lost, nobody can recover your funds. If it is stolen, the thief can withdraw them.</li>
-        <li>A multisig owner reduces both risks. Forwarding rules take effect only after a delay, which gives you time to cancel an unauthorised change.</li>
+        <li>A multisig owner reduces both risks. The vault&apos;s delay applies only to forwarding rules: the owner key can always withdraw at once, so the delay is not a defence against a stolen owner key.</li>
         <li>Customers can lose funds by sending to the wrong network, the wrong address or a lookalike site. Funds sent to an address on a chain where it does not exist can be unrecoverable.</li>
         <li>Signing a message you do not understand can authorise a payment. Read what your wallet displays before you sign.</li>
         <li>Smart-contract wallets are not supported on the gasless path.</li>
-        <li><strong>Payout wallet (direct payouts).</strong> A payout wallet has no vault timelock. Anyone who controls its key, or who tricks the account into confirming a change, can take what arrives there. Changes need a verified email, a signature from the new wallet and a confirmation link, and they wait out a cooldown, but treat the wallet as a hot destination.</li>
+        <li><strong>Payout wallet (direct payouts).</strong> A payout wallet is controlled directly by its key. Anyone who controls it, or who tricks the account into confirming a change, can take what arrives there. Changes need a signature from the new wallet and a fresh sign-in (and, where enabled, a confirmation link sent to your email), and they wait out a cooldown, but treat the wallet as a hot destination.</li>
         <li><strong>Compromised Plinth backend.</strong> An attacker who controls the backend cannot move funds already sitting in your vault or redirect funds sent to a payment address that has already been issued. They could, however, give customers new checkout addresses that pay the attacker, and a customer cannot check an address by looking at it. Verify what you fulfil against your own records and signed webhooks, and keep the unaudited status of this software in mind.</li>
       </ul>
 

@@ -60,6 +60,20 @@ Changing only the default **fee rate** needs no deployment: it is a configuratio
 Take the address from the network's official documentation, add it to `extraTokens` with its source, run `pnpm verify:networks <network>` (it must pass for the token), deploy with
 `TOKEN_SYMBOL=<TOKEN>` in the Foundry script, then `pnpm finalize:deployment --network <id> --token <TOKEN>`. Adding a token to an approved network withdraws that network's approval until a human approves again.
 
+## Where the signing keys live, and the interim setup without a KMS
+
+The relayer key and the custody key are used by the **API and worker processes** (for example the Render services), never by the web app. Do **not** put them in Vercel: the web app does not sign anything.
+Set them on the service that runs the API/worker:
+
+| Variable | Notes |
+| --- | --- |
+| `RELAYER_PRIVATE_KEY` (or `RELAYER_PRIVATE_KEY_<NETWORK>`) | Pays gas for sweeps. Holds gas only. |
+| `CUSTODY_PRIVATE_KEY` (or `..._<NETWORK>`) | Only if custody is on. Must differ from the relayer key and the treasury. |
+| `ALLOW_ENV_SIGNER_IN_PRODUCTION=true` | Required in production to accept env keys. This is the explicit "I accept the risk" switch. |
+
+Rules for the interim (until a KMS/HSM `SignerProvider` exists): use **testnets only**, use **fresh keys that hold only a small gas balance**, never reuse a key from a wallet you care about, generate them with `pnpm keys:testnet`,
+and keep the values only in the host's secret store. A KMS is required before any mainnet because a leaked env key on a mainnet loses real money.
+
 ## Alerts and what to do
 
 | Alert key / title | Meaning | Action |

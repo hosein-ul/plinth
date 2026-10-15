@@ -100,6 +100,7 @@ contract InvoiceFactory {
         } else if (
             destination == address(0) || destination == invoice || destination == TREASURY
                 || destination == address(TOKEN) || destination == IMPLEMENTATION || destination == address(this)
+                || destination == address(VAULTS)
         ) {
             revert InvalidDestination(destination);
         }

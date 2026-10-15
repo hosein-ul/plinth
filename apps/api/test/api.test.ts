@@ -495,6 +495,48 @@ describe("custody over HTTP", () => {
   }, 120_000);
 });
 
+describe("hosted MCP server over HTTP", () => {
+  it("a real MCP client connects to /mcp with an API key, lists tools, and creates and reads a payment through the API", async () => {
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+    const address = await app.listen({ port: 0, host: "127.0.0.1" });
+    const open = async (key: string) => {
+      const client = new Client({ name: "test-client", version: "0" });
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${address}/mcp`), { requestInit: { headers: { authorization: `Bearer ${key}` } } }));
+      return client;
+    };
+    // no key, and a key that does not exist
+    expect((await fetch(`${address}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: "{}" })).status).toBe(401);
+    const badClient = new Client({ name: "x", version: "0" });
+    await expect(badClient.connect(new StreamableHTTPClientTransport(new URL(`${address}/mcp`), { requestInit: { headers: { authorization: "Bearer sk_test_notarealkey" } } }))).resolves.toBeUndefined();
+    const denied = await badClient.callTool({ name: "get_account", arguments: {} });
+    expect((denied as { isError?: boolean }).isError).toBe(true);
+    expect(JSON.stringify(denied)).toMatch(/401/);
+
+    const client = await open(apiKey);
+    const tools = (await client.listTools()).tools.map((t) => t.name);
+    expect(tools).toEqual(expect.arrayContaining(["create_payment", "get_payment", "create_invoice", "create_webhook_endpoint", "get_overview"]));
+    const me = JSON.parse(((await client.callTool({ name: "get_account", arguments: {} })) as any).content[0].text);
+    expect(me.merchant).toBeTruthy();
+    const created = JSON.parse(((await client.callTool({ name: "create_payment", arguments: { amount: "7.25", order_reference: "MCP-1", idempotency_key: "mcp-1" } })) as any).content[0].text);
+    expect(created.checkout_url).toContain("/pay/");
+    const again = JSON.parse(((await client.callTool({ name: "create_payment", arguments: { amount: "7.25", order_reference: "MCP-1", idempotency_key: "mcp-1" } })) as any).content[0].text);
+    expect(again.id).toBe(created.id);
+    const got = JSON.parse(((await client.callTool({ name: "get_payment", arguments: { id: created.id } })) as any).content[0].text);
+    expect(got).toMatchObject({ id: created.id, status: "AWAITING_PAYMENT", amount: "7.25" });
+    // the same key through the REST API sees the same payment
+    expect((await call("GET", `/v1/payments/${created.id}`, { token: apiKey })).body.id).toBe(created.id);
+    // a tool that the key's rights do not allow is refused by the API, not by the MCP layer
+    const other = await open(apiKey);
+    const missing = await other.callTool({ name: "get_payment", arguments: { id: "pi_doesnotexist" } });
+    expect((missing as { isError?: boolean }).isError).toBe(true);
+    // GET and DELETE are not supported: the server is stateless
+    expect((await fetch(`${address}/mcp`)).status).toBe(405);
+    await client.close();
+    await other.close();
+  }, 60_000);
+});
+
 describe("rate limiting", () => {
   it("throttles credential guessing on login", async () => {
     let limited = 0;

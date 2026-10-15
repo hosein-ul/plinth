@@ -126,7 +126,7 @@ export default function SecurityPage() {
             </div>
           </div>
           <p className="mt-8 max-w-2xl text-sm text-ink-3">
-            Partial mitigation: the engine verifies your signed payout choice before it derives an address, which stops tampering with the database alone. It does not stop an attacker who controls the API process itself. Direct payouts add another trade-off: there is no vault timelock, so the payout wallet is a hot destination and a change to it relies on email confirmation, a cooldown and a fresh sign-in.
+            Partial mitigation: the engine verifies your signed payout choice before it derives an address, which stops tampering with the database alone. It does not stop an attacker who controls the API process itself. Direct payouts add another trade-off: the payout wallet's key controls the money directly, and a change of wallet relies on email confirmation, a cooldown and a fresh sign-in.
           </p>
         </Section>
 

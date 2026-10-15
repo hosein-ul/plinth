@@ -146,8 +146,8 @@ contract InvoiceFeeTest is Fixture {
 
     function test_directRejectsUnsafeDestinations() public {
         bytes32 inv = invoiceId("DIRECT-3");
-        address[5] memory bad =
-            [address(0), treasury, address(usdc), address(impl), address(invoices)];
+        address[6] memory bad =
+            [address(0), treasury, address(usdc), address(impl), address(invoices), address(vaults)];
         for (uint256 i = 0; i < bad.length; ++i) {
             vm.expectRevert(abi.encodeWithSelector(InvoiceFactory.InvalidDestination.selector, bad[i]));
             invoices.deployAndSweep(MERCHANT_A, inv, bad[i], DestinationKind.DIRECT, FEE);
@@ -204,6 +204,29 @@ contract InvoiceFeeTest is Fixture {
     }
 
     // ------------------------------------------------------------------ fail-open fee leg
+
+    /// @dev Gas-griefing: sweep() is permissionless, so a caller picks the gas. Whatever gas it picks, a sweep that SUCCEEDS must have
+    /// paid the fee (never FeeSkipped while the treasury is healthy): too little gas must make the whole call revert instead.
+    function test_callerCannotMakeTheFeeBeSkippedByChoosingGas_fuzz(uint256 gasLimit, uint96 amountRaw) public {
+        gasLimit = bound(gasLimit, 20_000, 400_000);
+        uint256 amount = bound(amountRaw, 1_000_000, 10_000_000_000_000);
+        bytes32 inv = invoiceId("GRIEF");
+        address clone = _direct(inv, FEE);
+        _settleDirect(inv, FEE); // deploys the clone with nothing to sweep
+        usdc.mint(clone, amount);
+        uint256 expectedFee = (amount * FEE) / 10_000;
+        vm.recordLogs();
+        (bool ok,) = clone.call{gas: gasLimit}(abi.encodeCall(InvoiceDeposit.sweep, ()));
+        if (ok) {
+            assertEq(usdc.balanceOf(treasury), expectedFee, "a successful sweep always pays the fee");
+            assertEq(usdc.balanceOf(merchantAWallet), amount - expectedFee);
+        } else {
+            // out of gas: nothing moved, and a retry with enough gas settles normally
+            assertEq(usdc.balanceOf(clone), amount);
+            InvoiceDeposit(clone).sweep();
+            assertEq(usdc.balanceOf(treasury), expectedFee);
+        }
+    }
 
     function test_blacklistedTreasuryDoesNotTrapMerchantFunds() public {
         bytes32 inv = invoiceId("BL-TREASURY");

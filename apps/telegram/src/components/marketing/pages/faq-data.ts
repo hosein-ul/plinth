@@ -49,7 +49,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "What if the Plinth backend or relayer key is compromised?",
-        a: "A compromised relayer key cannot redirect funds: sweep() takes no arguments and only sends to the destination baked into the invoice contract. It cannot withdraw from a vault or change its rules, and its gas budget is capped. A total compromise of the backend is different: it cannot take funds at addresses that were already issued, but it could hand out new checkout addresses that pay an attacker, and a customer cannot verify an address by looking at it. Mitigations exist (the engine checks your signed payout choice before deriving an address, which stops tampering with the database alone) but they do not stop a compromised API process. Direct payouts also have no vault timelock, so the payout wallet is a hot destination. The contracts are unaudited.",
+        a: "A compromised relayer key cannot redirect funds: sweep() takes no arguments and only sends to the destination baked into the invoice contract. It cannot withdraw from a vault or change its rules, and its gas budget is capped. A total compromise of the backend is different: it cannot take funds at addresses that were already issued, but it could hand out new checkout addresses that pay an attacker, and a customer cannot verify an address by looking at it. Mitigations exist (the engine checks your signed payout choice before deriving an address, which stops tampering with the database alone) but they do not stop a compromised API process. With direct payouts the payout wallet's own key controls the money. The contracts are unaudited.",
       },
       {
         q: "Have the contracts been audited?",
@@ -75,7 +75,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "What are the two payout modes?",
-        a: "Vault mode settles into a MerchantVault that only your owner address controls, with an optional settlement delay. Direct mode settles straight to a payout wallet you choose. Direct has no vault timelock, so that wallet is a hot destination. It needs a verified email, a signature from the wallet, and a confirmation link sent to your email, which also runs a cooldown before it takes effect. New payments use the destination committed when their address was issued.",
+        a: "Vault mode settles into a MerchantVault that only your owner address controls, with an optional settlement delay. Direct mode settles straight to a payout wallet you choose. Direct has no vault: the wallet's own key controls the money. It needs a signature from the wallet and a fresh sign-in (and, where an operator enables it, a confirmation link sent to your email), and a cooldown runs before it takes effect. New payments use the destination committed when their address was issued.",
       },
     ],
   },

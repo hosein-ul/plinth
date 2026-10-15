@@ -20,7 +20,13 @@ describe("Plinth MCP server", () => {
   it("lists the tools an assistant needs", async () => {
     const { client } = await connect(() => new Response("{}"));
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["create_payment", "create_payment_link", "get_integration_playbook", "get_payment", "get_webhook_verifier", "list_networks", "list_payments"]);
+    expect(names).toEqual([
+      "create_invoice", "create_payment", "create_payment_link", "create_webhook_endpoint", "delete_webhook_endpoint", "get_account", "get_custody", "get_integration_playbook", "get_invoice", "get_overview",
+      "get_payment", "get_payment_link", "get_payout_methods", "get_refund", "get_settlement_policy", "get_webhook_verifier", "list_invoices", "list_networks", "list_payment_links", "list_payments",
+      "list_refunds", "list_settlements", "list_transactions", "list_webhook_deliveries", "list_webhook_endpoints", "request_refund", "retry_webhook_delivery", "set_payment_link_active", "submit_refund_proof",
+    ]);
+    // Nothing here can change who gets paid, create keys, change the team or withdraw.
+    for (const n of names) expect(n).not.toMatch(/payout_wallet|withdraw(?!al)|api_key|team|custody_withdraw|switch/);
   });
 
   it("serves the playbook, which tells the assistant to price on the server and fulfil from webhooks", async () => {
@@ -57,7 +63,45 @@ describe("Plinth MCP server", () => {
     expect(text(r)).toContain("NO_VAULT");
   });
 
-  it("refuses to start with a live key", () => {
-    expect(() => createPlinthMcpServer({ apiUrl: "http://x", apiKey: "sk_live_abc" })).toThrow(/sk_test_/);
+  it("refuses to start with anything that is not a Plinth secret key", () => {
+    expect(() => createPlinthMcpServer({ apiUrl: "http://x", apiKey: "pk_abc" })).toThrow(/secret key/);
+    expect(() => createPlinthMcpServer({ apiUrl: "http://x", apiKey: "whsec_abc" })).toThrow(/secret key/);
+    expect(() => createPlinthMcpServer({ apiUrl: "http://x", apiKey: "sk_test_abc" })).not.toThrow();
+    expect(() => createPlinthMcpServer({ apiUrl: "http://x", apiKey: "sk_live_abc" })).not.toThrow();
+  });
+
+  it("routes each tool to the right endpoint, method and body", async () => {
+    const { client, seen } = await connect(() => new Response("{}"));
+    const calls: [string, Record<string, unknown>, string, string][] = [
+      ["get_account", {}, "GET", "/v1/me"],
+      ["list_payments", { limit: 5, status: "SETTLED" }, "GET", "/v1/payments?limit=5&status=SETTLED"],
+      ["list_payment_links", {}, "GET", "/v1/payment-links?limit=20"],
+      ["set_payment_link_active", { id: "plink_1", active: false }, "PATCH", "/v1/payment-links/plink_1"],
+      ["create_invoice", { customer_name: "Ada", customer_email: "ada@example.test", line_items: [{ description: "Work", quantity: 2, unit_amount: "10.00" }] }, "POST", "/v1/invoices"],
+      ["request_refund", { payment_intent_id: "pi_1", amount: "5.00", recipient: "0x" + "ab".repeat(20) }, "POST", "/v1/refund-requests"],
+      ["submit_refund_proof", { id: "ref_1", tx_hash: "0x" + "cd".repeat(32) }, "POST", "/v1/refund-requests/ref_1/proof"],
+      ["create_webhook_endpoint", { url: "https://shop.example/hook" }, "POST", "/v1/webhook-endpoints"],
+      ["delete_webhook_endpoint", { id: "we_1" }, "DELETE", "/v1/webhook-endpoints/we_1"],
+      ["retry_webhook_delivery", { id: "wd_1" }, "POST", "/v1/webhook-deliveries/wd_1/retry"],
+      ["get_overview", { days: 7, currency: "EURC" }, "GET", "/v1/overview?days=7&currency=EURC"],
+      ["get_payout_methods", {}, "GET", "/v1/payout-methods"],
+      ["get_custody", {}, "GET", "/v1/custody"],
+    ];
+    for (const [name, args, method, path] of calls) {
+      seen.length = 0;
+      const r = await client.callTool({ name, arguments: args });
+      expect((r as { isError?: boolean }).isError, name).toBeFalsy();
+      expect(seen[0]!.url, name).toBe(`http://api.test${path}`);
+      expect(seen[0]!.init.method, name).toBe(method);
+    }
+  });
+
+  it("offers the playbook as a resource and a ready prompt", async () => {
+    const { client } = await connect(() => new Response("{}"));
+    expect((await client.listResources()).resources.map((r) => r.uri).sort()).toEqual(["plinth://playbook", "plinth://webhook-verifier"]);
+    const res = await client.readResource({ uri: "plinth://playbook" });
+    expect(JSON.stringify(res)).toMatch(/computed ON THE SERVER/);
+    const prompt = await client.getPrompt({ name: "add_plinth_checkout" });
+    expect(JSON.stringify(prompt)).toMatch(/get_integration_playbook/);
   });
 });

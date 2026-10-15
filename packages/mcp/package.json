@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "bin": { "plinth-mcp": "./src/stdio.ts" },
-  "exports": { ".": "./src/index.ts" },
+  "exports": { ".": "./src/index.ts", "./http": "./src/http.ts" },
   "scripts": { "start": "tsx src/stdio.ts", "typecheck": "tsc -p .", "test": "vitest run" },
   "dependencies": { "@modelcontextprotocol/sdk": "^1.20.0", "zod": "^3.25.0" },
   "devDependencies": { "tsx": "^4.19.0" }

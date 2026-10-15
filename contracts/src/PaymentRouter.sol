@@ -107,7 +107,7 @@ contract PaymentRouter is ReentrancyGuard {
             if (!VAULTS.isVault(p.destination)) revert UnknownVault(p.destination);
         } else if (
             p.destination == address(0) || p.destination == address(this) || p.destination == TREASURY
-                || p.destination == address(TOKEN)
+                || p.destination == address(TOKEN) || p.destination == address(VAULTS)
         ) {
             revert InvalidDestination(p.destination);
         }
