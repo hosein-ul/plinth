@@ -2,18 +2,18 @@
 import Link from "next/link";
 import { ArrowRight, Check, FileText, ListChecks, Plug, ShieldCheck } from "lucide-react";
 import { siWindsurf } from "simple-icons";
-import { Chip } from "@/components/badge";
 import { Band } from "@/components/marketing/band";
 import { Reveal, RevealHeading } from "@/components/marketing/motion/reveal";
 import { wrap } from "@/components/marketing/parts";
 import { buttonStyles } from "@/components/ui/button";
+import { MCP_URL } from "@/lib/ai-kit";
 
-/** What an agent gets, in the words the build-with-AI page uses. Each row is built; the MCP package is the one thing not published yet. */
+/** What an agent gets, in the words the build-with-AI page uses. Every row is built and running. */
 const FEATURES = [
-  { icon: Plug, title: "An MCP server", text: "Tools to create and check test payments and payment links, list networks, and read the integration playbook. Test keys only." },
+  { icon: Plug, title: "A hosted MCP server", text: "One URL and your key in a header, nothing to install. 29 tools for payments, links, invoices, refunds, webhooks and reports, plus the integration playbook." },
   { icon: FileText, title: "Docs written for agents", text: "/llms.txt and /llms-full.txt, generated from the same playbook the MCP server serves, and an OpenAPI 3.1 document." },
   { icon: ListChecks, title: "A prompt per project", text: "One for a store, a SaaS, a bot or bookings. Each ends with the four checks the agent must pass." },
-  { icon: ShieldCheck, title: "Safe to retry", text: "Idempotency keys, exact decimal amounts and signed webhooks, so an agent that repeats a call never charges twice." },
+  { icon: ShieldCheck, title: "Safe by design", text: "Idempotency keys and signed webhooks make a repeated call harmless. No tool changes where money goes: payout wallets, vaults, keys and the team need you, signed in." },
 ] as const;
 
 /** Real marks from the lobehub icon set (MIT, copied into /public/brand/ai); Windsurf from simple-icons. Marks belong to their owners. */
@@ -55,6 +55,7 @@ function Session() {
         <div className="max-w-[94%] space-y-2.5">
           <p className="text-sm text-ink-2">I will read the playbook, create a test payment and check the result.</p>
           <div className="space-y-1.5 rounded-2xl border border-line bg-raised p-3 font-mono text-[0.8125rem] text-ink shadow-low">
+            <p className="flex items-center gap-2"><Check className="size-3.5 shrink-0 text-signal" strokeWidth={3} aria-hidden />get_integration_playbook<span className="text-ink-3">()</span></p>
             <p className="flex items-center gap-2"><Check className="size-3.5 shrink-0 text-signal" strokeWidth={3} aria-hidden />list_networks<span className="text-ink-3">()</span></p>
             <p className="flex items-center gap-2"><Check className="size-3.5 shrink-0 text-signal" strokeWidth={3} aria-hidden />create_payment<span className="truncate text-ink-3">({`{ amount: "25.00" }`})</span></p>
             <p className="flex items-center gap-2"><Check className="size-3.5 shrink-0 text-signal" strokeWidth={3} aria-hidden />get_payment<span className="text-ink-3">(&quot;AWAITING_PAYMENT&quot;)</span></p>
@@ -97,8 +98,8 @@ export function AiNative() {
             </ul>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <Link href="/build-with-ai" className={`${buttonStyles({ variant: "primary", size: "lg" })} h-12 px-5`}>Add it with your AI assistant<ArrowRight className="size-4" aria-hidden /></Link>
-              <Chip tone="warn">MCP package not published yet: it runs from the repository</Chip>
             </div>
+            <p className="mt-5 max-w-md overflow-x-auto whitespace-nowrap rounded-xl border border-line bg-sunk px-3.5 py-2.5 font-mono text-xs text-ink-2">claude mcp add --transport http plinth {MCP_URL} --header &quot;Authorization: Bearer sk_test_…&quot;</p>
           </div>
           <Reveal delay={0.1}><Session /></Reveal>
         </div>
