@@ -71,18 +71,21 @@ export function AssetsNetworks() {
               </Tilt>
             </ClipReveal>
           ))}
-          {mainnets.map((n, i) => (
-            <Reveal key={n.id} delay={0.1 + i * 0.04}>
-              <div className="flex items-center gap-3 rounded-card border border-dashed border-line-strong px-4 py-3.5">
-                <ChainIcon id={n.id} size={30} className="opacity-60 grayscale" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-ink-2">{n.name}</p>
-                  <p className="font-mono text-2xs text-ink-4">chain {n.chainId}</p>
-                </div>
+          <Reveal delay={0.1} className="sm:col-span-2">
+            <div className="rounded-card border border-dashed border-line-strong p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-ink-2">{mainnets.length} mainnets, recorded and switched off</p>
                 <Chip dot={false} className="shrink-0">Not enabled</Chip>
               </div>
-            </Reveal>
-          ))}
+              <ul className="mt-4 flex flex-wrap gap-2">
+                {mainnets.map((n) => (
+                  <li key={n.id} className="inline-flex items-center gap-2 rounded-full border border-line bg-raised py-1 pl-1.5 pr-3 text-xs font-medium text-ink-2">
+                    <ChainIcon id={n.id} size={18} className="opacity-70 grayscale" />{n.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Reveal>
         </div>
       </div>
 

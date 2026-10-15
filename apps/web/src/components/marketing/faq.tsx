@@ -9,6 +9,9 @@ import { wrap } from "@/components/marketing/parts";
 import { cn } from "@/lib/cn";
 
 const QA: [string, string][] = [
+  ["Do I need TON or a Telegram-specific coin?", "No. Customers pay in USDC (or EURC on Arc) on whichever network they already use, from any wallet. Plinth does not depend on Telegram's own payment system or on TON."],
+  ["Can I use it inside a Mini App?", "The checkout is a normal web page, so a Mini App can open it, and your server is told by a signed message when it is paid. It has not been tuned for Mini App themes yet, and there is no dedicated Mini App component today."],
+  ["Does Telegram allow this?", "Telegram sets its own rules for what may be sold inside Mini Apps, especially digital goods on phone app stores. Check the current rules for your case. Plinth links also work in plain chat messages and in an ordinary browser."],
   ["Who holds the money?", "Nobody in between. Each invoice has its own address, and funds are swept from it into a vault that only your wallet can withdraw from. Plinth runs the relayer that pays the network fee for the sweep, and that relayer cannot choose a destination or withdraw."],
   ["Does my customer need gas?", "Not with Pay with wallet, where the network's token supports signed authorisations: they sign once and our relayer pays. With Send to address they pay the normal network fee for the transfer themselves; on Arc that fee is paid in USDC."],
   ["When is it safe to fulfil an order?", "When you receive the signed payment.confirmed webhook. It fires only after the transfer meets the network's finality rule, which differs per network. Never fulfil from a redirect or a client-side callback."],
@@ -17,6 +20,7 @@ const QA: [string, string][] = [
   ["Are the contracts audited? Is this live on mainnet?", "No and no. The contracts have not been independently audited, and Plinth runs on testnets only. Mainnet is off by default and needs an operator to enable it for each network."],
   ["What does it cost?", "0.20% of each payment, taken inside the settlement transaction, with a 1% cap fixed in the contract. Plinth runs on testnets today, so no real money moves. The pricing page has the details."],
   ["How do refunds work?", "A refund is a transfer you sign from the account that received the funds, your vault or your payout wallet. It is marked complete only when that transfer is verified on-chain. The fee is not refunded."],
+  ["Is this a Telegram product?", "No. Plinth is independent and is not affiliated with or endorsed by Telegram. The Telegram name and mark belong to their owner and are used here only to say where it can be used."],
 ];
 
 export function Faq() {

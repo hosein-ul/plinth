@@ -330,3 +330,20 @@ main:has([data-joins-footer]) + .site-footer.grid-ink::before { display: none; }
   .scene-anim [style*="perspective"] { perspective: none !important; }
 }
 
+/* ── chat hero: one 12 s story, CSS only so it plays before hydration ───────────────────────── */
+@keyframes cp-m1 { 0%, 3% { opacity: 0; transform: translateY(14px) scale(0.98); } 9%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes cp-tap { 0%, 22% { opacity: 0; transform: scale(1.6); } 25% { opacity: 1; transform: scale(1); } 31%, 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes cp-press { 0%, 23% { transform: scale(1); } 26% { transform: scale(0.96); } 30%, 100% { transform: scale(1); } }
+@keyframes cp-sheet { 0%, 29% { transform: translateY(104%); } 35%, 62% { transform: translateY(0); } 68%, 100% { transform: translateY(104%); } }
+@keyframes cp-dim { 0%, 29% { opacity: 0; } 35%, 62% { opacity: 1; } 68%, 100% { opacity: 0; } }
+@keyframes cp-pay { 0%, 50% { background-color: var(--color-ink); } 54%, 100% { background-color: var(--color-signal); } }
+@keyframes cp-paylabel-a { 0%, 51% { opacity: 1; } 53%, 100% { opacity: 0; } }
+@keyframes cp-paylabel-b { 0%, 51% { opacity: 0; } 53%, 100% { opacity: 1; } }
+@keyframes cp-m2 { 0%, 68% { opacity: 0; transform: translateY(14px) scale(0.98); } 74%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes cp-m3 { 0%, 76% { opacity: 0; transform: translateY(14px) scale(0.98); } 82%, 96% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes cp-note { 0%, 70% { opacity: 0; transform: translateY(-16px); } 76%, 94% { opacity: 1; transform: none; } 99%, 100% { opacity: 0; transform: translateY(-16px); } }
+.cp { animation-duration: 12s; animation-iteration-count: infinite; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); animation-fill-mode: both; }
+@media (prefers-reduced-motion: reduce) {
+  .cp { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .cp-hide-static { display: none !important; }
+}

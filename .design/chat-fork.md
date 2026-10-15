@@ -14,3 +14,6 @@ copy, hero asset and information order differ. Source: apps/chat (a copy of apps
 ## Rules
 - No claim of a feature that is not built (Mini App theming, MCP, SDKs, TON are not built).
 - Chat copy stays plain: no code on the home page. Code lives in /developers and /build-with-ai.
+
+## Update 2026-10-15
+The chat home page was merged into the main landing (branch super-landing). `apps/telegram` is no longer the place to edit it; its checkout files had also drifted (they lack the token symbol on amounts).
