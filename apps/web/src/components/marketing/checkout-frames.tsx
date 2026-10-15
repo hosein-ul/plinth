@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 function Head() {
   return (
     <>
-      <div className="flex items-center justify-between text-xs text-ink-3"><span>Checkout</span><ChainBadge id="arc-testnet" size={16} className="text-xs" /></div>
+      <div className="flex items-center justify-between text-xs text-ink-3"><span>Checkout</span><ChainBadge id="arc-mainnet" size={16} className="text-xs" /></div>
       <div className="tnum mt-3 flex items-center gap-2.5">
         <TokenIcon symbol="USDC" size={28} />
         <span className="text-[2rem] font-medium leading-none tracking-[-0.045em] text-ink">25<span className="text-ink-4">.00</span></span>
@@ -75,7 +75,7 @@ export function AddressFrame({ className }: { className?: string }) {
       </div>
       <dl className="mt-4 space-y-2 border-t border-line pt-3 text-sm">
         <div className="flex justify-between gap-3"><dt className="text-ink-3">Send exactly</dt><dd className="tnum font-medium text-ink">25.00 USDC</dd></div>
-        <div className="flex justify-between gap-3"><dt className="text-ink-3">On network</dt><dd className="text-ink">Arc Testnet</dd></div>
+        <div className="flex justify-between gap-3"><dt className="text-ink-3">On network</dt><dd className="text-ink">Arc</dd></div>
         <div className="flex justify-between gap-3"><dt className="text-ink-3">Network fee</dt><dd className="text-ink-2">paid by the sender</dd></div>
       </dl>
       <p className="mt-3.5 flex items-center gap-2 text-xs text-ink-3"><span aria-hidden className="size-1.5 animate-[live-pulse_1.4s_ease-in-out_infinite] rounded-full bg-signal" />Watching for your transfer</p>

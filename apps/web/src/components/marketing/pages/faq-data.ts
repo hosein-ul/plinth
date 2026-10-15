@@ -13,7 +13,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "Can I accept real money today?",
-        a: "No. Plinth runs on testnets only. Mainnet support is configured and disabled by default, nothing has been deployed to a mainnet, and the contracts have not been independently audited. Do not hold meaningful value until an audit is complete.",
+        a: "Yes, on Arc mainnet, in USDC and EURC. The contracts have not been independently audited, so start with small amounts and do not hold more value than you can afford to lose. Other networks open one at a time, each after its own on-chain check.",
       },
     ],
   },
@@ -67,7 +67,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         q: "How long until funds reach my vault?",
-        a: "It depends on the network's finality rule: one confirmation on Arc Testnet, 12 on Base Sepolia, and the finalized block on Ethereum (about 13 minutes). After that the relayer sweeps the funds in one transaction. No settlement-time guarantee or SLA is offered.",
+        a: "It depends on the network's finality rule: one confirmation on Arc, and the finalized block on Ethereum (about 13 minutes). After that the relayer sweeps the funds in one transaction. No settlement-time guarantee or SLA is offered.",
       },
       {
         q: "What does Plinth cost?",

@@ -40,11 +40,11 @@ export function SiteFooter() {
           </div>
         </div>
         <div className="grid gap-4 border-t border-white/10 px-5 py-6 text-xs leading-relaxed text-white/55 sm:px-8 lg:grid-cols-2 lg:gap-12">
-          <p><span className="font-medium text-white/80">Risk.</span> Plinth runs on testnets today. The smart contracts have not been independently audited. Mainnet is disabled by default and requires explicit operator approval per network. Digital assets can lose value and transfers cannot be reversed.</p>
+          <p><span className="font-medium text-white/80">Risk.</span> Plinth is live on Arc mainnet. The smart contracts have not been independently audited, so start with small amounts. Each further network opens only after its own on-chain check and an explicit operator approval. Digital assets can lose value and transfers cannot be reversed.</p>
           <p><span className="font-medium text-white/80">Not advice.</span> Nothing on this site is investment, legal, tax or financial advice. Plinth is software that coordinates payments between wallets its users control; it is not a bank and does not hold customer funds.</p>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4 text-xs text-white/45 sm:px-8">
-          <span>Plinth. Testnet software, not yet in production.</span>
+          <span>Plinth. Live on Arc mainnet; contracts not yet independently audited.</span>
           <span className="inline-flex items-center gap-4">
             <Link href="/legal/terms" className="hover:text-white">Terms</Link>
             <Link href="/legal/privacy" className="hover:text-white">Privacy</Link>

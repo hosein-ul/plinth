@@ -19,10 +19,10 @@ const NAV = [
 ] as const;
 
 const ROWS: { ref: string; net: string; status: string; amount: string }[] = [
-  { ref: "order-1046", net: "arc-testnet", status: "SETTLED", amount: "25.00" },
+  { ref: "order-1046", net: "arc-mainnet", status: "SETTLED", amount: "25.00" },
   { ref: "order-1045", net: "base-sepolia", status: "CONFIRMING", amount: "120.00" },
-  { ref: "order-1044", net: "arc-testnet", status: "AWAITING_PAYMENT", amount: "8.50" },
-  { ref: "order-1043", net: "arc-testnet", status: "SETTLED", amount: "300.00" },
+  { ref: "order-1044", net: "arc-mainnet", status: "AWAITING_PAYMENT", amount: "8.50" },
+  { ref: "order-1043", net: "arc-mainnet", status: "SETTLED", amount: "300.00" },
   { ref: "order-1042", net: "base-sepolia", status: "UNDERPAID", amount: "42.00" },
 ];
 
@@ -69,7 +69,7 @@ export function DashboardPreview() {
               <div className="min-w-0 p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-medium tracking-[-0.03em] text-ink">Payments</h3>
-                  <Chip tone="info">Testnet</Chip>
+                  <Chip tone="info">Arc</Chip>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2.5 sm:gap-3">
                   {([["Received", "465", "info"], ["Settled to vault", "325", "ok"], ["In flight", "140", "neutral"]] as const).map(([l, v, t]) => (

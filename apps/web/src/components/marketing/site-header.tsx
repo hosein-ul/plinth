@@ -108,7 +108,7 @@ export function SiteHeader() {
           </LayoutGroup>
           <div className="ml-auto flex items-center gap-1.5">
             <Link href="/status" className="mr-1 hidden items-center gap-2 rounded-full border border-line px-3 py-1.5 text-xs text-ink-3 transition-colors hover:bg-sunk hover:text-ink xl:inline-flex">
-              <span aria-hidden className="relative grid size-2 place-items-center"><span className="absolute size-2 animate-[live-pulse_2s_ease-in-out_infinite] rounded-full bg-signal/50" /><span className="size-1.5 rounded-full bg-signal" /></span>Testnet
+              <span aria-hidden className="relative grid size-2 place-items-center"><span className="absolute size-2 animate-[live-pulse_2s_ease-in-out_infinite] rounded-full bg-signal/50" /><span className="size-1.5 rounded-full bg-signal" /></span>Arc mainnet
             </Link>
             <Link href="/login" className={cn(buttonStyles({ variant: "ghost", size: "md" }), "hidden rounded-full sm:inline-flex")}>Sign in</Link>
             <Link href="/signup" className={cn(buttonStyles({ variant: "primary", size: "md" }), "rounded-full px-4")}>Create account</Link>

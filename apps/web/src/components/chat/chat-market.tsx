@@ -99,7 +99,7 @@ export function ChatClosing() {
             <span className="block">Start in minutes.</span>
             <span className="block text-white/45">Test it for free.</span>
           </h2>
-          <p className="mt-6 max-w-lg text-lg text-white/65">Create an account, send a test payment and see an order get paid. It runs on test networks, so nothing real moves.</p>
+          <p className="mt-6 max-w-lg text-lg text-white/65">Create an account, set up a vault and take your first payment in USDC on Arc mainnet. The contracts are not yet independently audited, so start small.</p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <Link href="/signup" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "h-12 border-transparent px-6")}>Create a free test account<ArrowRight className="size-4" aria-hidden /></Link>
             <Link href="/build-with-ai" className="inline-flex h-12 items-center rounded-ctl border border-white/20 px-5 text-[0.9375rem] font-medium text-white transition-colors hover:bg-white/10">Add it with your AI assistant</Link>

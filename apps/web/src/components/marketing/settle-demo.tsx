@@ -37,7 +37,7 @@ function CheckoutCard({ n, className }: { n: number; className?: string }) {
   const stations: Station[] = STEPS.map((s, i) => ({ key: s.key, label: s.label, state: i < n ? "done" : i === n ? "live" : "todo", note: i < n ? s.note : undefined }));
   return (
     <div className={cn("card p-[18px]", className)}>
-      <div className="flex items-center justify-between text-xs text-ink-3"><span>Checkout</span><ChainBadge id="arc-testnet" size={16} className="text-xs" /></div>
+      <div className="flex items-center justify-between text-xs text-ink-3"><span>Checkout</span><ChainBadge id="arc-mainnet" size={16} className="text-xs" /></div>
       <div className="tnum mt-3 flex items-center gap-2.5">
         <TokenIcon symbol="USDC" size={30} />
         <span className="text-[2.25rem] font-medium leading-none tracking-[-0.045em] text-ink">25<span className="text-ink-4">.00</span></span>

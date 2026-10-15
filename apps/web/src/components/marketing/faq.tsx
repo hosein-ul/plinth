@@ -16,8 +16,8 @@ const QA: [string, string][] = [
   ["When is it safe to fulfil an order?", "When you receive the signed payment.confirmed webhook. It fires only after the transfer meets the network's finality rule, which differs per network. Never fulfil from a redirect or a client-side callback."],
   ["What if a customer underpays, overpays or pays late?", "Each case has its own state and its own webhook: underpaid, overpaid and late payment. Nothing is silently rounded or guessed. Several transfers to the same invoice are added up."],
   ["What happens if they send the wrong token?", "Only the official token the payment was created in counts: USDC, or EURC on Arc. Anything else sent to the address is recorded as an invalid asset and is not credited."],
-  ["Are the contracts audited? Is this live on mainnet?", "No and no. The contracts have not been independently audited, and Plinth runs on testnets only. Mainnet is off by default and needs an operator to enable it for each network."],
-  ["What does it cost?", "0.20% of each payment, taken inside the settlement transaction, with a 1% cap fixed in the contract. Plinth runs on testnets today, so no real money moves. The pricing page has the details."],
+  ["Are the contracts audited? Is this live on mainnet?", "Not yet audited, and live on Arc mainnet. The contracts have not been independently audited, so start with small amounts. Every other network opens only after its own on-chain check and an explicit approval."],
+  ["What does it cost?", "0.20% of each payment, taken inside the settlement transaction, with a 1% cap fixed in the contract. The pricing page has the details."],
   ["How do refunds work?", "A refund is a transfer you sign from the account that received the funds, your vault or your payout wallet. It is marked complete only when that transfer is verified on-chain. The fee is not refunded."],
   ["Is this a Telegram product?", "No. Plinth is independent and is not affiliated with or endorsed by Telegram. The Telegram name and mark belong to their owner and are used here only to say where it can be used."],
 ];
