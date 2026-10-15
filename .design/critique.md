@@ -77,3 +77,9 @@ Mode: inherit (Daylight). New parts: `TokenPicker` (the existing segmented Tabs 
 - Checked in the browser against the local stack with a real EURC payment: checkout (desktop and 375 px, wallet and address tabs), receipt, overview with the picker, Networks & assets, new-invoice dialog.
 - The picker only renders when the merchant can take two or more tokens; a USDC-only merchant sees exactly what they saw before.
 - Not checked: Telegram fork visually (files are identical copies, typechecked), dark mode, real wallet signing for EURC (engine tests cover EIP-3009 for EURC).
+
+## 2026-10-15 — custody (custodial payout mode)
+Mode: inherit (Daylight). New: `/dashboard/custody` (balance per token as the two-number Amount, withdraw dialog, automatic-payout dialog, withdrawals ledger) and a third "Held by Plinth" segment in the payout switcher. Existing tokens only; the page is hidden from the nav unless an operator turned custody on. The page opens with the same warn Notice every time: this is the one mode where the platform holds the money.
+- Checked in the browser against a local stack with custody on: balance, withdraw dialog, a real withdrawal from the UI through to CONFIRMED on-chain.
+- Not checked: mobile width, the custodial wallet-registration dialog in the browser (the engine and API flow are tested), dark mode, the Telegram fork visually (identical files).
+- Known: a hydration warning appeared in dev on first load of the page (server rendered data, client rendered the skeleton); not investigated.

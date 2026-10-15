@@ -21,8 +21,12 @@ export interface PayoutRow {
   name: string;
   environment: string;
   operational: boolean;
-  mode: "VAULT" | "DIRECT";
+  mode: "VAULT" | "DIRECT" | "CUSTODIAL";
   destination: string | null;
+  /** Custodial mode: where the held balance can be withdrawn to. */
+  withdrawal_wallet?: string | null;
+  /** Custodial payouts are switched on for this network. */
+  custody_available?: boolean;
   status: "ACTIVE" | "SETTING_UP" | "NOT_SET_UP";
   fee: { bps: number; percent: string; treasury: string };
   vault: { status: string; address: string; owner: string } | null;
@@ -59,11 +63,12 @@ function statusChip(r: PayoutRow) {
 
 function PayoutCard({ row, email, walletReady, chainId }: { row: PayoutRow; email: AccountEmail | undefined; walletReady: boolean; chainId: number | undefined }) {
   const { readOnly } = useDataSource();
-  const [dialog, setDialog] = useState<"wallet" | "vault" | null>(null);
+  const [dialog, setDialog] = useState<"wallet" | "custody" | "vault" | null>(null);
   const cancel = useAction(() => apiFetch(`/v1/payout-methods/${row.pending!.id}/cancel`, { method: "POST" }), { invalidate: ["/v1/payout-methods"], success: "Change cancelled" });
+  const custodial = row.mode === "CUSTODIAL";
   const direct = row.mode === "DIRECT";
   const p = row.pending;
-  const open = (d: "wallet" | "vault") => (readOnly || !walletReady ? notifyDemoReadOnly() : setDialog(d));
+  const open = (d: "wallet" | "custody" | "vault") => (readOnly || !walletReady ? notifyDemoReadOnly() : setDialog(d));
   return (
     <article className="card-flat overflow-hidden">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
@@ -73,18 +78,21 @@ function PayoutCard({ row, email, walletReady, chainId }: { row: PayoutRow; emai
           {statusChip(row)}
         </div>
         <div role="group" aria-label={`Paid into, on ${row.name}`} className="inline-flex rounded-ctl bg-sunk p-0.5 text-sm">
-          <button type="button" aria-pressed={!direct} disabled={!direct && !row.vault} onClick={() => direct && open("vault")} className={cn("rounded-[9px] px-3 py-1.5 font-medium transition-colors duration-[var(--duration-fast)]", !direct ? "bg-raised text-ink shadow-low" : "text-ink-3 hover:text-ink")}>Vault</button>
+          <button type="button" aria-pressed={!direct && !custodial} disabled={(direct || custodial) ? !row.vault : true} onClick={() => (direct || custodial) && open("vault")} className={cn("rounded-[9px] px-3 py-1.5 font-medium transition-colors duration-[var(--duration-fast)]", !direct && !custodial ? "bg-raised text-ink shadow-low" : "text-ink-3 hover:text-ink")}>Vault</button>
           <button type="button" aria-pressed={direct} onClick={() => !direct && open("wallet")} disabled={!row.operational} className={cn("rounded-[9px] px-3 py-1.5 font-medium transition-colors duration-[var(--duration-fast)]", direct ? "bg-raised text-ink shadow-low" : "text-ink-3 hover:text-ink")}>My wallet</button>
+          {(row.custody_available || custodial) && <button type="button" aria-pressed={custodial} onClick={() => !custodial && open("custody")} disabled={!row.operational || !row.custody_available} className={cn("rounded-[9px] px-3 py-1.5 font-medium transition-colors duration-[var(--duration-fast)]", custodial ? "bg-raised text-ink shadow-low" : "text-ink-3 hover:text-ink")}>Held by Plinth</button>}
         </div>
       </header>
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <div className="p-5 sm:p-6 lg:border-r lg:border-line">
-          <p className="label">{direct ? "New payments go straight to" : "New payments settle into"}</p>
-          <p className="mt-2 text-lg font-medium tracking-[-0.015em] text-ink">{direct ? "Your own wallet" : row.vault ? "Your Plinth vault" : "Nothing yet"}</p>
+          <p className="label">{direct ? "New payments go straight to" : custodial ? "New payments are held by" : "New payments settle into"}</p>
+          <p className="mt-2 text-lg font-medium tracking-[-0.015em] text-ink">{direct ? "Your own wallet" : custodial ? "Plinth, until you withdraw" : row.vault ? "Your Plinth vault" : "Nothing yet"}</p>
           <div className="mt-2">{row.destination ? <Hash value={row.destination} lead={10} tail={6} /> : <span className="text-sm text-ink-3">Create a vault or register a wallet to start accepting payments here.</span>}</div>
           <p className="mt-4 text-sm text-ink-3">
-            {direct
+            {custodial
+              ? "Plinth keeps the money in its custody wallet and credits your balance when a payment is final. You withdraw it to the wallet you confirmed. Unlike every other mode, Plinth holds this money, so you rely on it to pay out."
+              : direct
               ? "The money lands in your wallet when the payment is final. There is no vault delay: anyone who gets into this wallet's keys can move it at once."
               : "The money waits in a vault only your owner wallet can withdraw from, and forwarding rules take effect after a delay."}
           </p>
@@ -120,20 +128,29 @@ function PayoutCard({ row, email, walletReady, chainId }: { row: PayoutRow; emai
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line bg-wash px-5 py-4 sm:px-6">
-        <p className="min-w-0 text-sm text-ink-3">{direct ? "You can go back to your vault at any time." : "Prefer the money in your own wallet? Register a wallet you control."}</p>
+        <p className="min-w-0 text-sm text-ink-3">{custodial ? "Withdraw, and set automatic payouts, on the Custody page. You can go back to your vault at any time." : direct ? "You can go back to your vault at any time." : "Prefer the money in your own wallet? Register a wallet you control."}</p>
         <div className="flex gap-2">
-          {direct ? (
+          {custodial ? (
+            <>
+              <Button size="sm" onClick={() => open("custody")}>Use another withdrawal wallet</Button>
+              <Button size="sm" variant="primary" onClick={() => open("vault")} disabled={!row.vault || row.vault.status !== "ACTIVE"}>Switch back to my vault</Button>
+            </>
+          ) : direct ? (
             <>
               <Button size="sm" onClick={() => open("wallet")}>Use another wallet</Button>
               <Button size="sm" variant="primary" onClick={() => open("vault")} disabled={!row.vault || row.vault.status !== "ACTIVE"}>Switch back to my vault</Button>
             </>
           ) : (
-            <Button size="sm" variant="primary" onClick={() => open("wallet")} disabled={!row.operational}>Pay to my own wallet…</Button>
+            <>
+              <Button size="sm" variant="primary" onClick={() => open("wallet")} disabled={!row.operational}>Pay to my own wallet…</Button>
+              {row.custody_available && <Button size="sm" onClick={() => open("custody")} disabled={!row.operational}>Let Plinth hold my balance…</Button>}
+            </>
           )}
         </div>
       </div>
 
-      {dialog === "wallet" && <DirectWalletDialog row={row} email={email} chainId={chainId} onClose={() => setDialog(null)} />}
+      {dialog === "wallet" && <DirectWalletDialog row={row} email={email} chainId={chainId} mode="DIRECT" onClose={() => setDialog(null)} />}
+      {dialog === "custody" && <DirectWalletDialog row={row} email={email} chainId={chainId} mode="CUSTODIAL" onClose={() => setDialog(null)} />}
       {dialog === "vault" && <SwitchToVaultDialog row={row} email={email} onClose={() => setDialog(null)} />}
     </article>
   );
@@ -156,7 +173,8 @@ function Step({ n, title, done, locked, children }: { n: number; title: string; 
  * Register a wallet to be paid directly. The wallet signs a message to prove it controls the address, you confirm it
  * is you, and a link is emailed. Only after the link (and any cooldown) do new invoices use the wallet.
  */
-function DirectWalletDialog({ row, email, chainId, onClose }: { row: PayoutRow; email: AccountEmail | undefined; chainId: number | undefined; onClose: () => void }) {
+function DirectWalletDialog({ row, email, chainId, mode, onClose }: { row: PayoutRow; email: AccountEmail | undefined; chainId: number | undefined; mode: "DIRECT" | "CUSTODIAL"; onClose: () => void }) {
+  const custodial = mode === "CUSTODIAL";
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const reauth = useReauth(email?.auth_method);
@@ -175,7 +193,7 @@ function DirectWalletDialog({ row, email, chainId, onClose }: { row: PayoutRow; 
     setSigning(true);
     setSignError(null);
     try {
-      const ch = await apiFetch<{ nonce: string; message: string }>("/v1/payout-methods/challenge", { method: "POST", body: { network: row.network, address, purpose: "PAYOUT_WALLET" } });
+      const ch = await apiFetch<{ nonce: string; message: string }>("/v1/payout-methods/challenge", { method: "POST", body: { network: row.network, address, purpose: custodial ? "CUSTODY_WITHDRAWAL" : "PAYOUT_WALLET" } });
       const signature = await signMessageAsync({ message: ch.message });
       setProof({ nonce: ch.nonce, signature, address });
     } catch (e) {
@@ -186,7 +204,7 @@ function DirectWalletDialog({ row, email, chainId, onClose }: { row: PayoutRow; 
   }
 
   const submit = useAction(
-    () => apiFetch<any>("/v1/payout-methods/wallet", { method: "POST", body: { network: row.network, address: proof!.address, nonce: proof!.nonce, signature: proof!.signature, reauth: reauth.value() } }),
+    () => apiFetch<any>("/v1/payout-methods/wallet", { method: "POST", body: { network: row.network, mode, address: proof!.address, nonce: proof!.nonce, signature: proof!.signature, reauth: reauth.value() } }),
     { invalidate: ["/v1/payout-methods"], onSuccess: () => setSentTo(email?.email ?? "your email") },
   );
 
@@ -195,7 +213,7 @@ function DirectWalletDialog({ row, email, chainId, onClose }: { row: PayoutRow; 
   const signedOk = !!proof;
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent title={`Pay straight to your wallet on ${row.name}`} description="Four quick steps. Nothing moves and no transaction is sent.">
+      <DialogContent title={custodial ? `Let Plinth hold your balance on ${row.name}` : `Pay straight to your wallet on ${row.name}`} description={custodial ? "Name the wallet you can withdraw to. Four quick steps; nothing moves and no transaction is sent." : "Four quick steps. Nothing moves and no transaction is sent."}>
         {sentTo ? (
           <div className="space-y-4">
             <Notice tone="ok"><span className="inline-flex items-start gap-2"><Mail className="mt-0.5 size-4 shrink-0" aria-hidden /><span>We sent a confirmation link to <b className="font-medium">{sentTo}</b>. Open it to finish.</span></span></Notice>
@@ -211,7 +229,7 @@ function DirectWalletDialog({ row, email, chainId, onClose }: { row: PayoutRow; 
                   <><p><span className="font-mono text-xs">{email.email}</span> is not confirmed yet.</p><div className="flex gap-2"><Button size="sm" loading={resend.isPending} onClick={() => resend.mutate(undefined)}>Send confirmation link</Button><Button size="sm" variant="ghost" onClick={() => setEmailOpen(true)}>Use another address</Button></div><p>Open the link, then come back to this window.</p></>
                 )}
               </Step>
-              <Step n={2} title="Connect the wallet that should be paid" done={walletOk} locked={!emailOk}>
+              <Step n={2} title={custodial ? "Connect the wallet you will withdraw to" : "Connect the wallet that should be paid"} done={walletOk} locked={!emailOk}>
                 <div className="flex flex-wrap items-center gap-3"><WalletButton chainId={chainId} size="sm" label="Connect wallet" /></div>{walletOk && <p className="break-all font-mono text-xs text-ink-2">{address}</p>}
                 <p>Plain wallets such as MetaMask or Rabby work. Smart-contract wallets such as Safe are not supported yet.</p>
               </Step>
@@ -224,7 +242,7 @@ function DirectWalletDialog({ row, email, chainId, onClose }: { row: PayoutRow; 
                 {signedOk && email && reauth.field}
               </Step>
             </ol>
-            <div className="flex items-start gap-2 rounded-ctl bg-wash px-3.5 py-3 text-sm text-ink-3"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn-ink" aria-hidden /><span>Paying straight to a wallet has no vault delay. If this wallet&apos;s keys are ever stolen, the money in it can be moved at once. A hardware wallet is the safest choice.</span></div>
+            <div className="flex items-start gap-2 rounded-ctl bg-wash px-3.5 py-3 text-sm text-ink-3"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn-ink" aria-hidden /><span>{custodial ? "Plinth will hold your balance, so you rely on it to pay out, and the contracts are not independently audited. This wallet only receives your withdrawals; a hardware wallet is the safest choice." : "Paying straight to a wallet has no vault delay. If this wallet's keys are ever stolen, the money in it can be moved at once. A hardware wallet is the safest choice."}</span></div>
             <div className="flex justify-end">
               <Button variant="primary" loading={submit.isPending} disabled={!emailOk || !signedOk || !reauth.ready} onClick={() => submit.mutate(undefined)}>Email me the confirmation link</Button>
             </div>

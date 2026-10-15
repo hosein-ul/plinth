@@ -4,11 +4,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  ArrowLeftRight, ArrowUpRight, CreditCard, Eye, FileText, FlaskConical, History, KeyRound, Landmark, LayoutDashboard, Link2, LogOut, Menu, Network, Radio, ScrollText, Settings, Undo2, Users, Wallet, Webhook, X,
+  ArrowLeftRight, ArrowUpRight, CreditCard, Eye, FileText, FlaskConical, History, KeyRound, Landmark, LayoutDashboard, Link2, LogOut, Menu, Network, Radio, ScrollText, Settings, Undo2, Users, Vault, Wallet, Webhook, X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { notifyDemoReadOnly, useHref } from "@/lib/data-source";
 import { DEMO_HREF } from "@/lib/routes";
+import { useApi } from "@/lib/hooks";
 import { Logo } from "./logo";
 
 
@@ -46,6 +47,7 @@ const GROUPS: { label: string; items: { href: string; label: string; icon: React
     items: [
       { href: "/dashboard/networks", label: "Networks & assets", icon: Network },
       { href: "/dashboard/wallets", label: "Wallets & payouts", icon: Wallet },
+      { href: "/dashboard/custody", label: "Custody", icon: Vault },
       { href: "/dashboard/team", label: "Team", icon: Users },
       { href: "/dashboard/audit", label: "Audit log", icon: History },
       { href: "/dashboard/settings", label: "Settings", icon: Settings },
@@ -92,12 +94,15 @@ export function Shell({ me, env, children, variant = "live" }: { me: { merchant:
   }
 
   const initial = (me.merchant.name || "?").trim().charAt(0).toUpperCase();
+  // The Custody page only exists where an operator turned custodial payouts on for some network.
+  const custody = useApi<{ data: { available: boolean }[] }>("/v1/custody", { refetchMs: 60_000 });
+  const custodyOn = (custody.data?.data ?? []).some((n) => n.available);
 
   const nav = (
     <nav aria-label="Dashboard" className="flex h-full flex-col">
       <div className="px-5 pb-6 pt-6"><Logo href={home} /></div>
       <div className="flex-1 space-y-6 overflow-y-auto px-3 pb-6">
-        {GROUPS.map((g) => (
+        {GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.href !== "/dashboard/custody" || custodyOn) })).map((g) => (
           <div key={g.label}>
             <p className="px-2.5 pb-1.5 text-xs font-medium text-ink-4">{g.label}</p>
             <ul className="space-y-0.5">
