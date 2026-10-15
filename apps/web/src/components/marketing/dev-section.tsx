@@ -13,9 +13,9 @@ import { cn } from "@/lib/cn";
 
 const CURL = `curl -X POST $PLINTH_API/v1/payment-intents \\
   -H "Authorization: Bearer sk_test_…" \\
-  -H "Idempotency-Key: order-1042" \\
+  -H "Idempotency-Key: ORDER_ID" \\
   -H "Content-Type: application/json" \\
-  -d '{ "amount": "25.00", "order_reference": "order-1042" }'
+  -d '{ "amount": "25.00", "order_reference": "ORDER_ID" }'
 
 # → { "status": "AWAITING_PAYMENT", "checkout_url": "…" }`;
 
@@ -23,10 +23,10 @@ const NODE = `const res = await fetch(\`\${process.env.PLINTH_API}/v1/payment-in
   method: "POST",
   headers: {
     Authorization: \`Bearer \${process.env.PLINTH_SECRET_KEY}\`,
-    "Idempotency-Key": "order-1042",
+    "Idempotency-Key": "ORDER_ID",
     "Content-Type": "application/json",
   },
-  body: JSON.stringify({ amount: "25.00", order_reference: "order-1042" }),
+  body: JSON.stringify({ amount: "25.00", order_reference: "ORDER_ID" }),
 });
 const intent = await res.json();
 // send the customer to intent.checkout_url`;

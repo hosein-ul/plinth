@@ -9,7 +9,8 @@ import { SITE_URL } from "@/lib/site";
 export { API_FACTS };
 
 /** The hosted MCP server. It is part of the Plinth API, so it lives next to it; override with NEXT_PUBLIC_MCP_URL for another deployment. */
-export const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? "https://plinth-api.onrender.com/mcp";
+export { MCP_URL } from "./config";
+import { MCP_URL } from "./config";
 
 export const LLMS_TXT = `# Plinth
 
@@ -42,8 +43,8 @@ ${API_FACTS.map((f) => `- ${f}`).join("\n")}
 
 ## Create a payment for one order
 POST /v1/payment-intents
-Headers: Authorization: Bearer sk_test_..., Idempotency-Key: order-1042-1, Content-Type: application/json
-Body: {"amount":"25.00","order_reference":"order-1042","success_url":"https://shop.example/thanks","cancel_url":"https://shop.example/cart"}
+Headers: Authorization: Bearer sk_test_..., Idempotency-Key: ORDER_ID-1, Content-Type: application/json
+Body: {"amount":"25.00","order_reference":"ORDER_ID","success_url":"https://YOUR_DOMAIN/thanks","cancel_url":"https://YOUR_DOMAIN/cart"}
 Response includes: id, status, checkout_url, networks[].deposit_address. Redirect the customer to checkout_url.
 
 ## Webhook events
@@ -80,7 +81,7 @@ Otherwise read ${SITE_URL}/llms-full.txt and follow the playbook there.
 Work in this order and tell me what you found before you change anything:
 1. Find where an order, cart, booking or plan is created and where prices come from.
 2. Add the server-side payment creation, the redirect to checkout_url, and the webhook route with signature verification.
-3. Add PLINTH_API_URL, PLINTH_SECRET_KEY and PLINTH_WEBHOOK_SECRET to .env.example. Use test keys only.
+3. Add PLINTH_API_URL, PLINTH_SECRET_KEY and PLINTH_WEBHOOK_SECRET to the project's env template (and document them there). Use test keys only.
 4. Test it on a test network: a real order total is charged, the order flips to paid from the webhook only, a bad signature is rejected, a replayed event is ignored.
 5. Finish with a short list: files changed, env vars to set, how to run the test.`;
 }

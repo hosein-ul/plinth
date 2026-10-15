@@ -55,7 +55,7 @@ curl -X POST $PLINTH_API/v1/payment-intents \\
 curl -X POST $PLINTH_API/v1/webhook-endpoints \\
   -H "Authorization: Bearer $PLINTH_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{ "url": "https://shop.example/plinth/webhook", "events": ["payment.confirmed", "payment.completed"] }'`;
+  -d '{ "url": "https://YOUR_DOMAIN/plinth/webhook", "events": ["payment.confirmed", "payment.completed"] }'`;
 
 const NODE = `import crypto from "node:crypto";
 import express from "express";

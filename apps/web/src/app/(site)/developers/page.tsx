@@ -15,6 +15,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { STATUS_META } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
+import { PUBLIC_API_URL } from "@/lib/config";
 export const metadata = pageMeta({ title: "Developers", description: "The Plinth REST API, signed webhooks, payment states and a testnet sandbox. Quickstart in cURL.", path: "/developers" });
 
 const NAV = [
@@ -63,7 +64,7 @@ const RULES: [string, React.ReactNode][] = [
 ];
 
 const SECTION = "scroll-mt-32";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+const API_BASE = PUBLIC_API_URL;
 
 export default function DevelopersPage() {
   return (
@@ -88,7 +89,7 @@ export default function DevelopersPage() {
                 <p className="max-w-2xl text-[0.9375rem] text-ink-2">
                   Create a test account, then open <b className="font-medium text-ink">API keys</b> in the dashboard for a secret key (<C>sk_test_…</C>) and <b className="font-medium text-ink">Webhooks</b> for an endpoint secret. Keep both on your server, as environment variables.
                 </p>
-                <Code label=".env">{`PLINTH_API_URL=${API_BASE ?? "https://your-plinth-api.example"}
+                <Code label=".env">{`PLINTH_API_URL=${API_BASE}
 PLINTH_SECRET_KEY=sk_test_...
 PLINTH_WEBHOOK_SECRET=whsec_...`}</Code>
               </li>
@@ -108,7 +109,7 @@ PLINTH_WEBHOOK_SECRET=whsec_...`}</Code>
   "currency": "USDC",
   "order_reference": "order-1042",
   "checkout_url": "${SITE_URL}/pay/pi_9e78c740ce82e30fdbed754ad9a97ea6",
-  "success_url": "https://shop.example/thanks",
+  "success_url": "https://YOUR_DOMAIN/thanks",
   "expires_at": "2026-10-14T14:48:00.720Z",
   "networks": [{
     "network": "arc-testnet",

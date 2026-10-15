@@ -96,7 +96,7 @@ const CASES: UseCase[] = [
     ],
     objects: [
       ["team member", <>email, role (OWNER, ADMIN, DEVELOPER, VIEWER)</>],
-      ["api key", <><C>sk_test_</C> for testnets, <C>sk_live_</C> for mainnets; shown once, rotatable</>],
+      ["api key", <>a test key for testnets, a live key for mainnets; shown once, rotatable</>],
       ["webhook endpoint", <>https only; signed with <C>Plinth-Signature</C>; manual retry from the log</>],
     ],
     limit: "Each account is isolated. There is no multi-account console for agencies yet.",
