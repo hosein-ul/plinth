@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | [architecture.md](architecture.md) | engineers | Contracts and trust boundaries, counterfactual addresses, payment lifecycle, relayer, networks, fee and tokens, payout modes, custody |
 | [api-guide.md](api-guide.md) + [openapi.json](openapi.json) | integrators | Authentication, idempotency, payments, webhooks, refunds, payout methods, custody, settlement policy |
-| [mcp.md](mcp.md) | integrators using an AI assistant | The MCP server: install, tools, inputs, errors, safety |
+| [mcp.md](mcp.md) | integrators using an AI assistant | The hosted MCP server: one URL and a key, all 29 tools, inputs, errors, security |
 | [networks.md](networks.md) | operators | All 26 registry networks, how each fact was verified, what is pending and why, spending limits |
 | [operations.md](operations.md) | operators | Processes, secrets, every configuration variable, alerts, emergency stop, procedures (treasury rotation, adding a token) |
 | [threat-model.md](threat-model.md) | security | Assets, actors, mitigations, what a compromised backend can and cannot do, payout and custody trade-offs |

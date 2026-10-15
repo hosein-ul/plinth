@@ -87,3 +87,8 @@ Only where an operator turned custody on. `POST /v1/payout-methods/challenge` wi
 * `PATCH /v1/custody/schedule {network, token?, schedule: MANUAL|DAILY|WEEKLY, min_amount?, reauth}`: automatic payout of the whole balance in one transfer per period.
 
 Refunds of a custodial payment are not supported yet (`REFUND_UNSUPPORTED_CUSTODIAL`). Payments show `payout_routes[].mode = "CUSTODIAL"`.
+
+## 8 · MCP server (for AI assistants)
+
+The API also serves a hosted **MCP** endpoint at `POST /mcp` (Streamable HTTP, stateless), authenticated with the same `Authorization: Bearer sk_...` key. It exposes 29 tools over the endpoints above (payments, links, invoices,
+refunds, webhooks, reports) and none that change payout destinations, custody, keys or team. It is not part of `openapi.json` (it speaks JSON-RPC). See [mcp.md](mcp.md).

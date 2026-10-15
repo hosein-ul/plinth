@@ -8,6 +8,9 @@ import { SITE_URL } from "@/lib/site";
 
 export { API_FACTS };
 
+/** The hosted MCP server. It is part of the Plinth API, so it lives next to it; override with NEXT_PUBLIC_MCP_URL for another deployment. */
+export const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? "https://plinth-api.onrender.com/mcp";
+
 export const LLMS_TXT = `# Plinth
 
 > Non-custodial stablecoin payment gateway (USDC, and EURC on Arc). Your app asks for a payment with each order's real total; the customer pays with a wallet or to a unique address; funds settle, minus a 0.20% platform fee, into a vault only the merchant can withdraw from or into the merchant's own payout wallet. Test networks only today; contracts are not yet independently audited.
@@ -16,7 +19,7 @@ export const LLMS_TXT = `# Plinth
 - [Integration playbook and API guide](${SITE_URL}/llms-full.txt): how to add Plinth checkout to an existing project
 - [Build with AI](${SITE_URL}/build-with-ai): connect an assistant, or paste one prompt
 - OpenAPI 3.1 document: served by a running Plinth API at /v1/openapi.json
-- MCP server (stdio): tools create_payment, get_payment, list_payments, create_payment_link, list_networks, get_integration_playbook
+- MCP server (hosted, Streamable HTTP): ${MCP_URL}  (header: Authorization: Bearer sk_test_...). 29 tools: payments, payment links, invoices, refunds, webhooks, reports and get_integration_playbook
 
 ## Key facts
 ${API_FACTS.map((f) => `- ${f}`).join("\n")}
@@ -26,8 +29,8 @@ ${API_FACTS.map((f) => `- ${f}`).join("\n")}
 - Payment links and invoices: one fixed price, shared as a link. No code.
 
 ## Status
-- Available: REST API, signed webhooks, payment links, invoices, hosted checkout, dashboard, sandbox on test networks, MCP server (run from the repository).
-- Planned, not built: a published npm package for the MCP server, published SDKs, starter templates beyond the chat bot.
+- Available: REST API, signed webhooks, payment links, invoices, hosted checkout, dashboard, sandbox on test networks, hosted MCP server.
+- Planned, not built: published SDKs, starter templates beyond the chat bot.
 `;
 
 export const LLMS_FULL = `# Plinth: add USDC payments to a project (plain text for AI assistants)
