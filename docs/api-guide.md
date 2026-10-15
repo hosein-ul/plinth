@@ -75,3 +75,15 @@ Forwarding modes activate after the vault's delay; a permissionless call applies
 
 `GET /public/checkout/{id}` · `POST …/wallet/prepare` · `POST …/wallet/submit` · `GET …/wallet/attempts/{attemptId}`; links: `GET /public/links/{slug}`,
 `POST /public/links/{slug}/checkout`. Rate-limited; signatures are never logged or echoed.
+
+## 7 · Custody (custodial payouts, off by default)
+
+Only where an operator turned custody on. `POST /v1/payout-methods/challenge` with `purpose: "CUSTODY_WITHDRAWAL"` and `POST /v1/payout-methods/wallet` with `mode: "CUSTODIAL"` register a
+**withdrawal wallet** (same proof, email link and cooldown as a direct payout wallet). New payments then settle to the platform's custody wallet and the net amount (minus the fee) is credited to your balance.
+
+* `GET /v1/custody`: per network and token, `balance`, `pending_withdrawals`, `schedule` and `withdrawal_wallet`. Amounts of different tokens are never added.
+* `POST /v1/custody/withdrawals {network, token?, amount?, reauth}` with an `Idempotency-Key` header: sends to your withdrawal wallet only (omit `amount` for everything). Sessions only; needs a fresh sign-in.
+* `GET /v1/custody/withdrawals`: `REQUESTED`, `SUBMITTED`, `CONFIRMED` or `FAILED` (a failed one is credited back).
+* `PATCH /v1/custody/schedule {network, token?, schedule: MANUAL|DAILY|WEEKLY, min_amount?, reauth}`: automatic payout of the whole balance in one transfer per period.
+
+Refunds of a custodial payment are not supported yet (`REFUND_UNSUPPORTED_CUSTODIAL`). Payments show `payout_routes[].mode = "CUSTODIAL"`.

@@ -31,6 +31,19 @@
 Migrations 0002 to 0005 add the expiry default, fee and payout tables, verified email and the token columns. Set `RUN_MIGRATIONS=true` on the API service (Render) for the
 release that includes them, then check the service logs.
 
+### Custody (custodial payouts)
+
+Off by default. A mainnet must not use it until the owner has approved it in writing.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `CUSTODY_ENABLED` | false | Turns the custodial payout mode on for networks that also have a key. |
+| `ALLOW_CUSTODY_MAINNET` | false | Needed in addition on a mainnet. |
+| `CUSTODY_PRIVATE_KEY`, `CUSTODY_PRIVATE_KEY_<NETWORK>` | none | The custody wallet's key. Must differ from the relayer key and the treasury. Refused from the environment in production unless `ALLOW_ENV_SIGNER_IN_PRODUCTION=true`; implement `SignerProvider.getCustodySigner` against a KMS instead. |
+
+Fund the custody address with gas only as needed (alert `custody-gas-low:<net>`). Alerts: `custody-insolvent:<net>:<token>` (critical; withdrawals for that token are paused; compare the on-chain balance with the sum of `CUSTODY_BALANCE`),
+`custody-withdrawal-failed:<id>`, `custody-stuck:<id>`, `custody-fee-cap:<net>`. Reconciliation: the custody wallet's token balance must be at least the sum of merchants' `CUSTODY_BALANCE` plus withdrawals in `SUBMITTED`.
+
 ### Treasury and fee rotation
 
 The treasury address is an **immutable** of each `InvoiceDeposit` implementation (and of the router). Rotating it is a new contract version, not a setting:

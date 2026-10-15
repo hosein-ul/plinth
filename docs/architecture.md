@@ -114,3 +114,27 @@ TOKEN, CHAIN_ID, VERSION, TREASURY and MAX_FEE_BPS back from every deployed cont
 sources in the registry). USYC (permissioned), cirBTC and WETH (volatile, different decimals) are deliberately not supported. A payment is created in
 one token; its address, vault, router, ledger rows, amounts and webhooks all name that token. Gasless wallet checkout is used only for a token whose
 `receiveWithAuthorization` was probed (`pnpm verify:networks`); otherwise the address flow is the way to pay.
+
+## 10. Custodial payout mode (off by default)
+
+A third way to be paid, next to the vault and direct payouts: the **platform holds the balance** and the merchant withdraws it in crypto, like the custodial mode of
+other gateways. It is a different trust model, and it is disabled unless `CUSTODY_ENABLED=true`; on a mainnet it also needs `ALLOW_CUSTODY_MAINNET=true`, which
+nobody should set without the owner's explicit approval.
+
+* **On-chain** nothing changes: the invoice address is a normal `DestinationKind.DIRECT` address whose destination is the network's **custody wallet** (a key separate from the
+  relayer and from the treasury, `SignerProvider.getCustodySigner`, `CUSTODY_PRIVATE_KEY[_<NETWORK>]`). `custodial` is committed with the route and the address
+  (`payment_intent_routes.custodial`, `invoice_addresses.custodial`), so a later change of mode affects only new invoices. Fee and expiry work as in every mode.
+* **Ledger.** A final payment on a custodial route credits `SETTLED_TO_CUSTODY` and `CUSTODY_BALANCE` with the net amount (amount minus fee). The balance of a merchant, network
+  and token is the sum of `CUSTODY_BALANCE` credits minus debits. Reorgs reverse the credits by reference, as for every other account.
+* **Withdrawal wallet.** The merchant's `payout wallet` row has `mode = CUSTODIAL` and its `address` is the **withdrawal** wallet. It uses the same flow as a direct payout wallet:
+  verified email, fresh re-authentication, an EIP-4361 proof with its own statement ("withdraw your Plinth custody balance", purpose `CUSTODY_WITHDRAWAL`), an emailed single-use
+  link and the cooldown. The proof is re-verified before every address is issued and before every withdrawal. Withdrawals go only to the newest confirmed custodial
+  wallet whose cooldown has passed, even if the active mode has changed since. The custody wallet, the relayer and the treasury can never be named as a withdrawal wallet.
+* **Withdrawals** (`custody_withdrawals`: REQUESTED, SUBMITTED, CONFIRMED, FAILED; MANUAL or SCHEDULED). A request needs a fresh sign-in, is idempotent per key, and debits the
+  ledger in the same transaction that creates it (serialised per merchant). `custodyTick` (called by the worker) reconciles sent withdrawals by receipt, sends **one withdrawal in flight per
+  network** (simulate first, honour the per-transaction fee cap and the minimum gas balance, persist the signed transaction before broadcasting), and credits a failed or reverted
+  withdrawal back exactly once. Scheduled payouts (`custody_settings`: DAILY or WEEKLY, minimum amount) send the whole balance in one transfer per period.
+* **Solvency.** Each tick compares the custody wallet's on-chain token balance with what is owed (all balances plus withdrawals still in flight). If it holds less, that token's withdrawals
+  are paused and a critical alert `custody-insolvent:<network>:<token>` is raised until it does not.
+* **Not done:** refunds of custodial payments (refused with `REFUND_UNSUPPORTED_CUSTODIAL`; the merchant has no account to refund from), a KMS signer for the custody key, merchant-facing
+  statements, per-merchant withdrawal limits, an operator tool to reconcile the custody wallet against the ledger beyond the solvency check.

@@ -138,6 +138,7 @@ export default function SecurityPage() {
             <li>Wallet checkout supports ordinary accounts; smart-contract wallets need an EIP-1271 path that is not built yet.</li>
             <li>Native-currency transfers to a deposit address on Arc are not event-detected; they surface through balance reconciliation only.</li>
             <li>Stablecoin issuers can block addresses; a blocked vault, payout wallet or invoice address cannot receive or sweep funds.</li>
+            <li>A <strong className="font-semibold">custodial</strong> payout mode, where Plinth holds the balance and you withdraw it, exists in the code but is switched off and is not offered. Where it is ever enabled, the gateway does hold a key that can move funds.</li>
             <li>Payout wallets must be ordinary accounts (no contract code), and the Plinth treasury is assumed to be an ordinary account too.</li>
             <li>No live public-testnet acceptance run has been recorded yet, and no SOC 2, ISO or similar certification exists.</li>
           </ul>

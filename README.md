@@ -28,6 +28,8 @@ key that can move merchant funds.
   transfer fails the merchant gets the full amount (`FeeSkipped`). The fee is not refunded.
 * **Payout modes** — vault (owner-only, delayed policy changes) or direct to a payout wallet, which needs a verified email, a wallet
   signature, an emailed confirmation link and a cooldown. Direct mode has no vault timelock: the payout wallet is a hot destination.
+  A third, **custodial** mode (the platform holds the balance and the merchant withdraws) exists in the code but is **off by default** and must not be
+  used on a mainnet without the owner's explicit approval; in that mode the gateway does hold a key that can move funds.
 * **Merchant vault** — non-upgradeable; the only authority is its `owner`. Settlement modes `BALANCE_IN_VAULT` (default),
   `INSTANT_FORWARD`, `THRESHOLD_OR_PERIODIC` pay only an owner-authorised destination, activated after an owner-chosen delay.
 * **Wallet checkout** — customer signs EIP-3009 `receiveWithAuthorization` to a stateless `PaymentRouter`; any relayer submits it. The nonce

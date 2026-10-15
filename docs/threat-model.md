@@ -57,7 +57,23 @@ separate signing service for route commitments, merchant-pinned addresses) are n
 | Wallet-only accounts (no real email) | Must add and verify an email first; Google sign-in counts as verified, a placeholder address never does |
 | Refunds in Direct mode need custody | They do not: a refund is a transfer the merchant signs from the account that received the funds (vault or payout wallet); the proof checks `Transfer(from=that account, to=recipient, value)` of the payment's token, capped at the net amount |
 
-## Accounting integrity
+## Custodial mode (a trust change)
+
+In every other mode the gateway holds no key that can move merchant funds. **In custodial mode it does**: the custody wallet's key can move everything merchants hold there, and merchants trust the
+platform to keep the ledger honest and to pay out. Custody is off by default and must stay off on a mainnet until the owner has approved it, an independent audit covers it and the key is in a KMS.
+
+| Threat | Mitigation | Remaining risk |
+| --- | --- | --- |
+| Custody key theft | Separate key from the relayer and the treasury; env key refused in production without an explicit override; per-network key; a withdrawal can only be signed for a merchant's proven wallet | The key is a hot key on the server. A theft empties the wallet. Use a KMS/HSM and keep the wallet's balance small (scheduled payouts) |
+| Withdrawal redirected | Destination is never in the request; it is the newest confirmed custodial wallet, re-verified against its stored EIP-4361 signature at request time | A compromised API process can still create a new withdrawal wallet record and sign proofs |
+| A stolen session drains the balance | Withdrawal and schedule changes need a fresh re-authentication; a new withdrawal wallet needs verified email, a signature, the emailed link and the cooldown; every request emails the owner | Within the cooldown window an attacker with email access can still win |
+| Double spend of a balance | Ledger debit in the same DB transaction, serialised per merchant; idempotency key per request; one transfer in flight per network; a failure credits back once | Database corruption or manual edits |
+| Insolvency (wallet holds less than owed) | Solvency check every tick, per token; withdrawals pause and a critical alert fires | The check cannot prevent a theft, only stop paying out against a hole |
+| Issuer blocks the custody wallet or the recipient | A transfer that would revert is failed and credited back; a blocked custody wallet stops all payouts for that token | Funds in a blocked wallet are frozen by the issuer |
+| Refunds | Refunds of custodial payments are refused for now | Merchants must be refunded by support |
+
+Because payments are sent to a platform address, a **compromised backend can also redirect new custodial payments to itself**, exactly as it can hand out new addresses in the other modes (see above).
+
 
 | Threat | Mitigation |
 | --- | --- |
