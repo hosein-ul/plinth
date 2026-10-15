@@ -48,9 +48,6 @@ export function ChatHero() {
 
         <div className="relative z-10 select-none">
           <div aria-hidden className="pointer-events-none absolute left-1/2 top-[42%] -z-10 size-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#26a5e4]/25" style={{ boxShadow: "0 0 0 4.5rem rgb(38 165 228 / 0.05), 0 0 0 9rem rgb(38 165 228 / 0.03)" }} />
-          <div className="absolute -left-2 top-6 z-20 grid size-[5.5rem] place-items-center rounded-[1.6rem] bg-white shadow-float ring-1 ring-black/5 sm:-left-8 sm:size-[7.5rem] sm:rounded-[2.2rem] lg:-left-4 xl:-left-14">
-            <TelegramMark size={72} className="size-[3.4rem] sm:size-[4.75rem]" />
-          </div>
           <ChatPhone />
         </div>
       </div>

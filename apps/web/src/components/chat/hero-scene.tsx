@@ -3,7 +3,6 @@ import { FitBox } from "@/components/marketing/fit-box";
 import { CheckoutWindow } from "@/components/marketing/hero-visuals";
 import { usePhonePhase } from "@/components/marketing/iphone-checkout";
 import { ChatPhone } from "@/components/chat/chat-phone";
-import { TelegramMark } from "@/components/chat/telegram-mark";
 
 /**
  * Two channels, one engine: the hosted checkout in a desktop browser (a shop, a payment link, your own site) next to the same
@@ -18,9 +17,6 @@ export function HeroScene() {
       <div className="absolute left-0 top-[160px]" style={{ animation: "scene-float 8s ease-in-out infinite alternate" }}><CheckoutWindow phase={phase} /></div>
       <div className="absolute left-[440px] top-0" style={{ animation: "scene-float 7s ease-in-out -2s infinite alternate" }}>
         <ChatPhone />
-        <div className="absolute -left-12 top-10 z-20 grid size-[6.25rem] place-items-center rounded-[2rem] bg-white shadow-float ring-1 ring-black/5">
-          <TelegramMark size={64} />
-        </div>
       </div>
     </FitBox>
   );
