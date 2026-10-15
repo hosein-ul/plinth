@@ -42,8 +42,8 @@ export function ChatHero() {
             In a chat, a Mini App, a web shop or a plain link, Plinth charges every order automatically, in USDC, on the network your customer already uses. The money lands in a vault only you can open.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/signup" className={`${buttonStyles({ variant: "primary", size: "lg" })} h-12 px-5`}>Try the sandbox<ArrowRight className="size-4" aria-hidden /></Link>
-            <Link href={DEMO_HREF} className="inline-flex h-12 items-center rounded-ctl border border-line-strong bg-raised px-5 text-[0.9375rem] font-medium text-ink shadow-ctl transition-colors hover:bg-wash">Open the live demo</Link>
+            <Link href="/signup" className={`${buttonStyles({ variant: "primary", size: "lg" })} h-12 px-5`}>Get started<ArrowRight className="size-4" aria-hidden /></Link>
+            <Link href={DEMO_HREF} className="inline-flex h-10 items-center rounded-ctl border border-line-strong bg-raised px-4 text-sm font-medium text-ink-2 shadow-ctl transition-colors hover:bg-wash hover:text-ink">Live demo</Link>
           </div>
           <ul className="mt-10 grid max-w-[31rem] gap-3 text-sm text-ink-2 sm:grid-cols-3 sm:gap-4">
             {POINTS.map(([I, t]) => <li key={t} className="flex items-start gap-2"><I className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden />{t}</li>)}
