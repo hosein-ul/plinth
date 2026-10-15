@@ -9,7 +9,6 @@ import { wrap } from "@/components/marketing/parts";
 import { cn } from "@/lib/cn";
 
 const QA: [string, string][] = [
-  ["Do I need TON or a Telegram-specific coin?", "No. Customers pay in USDC (or EURC on Arc) on whichever network they already use, from any wallet. Plinth does not depend on Telegram's own payment system or on TON."],
   ["Can I use it inside a Mini App?", "The checkout is a normal web page, so a Mini App can open it, and your server is told by a signed message when it is paid. It has not been tuned for Mini App themes yet, and there is no dedicated Mini App component today."],
   ["Does Telegram allow this?", "Telegram sets its own rules for what may be sold inside Mini Apps, especially digital goods on phone app stores. Check the current rules for your case. Plinth links also work in plain chat messages and in an ordinary browser."],
   ["Who holds the money?", "Nobody in between. Each invoice has its own address, and funds are swept from it into a vault that only your wallet can withdraw from. Plinth runs the relayer that pays the network fee for the sweep, and that relayer cannot choose a destination or withdraw."],

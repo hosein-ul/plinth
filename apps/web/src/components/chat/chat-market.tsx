@@ -4,7 +4,6 @@ import { ChainIcon, LogoMark, TokenIcon } from "@/components/brand";
 import { Band } from "@/components/marketing/band";
 import { Reveal, RevealHeading } from "@/components/marketing/motion/reveal";
 import { wrap } from "@/components/marketing/parts";
-import { Chip } from "@/components/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { TelegramMark } from "@/components/chat/telegram-mark";
 import { cn } from "@/lib/cn";
@@ -84,36 +83,6 @@ export function ChatGap() {
             </div>
           </div>
         </Reveal>
-      </div>
-    </Band>
-  );
-}
-
-/* ── where we are, honestly ────────────────────────────────────────────────────────────────── */
-const COLS: { title: string; tone: "ok" | "info" | "neutral"; label: string; items: string[] }[] = [
-  { title: "Built and tested", tone: "ok", label: "Now", items: ["Gateway API with idempotent, per-order payments", "Hosted checkout: wallet or address, gasless where the network allows", "Non-custodial vaults and invoice contracts, tested with fuzzing and real-bytecode forks", "Signed, retried webhooks and a merchant dashboard", "An MCP server and an AI kit for adding it to an existing project"] },
-  { title: "Next, in this order", tone: "info", label: "Gates", items: ["A live run on a public testnet, end to end", "The API hosted, so sign-in and the dashboard work on this site", "Design partners among Telegram sellers and Mini App developers, to learn what they actually need", "An independent audit of the contracts", "A checkout made for Mini Apps: theme, back button, haptics"] },
-  { title: "Only after the gates", tone: "neutral", label: "Later", items: ["Mainnet, switched on network by network with a recorded approval", "A published package for the MCP server, and SDKs", "More networks, each probed before it is enabled"] },
-];
-
-export function ChatStage() {
-  return (
-    <Band tone="light" labelledBy="stage-h" className="grid-paper [--grid-x:85%] [--grid-y:15%]">
-      <div className={wrap}>
-        <RevealHeading id="stage-h" as="h2" mode="line" className="t-1 max-w-3xl text-ink" parts={[["Where we are, and what comes next.", ""], ["No customers yet. A product that works, and a plan with gates.", "text-ink-4"]]} />
-        <div className="mt-12 grid gap-4 lg:grid-cols-3">
-          {COLS.map((c, i) => (
-            <Reveal key={c.title} delay={i * 0.08} className="min-w-0">
-              <div className="flex h-full flex-col rounded-[1.75rem] border border-line bg-raised p-6 shadow-low sm:p-7">
-                <div className="flex items-center justify-between"><h3 className="text-[1.25rem] font-medium tracking-[-0.025em] text-ink">{c.title}</h3><Chip tone={c.tone}>{c.label}</Chip></div>
-                <ul className="mt-5 space-y-3">
-                  {c.items.map((t) => <li key={t} className="flex gap-3 text-[0.9375rem] text-ink-2"><span aria-hidden className={cn("mt-2 size-1.5 shrink-0 rounded-full", c.tone === "ok" ? "bg-signal" : c.tone === "info" ? "bg-info" : "bg-ink-4")} />{t}</li>)}
-                </ul>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-        <p className="mt-6 max-w-3xl text-sm text-ink-3">The contracts have not been independently audited and nothing here runs on mainnet. Read the <Link href="/security" className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink">security model</Link> and the <Link href="/legal/risk-disclosure" className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink">risks</Link>.</p>
       </div>
     </Band>
   );

@@ -103,7 +103,7 @@ export default function SecurityPage() {
             </div>
           </div>
           <p className="mt-8 max-w-2xl text-sm text-ink-3">
-            Longer write-ups ship in the repository: <C>docs/architecture.md</C>, <C>docs/threat-model.md</C> and <C>docs/verification.md</C> (what was tested and what was not). There is no hosted copy of those documents yet.
+            Longer write-ups ship in the repository: <C>docs/architecture.md</C> and <C>docs/verification.md</C> (what was tested and what was not). There is no hosted copy of those documents yet.
           </p>
         </Section>
 
