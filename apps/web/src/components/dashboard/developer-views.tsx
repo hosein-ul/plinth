@@ -15,7 +15,8 @@ import { useAction, useApi } from "@/lib/hooks";
 import Link from "next/link";
 import { useHref } from "@/lib/data-source";
 import { cap, CheckRow, ConfirmDialog, Ledger, SecretReveal } from "./parts-account";
-
+
+import { PUBLIC_API_URL } from "@/lib/config";
 export function ApiKeysView() {
   const q = useApi<any>("/v1/api-keys");
   const me = useApi<any>("/v1/me");
@@ -27,12 +28,12 @@ export function ApiKeysView() {
   const create = useAction(() => apiFetch<any>("/v1/api-keys", { method: "POST", body: { name, environment: env } }), { invalidate: ["/v1/api-keys"], onSuccess: setFresh });
   const rotate = useAction((id: string) => apiFetch<any>(`/v1/api-keys/${id}/rotate`, { method: "POST" }), { invalidate: ["/v1/api-keys"], onSuccess: (o) => { setFresh(o); setOpen(true); } });
   const revoke = useAction((id: string) => apiFetch(`/v1/api-keys/${id}`, { method: "DELETE" }), { invalidate: ["/v1/api-keys"], success: "Key revoked", onSuccess: () => setRevoking(null) });
-  const api = process.env.NEXT_PUBLIC_API_URL ?? "https://api.your-plinth-host.example";
+  const api = PUBLIC_API_URL;
   const snippet = `curl -X POST ${api || "$PLINTH_API"}/v1/payment-intents \\
   -H "Authorization: Bearer sk_${env}_…" \\
-  -H "Idempotency-Key: order-1042" \\
+  -H "Idempotency-Key: ORDER_ID" \\
   -H "Content-Type: application/json" \\
-  -d '{"amount":"25.00","order_reference":"order-1042"}'`;
+  -d '{"amount":"25.00","order_reference":"ORDER_ID"}'`;
   return (
     <>
       <PageHeader

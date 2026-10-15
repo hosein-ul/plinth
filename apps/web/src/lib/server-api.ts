@@ -1,7 +1,8 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { required } from "./config";
 
-export const API_URL = (process.env.API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+export const API_URL = required("API_URL", process.env.API_URL);
 export const SESSION_COOKIE = "plinth_session";
 export const ENV_COOKIE = "plinth_env";
 

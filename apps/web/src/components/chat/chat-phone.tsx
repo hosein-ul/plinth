@@ -45,7 +45,7 @@ export function ChatPhone({ className }: { className?: string }) {
                 <div className="cp max-w-[88%] rounded-2xl rounded-bl-md bg-raised p-3 shadow-low" style={{ animationName: "cp-m3" }}>
                   <p className="text-[12.5px] font-medium">Order confirmed.</p>
                   <p className="mt-0.5 text-[11.5px] text-ink-3">We are packing it now.</p>
-                  <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-sunk px-2.5 py-1.5 font-mono text-[10.5px] text-ink-2"><Send className="size-3" aria-hidden />tracking.example/1042</p>
+                  <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-sunk px-2.5 py-1.5 font-mono text-[10.5px] text-ink-2"><Send className="size-3" aria-hidden />Receipt sent</p>
                 </div>
               </div>
 

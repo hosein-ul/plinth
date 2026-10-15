@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 
 /** Public origin used for canonical URLs, Open Graph and the sitemap. Set NEXT_PUBLIC_SITE_URL in production. */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+export { SITE_URL } from "./config";
+import { SITE_URL } from "./config";
 
 /** Date the draft legal pages were last edited. Update when their text changes. */
 export const LEGAL_UPDATED = "2026-10-11";

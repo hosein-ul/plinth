@@ -40,7 +40,7 @@ export function AssetsNetworks() {
           </div>
           <RevealHeading as="h2" id="assets-h" className="t-1 mt-6 text-ink" parts={[["One token.", ""], ["Official contracts only.", "text-ink-4"]]} />
           <Reveal delay={0.1}>
-            <p className="mt-5 max-w-md text-lg text-ink-2">Built for {mainnets.length} networks with native USDC. {testnets.length} testnets run today; each mainnet opens after its own on-chain check and the audit.</p>
+            <p className="mt-5 max-w-md text-lg text-ink-2">Built for {mainnets.length} networks with native USDC. Arc mainnet is live. The other {mainnets.length - 1} mainnets open one by one, each after its own on-chain check, and {testnets.length} testnets run alongside.</p>
             <p className="mt-3 max-w-md text-[0.9375rem] text-ink-3">
               Each network&apos;s USDC address comes from Circle&apos;s published list and is probed on-chain before the network can be enabled. A look-alike token is recorded and ignored, never credited.
             </p>

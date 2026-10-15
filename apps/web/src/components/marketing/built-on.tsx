@@ -44,7 +44,7 @@ export function BuiltOn() {
             {/* Arc: where it runs first */}
             <div className="flex flex-col p-6 sm:p-7">
               <div className="flex h-11 items-center"><img src="/brand/partners/arc-logo.svg" alt="Arc" width={500} height={171} className="h-11 w-auto" /></div>
-              <p className="mt-5 text-[0.9375rem] text-ink-2">Circle&apos;s own blockchain, and where Plinth runs first. USDC pays the network fee, and a payment is final after one confirmation.</p>
+              <p className="mt-5 text-[0.9375rem] text-ink-2">Circle&apos;s own blockchain, and where Plinth is live on mainnet. USDC pays the network fee, and a payment is final after one confirmation.</p>
             </div>
 
             {/* Web3Auth: the way in */}

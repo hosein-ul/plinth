@@ -4,6 +4,7 @@ import { createConfig, http, WagmiProvider } from "wagmi";
 import { coinbaseWallet, injected, walletConnect } from "wagmi/connectors";
 import { defineChain, type Chain } from "viem";
 
+import { SITE_URL } from "@/lib/config";
 /** WalletConnect is offered only when a project id is configured (https://cloud.reown.com). Never render a broken option. */
 export const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim() || "";
 export const WALLETCONNECT_ENABLED = WALLETCONNECT_PROJECT_ID.length > 0;
@@ -47,7 +48,7 @@ export function WalletProvider({ networks, children }: { networks: NetInfo[]; ch
         injected(),
         coinbaseWallet({ version: "4", appName: "Plinth", preference: "all" }),
         ...(WALLETCONNECT_ENABLED
-          ? [walletConnect({ projectId: WALLETCONNECT_PROJECT_ID, showQrModal: false, metadata: { name: "Plinth", description: "Non-custodial USDC payments", url: typeof window === "undefined" ? "https://plinth.invalid" : window.location.origin, icons: [] } })]
+          ? [walletConnect({ projectId: WALLETCONNECT_PROJECT_ID, showQrModal: false, metadata: { name: "Plinth", description: "Non-custodial USDC payments", url: typeof window === "undefined" ? SITE_URL : window.location.origin, icons: [] } })]
           : []),
       ],
       ssr: true,

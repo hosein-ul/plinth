@@ -7,7 +7,8 @@ import { FitBox } from "@/components/marketing/fit-box";
 import { IPhone, usePhonePhase } from "@/components/marketing/iphone-checkout";
 import { useReduced } from "@/components/marketing/motion/use-reduced";
 import { cn } from "@/lib/cn";
-
+
+import { CHECKOUT_HOST } from "@/lib/config";
 const NETS: [string, string][] = [
   ["arc-mainnet", "Arc"],
   ["base-mainnet", "Base"],
@@ -25,7 +26,7 @@ export function CheckoutWindow({ phase }: { phase: number }) {
     <div className="w-[468px] overflow-hidden rounded-[20px] border border-line-strong bg-ground shadow-float">
       <div className="flex items-center gap-2 border-b border-line bg-raised px-4 py-2.5">
         <span className="flex gap-1.5"><i className="size-2.5 rounded-full bg-line-strong" /><i className="size-2.5 rounded-full bg-line-strong" /><i className="size-2.5 rounded-full bg-line-strong" /></span>
-        <span className="mx-auto flex h-6 w-[220px] items-center justify-center gap-1.5 rounded-md bg-sunk font-mono text-[10.5px] text-ink-3"><Lock className="size-2.5" aria-hidden />pay.plinth.app/pi_9c1e…</span>
+        <span className="mx-auto flex h-6 w-[220px] items-center justify-center gap-1.5 rounded-md bg-sunk font-mono text-[10.5px] text-ink-3"><Lock className="size-2.5" aria-hidden />{CHECKOUT_HOST}/pay/…</span>
         <span className="w-[42px]" />
       </div>
       <div className="grid grid-cols-[158px_1fr] gap-2.5 p-3">
