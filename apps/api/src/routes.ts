@@ -3,7 +3,7 @@ import { getAddress, type Hex } from "viem";
 import { and, eq, schema, sql } from "@plinth/db";
 import {
   createApiKeySchema, createInvoiceSchema, createPaymentIntentSchema, createPaymentLinkSchema, createRefundRequestSchema, createWebhookEndpointSchema,
-  emailChangeSchema, emailConfirmSchema, enableNetworkSchema, loginSchema, merchantFeeSchema, payoutChallengeSchema, payoutConfirmSchema, payoutVaultSchema, payoutWalletSchema, web3authSchema, TOKEN_SYMBOLS, type TokenSymbol, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
+  custodyScheduleSchema, custodyWithdrawalSchema, emailChangeSchema, emailConfirmSchema, enableNetworkSchema, loginSchema, merchantFeeSchema, payoutChallengeSchema, payoutConfirmSchema, payoutVaultSchema, payoutWalletSchema, reauthSchema, web3authSchema, TOKEN_SYMBOLS, type TokenSymbol, selectAddressNetworkSchema, signupSchema, submitRefundProofSchema, txHashSchema, walletPrepareSchema, walletSubmitSchema, WEBHOOK_EVENT_TYPES,
 } from "@plinth/shared";
 import * as E from "@plinth/engine";
 import type { Engine } from "@plinth/engine";
@@ -237,6 +237,27 @@ export function buildRoutes(e: Engine): RouteDef[] {
       method: "POST", path: "/public/payout/confirm", tag: "Payout methods", summary: "Use the link from a payout confirmation email", auth: "none", body: payoutConfirmSchema, rateLimit: 20,
       description: "Single use. The web app opens this from `/confirm-payout?token=…`. Starts the cooldown.",
       handler: async ({ body }) => E.confirmPayoutLink(e, body.token),
+    }),
+
+    // ------------------------------------------------------------------ custody (custodial payouts)
+    route({
+      method: "GET", path: "/v1/custody", tag: "Custody", summary: "Custody balances per network and token, and where they can be withdrawn", auth: "merchant",
+      description: "Only meaningful for merchants in the custodial payout mode, where the platform holds the balance. `available` is false on networks where custody is switched off. Amounts are in each token's own units; they are never added across tokens.",
+      handler: async ({ auth }) => list(await E.listCustody(e, A(auth))),
+    }),
+    route({
+      method: "POST", path: "/v1/custody/withdrawals", tag: "Custody", summary: "Withdraw your custody balance to your proven withdrawal wallet", auth: "session", body: custodyWithdrawalSchema, rateLimit: 10, successStatus: 201,
+      description: "Needs a fresh sign-in (`reauth`). Send an `Idempotency-Key` header: repeating the same key returns the same withdrawal. Omit `amount` to withdraw everything. The destination is never chosen in the request: it is the withdrawal wallet you proved and confirmed by email.",
+      handler: async ({ auth, body, req }) => E.requestWithdrawal(e, A(auth), { ...body, idempotencyKey: typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"] : undefined }),
+    }),
+    route({
+      method: "GET", path: "/v1/custody/withdrawals", tag: "Custody", summary: "Your custody withdrawals", auth: "merchant", query: z.object({ limit: limitQ }),
+      handler: async ({ auth, query }) => list(await E.listWithdrawals(e, A(auth), query.limit)),
+    }),
+    route({
+      method: "PATCH", path: "/v1/custody/schedule", tag: "Custody", summary: "Set automatic payouts of a custody balance", auth: "session", body: custodyScheduleSchema.extend({ reauth: reauthSchema }), rateLimit: 10,
+      description: "MANUAL, DAILY or WEEKLY. A scheduled payout sends the whole balance in one transfer, only when it is at least `min_amount`, and needs a confirmed withdrawal wallet.",
+      handler: async ({ auth, body }) => E.setCustodySchedule(e, A(auth), body),
     }),
 
     // ------------------------------------------------------------------ vaults & settlement policy

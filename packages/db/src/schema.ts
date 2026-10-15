@@ -219,6 +219,8 @@ export const paymentIntentRoutes = pgTable(
     feeBps: integer("fee_bps").notNull(),
     treasuryAddress: text("treasury_address").notNull(),
     payoutConfigId: text("payout_config_id"),
+    /** The destination is the platform's custody wallet: the net amount is credited to the merchant's custody balance. */
+    custodial: boolean("custodial").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("payment_intent_routes_uq").on(t.paymentIntentId, t.networkId)],
@@ -341,6 +343,8 @@ export const invoiceAddresses = pgTable(
     destinationAddress: text("destination_address").notNull(),
     feeBps: integer("fee_bps").notNull().default(0),
     treasuryAddress: text("treasury_address"),
+    /** Committed with the address: the destination is the platform's custody wallet (kind DIRECT on-chain). */
+    custodial: boolean("custodial").notNull().default(false),
     merchantId32: text("merchant_id32").notNull(),
     invoiceId32: text("invoice_id32").notNull(),
     factoryAddress: text("factory_address").notNull(),
@@ -510,7 +514,7 @@ export const ledgerEntries = pgTable(
     merchantId: text("merchant_id").notNull().references(() => merchants.id),
     paymentIntentId: text("payment_intent_id").references(() => paymentIntents.id),
     networkId: text("network_id").notNull().references(() => networks.id),
-    /** DETECTED | VERIFIED | FINALIZED | SETTLED_TO_VAULT | SETTLED_TO_WALLET | PLATFORM_FEE | FORWARDED | REFUNDED | GAS_COST */
+    /** DETECTED | VERIFIED | FINALIZED | SETTLED_TO_VAULT | SETTLED_TO_WALLET | SETTLED_TO_CUSTODY | CUSTODY_BALANCE | PLATFORM_FEE | FORWARDED | REFUNDED | GAS_COST */
     account: text("account").notNull(),
     /** The token the amount is in. Amounts of different tokens are never added together. */
     asset: text("asset").notNull().default("USDC"),
@@ -686,4 +690,63 @@ export const idempotencyKeys = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("idempotency_merchant_key_uq").on(t.merchantId, t.key)],
+);
+
+/**
+ * A merchant's request to move their custody balance to their withdrawal wallet. The ledger is debited in the same
+ * transaction that creates the row; a failed or reverted transfer credits it back.
+ */
+export const custodyWithdrawals = pgTable(
+  "custody_withdrawals",
+  {
+    id: text("id").primaryKey(),
+    merchantId: text("merchant_id").notNull().references(() => merchants.id),
+    networkId: text("network_id").notNull().references(() => networks.id),
+    tokenSymbol: text("token_symbol").notNull(),
+    /** The merchant's proven withdrawal wallet at the time of the request. */
+    toAddress: text("to_address").notNull(),
+    amount: money("amount").notNull(),
+    /** REQUESTED | SUBMITTED | CONFIRMED | FAILED */
+    status: text("status").notNull().default("REQUESTED"),
+    trigger: text("trigger").notNull().default("MANUAL"), // MANUAL | SCHEDULED
+    idempotencyKey: text("idempotency_key").notNull(),
+    signerAddress: text("signer_address"),
+    nonce: bigint("nonce", { mode: "bigint" }),
+    /** Signed raw transaction persisted BEFORE broadcast. */
+    rawTx: text("raw_tx"),
+    txHash: text("tx_hash"),
+    gasLimit: bigint("gas_limit", { mode: "bigint" }),
+    maxFeePerGas: bigint("max_fee_per_gas", { mode: "bigint" }),
+    maxPriorityFeePerGas: bigint("max_priority_fee_per_gas", { mode: "bigint" }),
+    gasUsed: bigint("gas_used", { mode: "bigint" }),
+    feeNativeWei: bigint("fee_native_wei", { mode: "bigint" }),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    nextAttemptAt: ts("next_attempt_at").notNull().defaultNow(),
+    createdAt: createdAt(),
+    submittedAt: ts("submitted_at"),
+    confirmedAt: ts("confirmed_at"),
+  },
+  (t) => [
+    uniqueIndex("custody_withdrawals_idem_uq").on(t.merchantId, t.idempotencyKey),
+    index("custody_withdrawals_status_idx").on(t.networkId, t.status),
+    index("custody_withdrawals_merchant_idx").on(t.merchantId, t.createdAt),
+  ],
+);
+
+/** Per merchant, network and token: how the custody balance is paid out automatically. */
+export const custodySettings = pgTable(
+  "custody_settings",
+  {
+    id: text("id").primaryKey(),
+    merchantId: text("merchant_id").notNull().references(() => merchants.id),
+    networkId: text("network_id").notNull().references(() => networks.id),
+    tokenSymbol: text("token_symbol").notNull(),
+    schedule: text("schedule").notNull().default("MANUAL"), // MANUAL | DAILY | WEEKLY
+    /** A scheduled payout only runs when the balance is at least this much. */
+    minUnits: money("min_units").notNull().default(sql`0`),
+    lastAutoPayoutAt: ts("last_auto_payout_at"),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("custody_settings_uq").on(t.merchantId, t.networkId, t.tokenSymbol)],
 );

@@ -29,12 +29,13 @@ export function emailChangedNotice(to: string, newEmail: string): EmailMessage {
 
 export interface PayoutChangeDetails {
   network: string;
-  mode: "VAULT" | "DIRECT";
+  mode: "VAULT" | "DIRECT" | "CUSTODIAL";
   address: string | null;
   cooldownHours: number;
 }
 
-const describe = (d: PayoutChangeDetails) => (d.mode === "DIRECT" ? `pay straight to the wallet ${d.address}` : "pay into your Plinth vault");
+const describe = (d: PayoutChangeDetails) =>
+  d.mode === "DIRECT" ? `pay straight to the wallet ${d.address}` : d.mode === "CUSTODIAL" ? `be held by Plinth for you, with withdrawals to the wallet ${d.address}` : "pay into your Plinth vault";
 
 export function payoutConfirmMessage(to: string, link: string, d: PayoutChangeDetails, hours: number, key: string): EmailMessage {
   const lines = [
@@ -62,4 +63,24 @@ export function payoutChangedNotice(to: string, d: PayoutChangeDetails & { event
           ? [`A pending payout change on ${d.network} was cancelled.`]
           : [`A change to ${describe(d)} on ${d.network} was requested and is waiting for confirmation by email.`];
   return mk(to, titles[d.event], layout({ title: titles[d.event], lines }), `payout_${d.event}`);
+}
+
+export interface CustodyWithdrawalDetails {
+  network: string;
+  token: string;
+  amount: string;
+  address: string;
+  event: "requested" | "confirmed" | "failed";
+  txHash?: string | null;
+}
+
+export function custodyWithdrawalNotice(to: string, d: CustodyWithdrawalDetails): EmailMessage {
+  const titles = { requested: "A custody withdrawal was requested", confirmed: "A custody withdrawal was sent", failed: "A custody withdrawal failed and was credited back" } as const;
+  const lines =
+    d.event === "requested"
+      ? [`A withdrawal of ${d.amount} ${d.token} on ${d.network} to ${d.address} was requested.`, "If this was not you, sign in now, change your password and contact support."]
+      : d.event === "confirmed"
+        ? [`${d.amount} ${d.token} was sent to ${d.address} on ${d.network}.`, ...(d.txHash ? [`Transaction: ${d.txHash}`] : [])]
+        : [`The withdrawal of ${d.amount} ${d.token} to ${d.address} on ${d.network} could not be completed. The amount is back in your custody balance.`];
+  return mk(to, titles[d.event], layout({ title: titles[d.event], lines }), "custody_withdrawal");
 }

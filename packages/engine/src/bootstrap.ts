@@ -2,7 +2,7 @@ import { EvmAdapter, createChainPublicClient, createChainWalletClient, loadDeplo
 import { schema, type Database } from "@plinth/db";
 import { contractsFor, DEFAULT_FEE_BPS, NETWORKS, networkTokens, operationalGate, type Deployment, type NetworkConfig, type TokenConfig, type TokenSymbol } from "@plinth/shared";
 import { privateKeyToAccount } from "viem/accounts";
-import type { Hex, LocalAccount, PublicClient } from "viem";
+import { isAddressEqual, type Hex, type LocalAccount, type PublicClient } from "viem";
 import { DefaultAlertSink } from "./alerts";
 import { checkChain, refreshOperational } from "./deployment-check";
 import { createEmailSender, type EmailSender } from "./email";
@@ -25,6 +25,8 @@ export const silentLogger: Logger = { info() {}, warn() {}, error() {} };
  */
 export interface SignerProvider {
   getSigner(networkId: string): LocalAccount | undefined;
+  /** The custody wallet's signer, a different key from the relayer's. Optional: absent means no custody. */
+  getCustodySigner?(networkId: string): LocalAccount | undefined;
 }
 
 export function envSignerProvider(env: Record<string, string | undefined> = process.env): SignerProvider {
@@ -33,6 +35,12 @@ export function envSignerProvider(env: Record<string, string | undefined> = proc
       const key = env[`RELAYER_PRIVATE_KEY_${networkId.toUpperCase().replace(/-/g, "_")}`] ?? env.RELAYER_PRIVATE_KEY;
       if (!key) return undefined;
       if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("RELAYER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string");
+      return privateKeyToAccount(key as Hex);
+    },
+    getCustodySigner(networkId) {
+      const key = env[`CUSTODY_PRIVATE_KEY_${networkId.toUpperCase().replace(/-/g, "_")}`] ?? env.CUSTODY_PRIVATE_KEY;
+      if (!key) return undefined;
+      if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("CUSTODY_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string");
       return privateKeyToAccount(key as Hex);
     },
   };
@@ -64,6 +72,10 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
     throw new Error("Refusing to load a relayer private key from the environment in production. Provide a KMS-backed SignerProvider, or set ALLOW_ENV_SIGNER_IN_PRODUCTION=true to accept the risk explicitly.");
   }
 
+  if (production && !opts.signers && (env.CUSTODY_PRIVATE_KEY || Object.keys(env).some((k) => k.startsWith("CUSTODY_PRIVATE_KEY_"))) && env.ALLOW_ENV_SIGNER_IN_PRODUCTION !== "true") {
+    throw new Error("Refusing to load a custody private key from the environment in production. Provide a KMS-backed SignerProvider with getCustodySigner, or set ALLOW_ENV_SIGNER_IN_PRODUCTION=true to accept the risk explicitly.");
+  }
+
   const cfg: EngineConfig = {
     publicWebUrl: env.PUBLIC_WEB_URL ?? "http://localhost:3000",
     secretKey: parseSecretKey(env.APP_SECRET_KEY ?? (production ? "" : "00".repeat(32))),
@@ -77,6 +89,8 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
     // Development and tests: no waiting. Production: 24 hours unless an operator chooses otherwise.
     payoutCooldownSeconds: Number(env.PAYOUT_COOLDOWN_SECONDS ?? (production ? 24 * 3600 : 0)),
     requireVaultOwnerProof: (env.REQUIRE_VAULT_OWNER_PROOF ?? (production ? "true" : "false")) === "true",
+    custodyEnabled: env.CUSTODY_ENABLED === "true",
+    allowCustodyMainnet: env.ALLOW_CUSTODY_MAINNET === "true",
     web3authClientId: env.WEB3AUTH_CLIENT_ID ?? env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID,
     ...opts.config,
   };
@@ -102,6 +116,18 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
       }
       signer = signers.getSigner(network.id);
     }
+    // The custody wallet: off by default, never on a mainnet without ALLOW_CUSTODY_MAINNET, and never the relayer or the treasury.
+    let custody: LocalAccount | undefined;
+    const custodyReasons: string[] = [];
+    if (!cfg.custodyEnabled) custodyReasons.push("custody is switched off (CUSTODY_ENABLED)");
+    else if (!gate.operational) custodyReasons.push("the network is not operational");
+    else if (network.environment === "mainnet" && !cfg.allowCustodyMainnet) custodyReasons.push("custody on a mainnet needs ALLOW_CUSTODY_MAINNET=true");
+    else {
+      custody = signers.getCustodySigner?.(network.id);
+      if (!custody) custodyReasons.push("no custody key is configured for this network");
+      else if (signer && isAddressEqual(custody.address, signer.address)) { custody = undefined; custodyReasons.push("the custody key must differ from the relayer key"); }
+      else if (isAddressEqual(custody.address, deployment.treasury)) { custody = undefined; custodyReasons.push("the custody wallet must differ from the treasury"); }
+    }
     // One runtime per payment token that has contracts recorded for it. USDC is always there.
     const tokens = new Map<TokenSymbol, TokenRuntime>();
     for (const [symbol, config] of Object.entries(networkTokens(network)) as [TokenSymbol, TokenConfig][]) {
@@ -114,7 +140,7 @@ export async function createEngine(opts: CreateEngineOptions): Promise<Engine> {
       });
     }
     chains.set(network.id, {
-      network, deployment, adapter: tokens.get("USDC")!.adapter, tokens, client: c, signer,
+      network, deployment, adapter: tokens.get("USDC")!.adapter, tokens, client: c, signer, custody, custodyReasons,
       wallet: signer && !client ? createChainWalletClient(network, urls, signer) : undefined, policy,
       operational: gate.operational && !policyBlocked, gateReasons: policyBlocked ? [...gate.reasons, "relayer policy not configured"] : gate.reasons,
       baseOperational: gate.operational && !policyBlocked, baseReasons: policyBlocked ? [...gate.reasons, "relayer policy not configured"] : gate.reasons,

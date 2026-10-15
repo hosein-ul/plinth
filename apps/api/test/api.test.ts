@@ -434,6 +434,67 @@ describe("payment tokens over HTTP", () => {
   }, 120_000);
 });
 
+describe("custody over HTTP", () => {
+  it("custodial mode: proven withdrawal wallet, payment into custody, balance, withdrawal with an idempotency key, schedule", async () => {
+    const ch2 = await startHarness({ confirmations: 2, custody: true });
+    const capp = (await buildServer(ch2.engine, { adminToken: "op-secret-token", rateLimitDisabled: true })).app;
+    await capp.ready();
+    const ccall = async (method: string, url: string, opts: { token?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<Res> => {
+      const r = await capp.inject({ method: method as never, url, payload: opts.body as never, headers: { ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}), ...opts.headers } });
+      return { status: r.statusCode, body: r.body ? JSON.parse(r.body) : null, headers: r.headers };
+    };
+    const PASSWORD = "a-very-long-passphrase-123";
+    const payee = ch2.chain.accounts[6]!;
+    try {
+      const su = await ccall("POST", "/v1/auth/signup", { body: { business_name: "Custody API", email: "cust@api.test", password: PASSWORD } });
+      const tok = su.body.token as string;
+      await ccall("POST", "/v1/auth/email/verify", { token: tok });
+      await ccall("POST", "/public/auth/email/confirm", { body: { token: new URL(ch2.mail.linkTo("cust@api.test")!).searchParams.get("token")! } });
+      const key = (await ccall("POST", "/v1/api-keys", { token: tok, body: { name: "k", environment: "test" } })).body.key as string;
+
+      // custody is on for this network; an API key can read balances but never withdraw
+      const before = await ccall("GET", "/v1/custody", { token: key });
+      expect(before.status).toBe(200);
+      expect(before.body.data.find((n: any) => n.network === ch2.net)).toMatchObject({ available: true, withdrawal_wallet: null });
+      expect((await ccall("POST", "/v1/custody/withdrawals", { token: key, body: { network: ch2.net, reauth: { password: PASSWORD } } })).status).toBe(403);
+      expect((await ccall("POST", "/v1/custody/withdrawals", { token: tok, body: { network: ch2.net, reauth: { password: PASSWORD } } })).body.error.code).toBe("NO_WITHDRAWAL_WALLET");
+
+      const ch = await ccall("POST", "/v1/payout-methods/challenge", { token: tok, body: { network: ch2.net, address: payee.address, purpose: "CUSTODY_WITHDRAWAL" } });
+      expect(ch.status).toBe(200);
+      expect(ch.body.message).toContain("withdraw your Plinth custody balance");
+      const asked = await ccall("POST", "/v1/payout-methods/wallet", { token: tok, body: { network: ch2.net, mode: "CUSTODIAL", address: payee.address, nonce: ch.body.nonce, signature: await payee.signMessage({ message: ch.body.message }), reauth: { password: PASSWORD } } });
+      expect(asked.status).toBe(201);
+      expect(asked.body).toMatchObject({ mode: "CUSTODIAL", status: "PENDING_CONFIRMATION" });
+      expect((await ccall("POST", "/public/payout/confirm", { body: { token: new URL(ch2.mail.linkTo("cust@api.test")!).searchParams.get("token")! } })).body).toMatchObject({ mode: "CUSTODIAL", status: "ACTIVE" });
+
+      const pi = await ccall("POST", "/v1/payment-intents", { token: key, body: { amount: "40.00", checkout_methods: ["ADDRESS"] } });
+      expect(pi.status).toBe(201);
+      await ch2.payUsdc(pi.body.networks[0].deposit_address, parseUsdc("40"));
+      await ch2.pump(8);
+      const detail = await ccall("GET", `/v1/payments/${pi.body.id}`, { token: tok });
+      expect(detail.body.payout_routes[0]).toMatchObject({ mode: "CUSTODIAL", custodial: true });
+
+      const cust = (await ccall("GET", "/v1/custody", { token: key })).body.data.find((n: any) => n.network === ch2.net);
+      expect(cust.withdrawal_wallet).toBe(payee.address);
+      expect(cust.tokens.find((t: any) => t.symbol === "USDC")).toMatchObject({ balance: "39.92", schedule: "MANUAL" });
+
+      const w = await ccall("POST", "/v1/custody/withdrawals", { token: tok, headers: { "idempotency-key": "wd-1" }, body: { network: ch2.net, amount: "9.92", reauth: { password: PASSWORD } } });
+      expect(w.status).toBe(201);
+      expect(w.body).toMatchObject({ status: "REQUESTED", amount: "9.92", to: payee.address });
+      expect((await ccall("POST", "/v1/custody/withdrawals", { token: tok, headers: { "idempotency-key": "wd-1" }, body: { network: ch2.net, amount: "9.92", reauth: { password: PASSWORD } } })).body.id).toBe(w.body.id);
+      await ch2.pump(6);
+      expect((await ccall("GET", "/v1/custody/withdrawals", { token: key })).body.data[0]).toMatchObject({ id: w.body.id, status: "CONFIRMED" });
+
+      const sched = await ccall("PATCH", "/v1/custody/schedule", { token: tok, body: { network: ch2.net, schedule: "WEEKLY", min_amount: "1", reauth: { password: PASSWORD } } });
+      expect(sched.body).toMatchObject({ schedule: "WEEKLY", min_amount: "1.00" });
+      expect((await ccall("PATCH", "/v1/custody/schedule", { token: key, body: { network: ch2.net, schedule: "DAILY", reauth: { password: PASSWORD } } })).status).toBe(403);
+    } finally {
+      await capp.close();
+      await ch2.stop();
+    }
+  }, 120_000);
+});
+
 describe("rate limiting", () => {
   it("throttles credential guessing on login", async () => {
     let limited = 0;

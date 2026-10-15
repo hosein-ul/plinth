@@ -15,8 +15,30 @@ export interface PayoutRoute {
   destination: Address;
   feeBps: number;
   treasury: Address;
-  /** The payout config that selected DIRECT mode; null when the default (vault) applies. */
+  /** The payout config that selected DIRECT or CUSTODIAL mode; null when the default (vault) applies. */
   payoutConfigId: string | null;
+  /**
+   * The destination is the platform's custody wallet. On-chain this is an ordinary DIRECT address; the difference is that
+   * the net amount is credited to the merchant's custody balance in the ledger and withdrawn later.
+   */
+  custodial: boolean;
+}
+
+/** What the wallet signed for each mode. The statement text is part of the signed message, so a proof cannot be reused across modes. */
+export const PROOF_STATEMENT = { DIRECT: "receive stablecoin payouts directly", CUSTODIAL: "withdraw your Plinth custody balance" } as const;
+
+/**
+ * Where a merchant's custody balance may be sent: the newest CONFIRMED custodial config whose cooldown has passed. It does not
+ * matter whether custodial is still the active mode: a balance already held can always be withdrawn to the wallet that was proven.
+ */
+export async function withdrawalConfig(e: Engine, tx: Executor, merchantId: string, networkId: string): Promise<PayoutConfig | null> {
+  const [row] = await tx
+    .select()
+    .from(schema.merchantPayoutConfigs)
+    .where(and(eq(schema.merchantPayoutConfigs.merchantId, merchantId), eq(schema.merchantPayoutConfigs.networkId, networkId), eq(schema.merchantPayoutConfigs.mode, "CUSTODIAL"), eq(schema.merchantPayoutConfigs.status, "CONFIRMED"), lte(schema.merchantPayoutConfigs.activeFrom, e.now())))
+    .orderBy(desc(schema.merchantPayoutConfigs.confirmedAt), desc(schema.merchantPayoutConfigs.createdAt))
+    .limit(1);
+  return row ?? null;
 }
 
 /**
@@ -53,7 +75,8 @@ export async function payoutProofHolds(cfg: PayoutConfig, merchantId: string, ch
     const m = parseSiweMessage(cfg.proofMessage);
     if (!m.address || !isAddressEqual(m.address, cfg.address as Address)) return false;
     if (m.chainId !== chain.network.chainId || m.requestId !== merchantId) return false;
-    if (!m.statement?.includes("receive stablecoin payouts directly")) return false;
+    const mode = cfg.mode === "CUSTODIAL" ? "CUSTODIAL" : "DIRECT";
+    if (!m.statement?.includes(PROOF_STATEMENT[mode])) return false;
     const signer = await recoverMessageAddress({ message: cfg.proofMessage, signature: cfg.proofSignature as Hex });
     return isAddressEqual(signer, cfg.address as Address);
   } catch {
@@ -85,6 +108,19 @@ export async function resolveRoute(
   const feeBps = feeBpsFor(e, merchant.feeBps, chain);
   const treasury = getAddress(chain.deployment.treasury);
   const cfg = await activePayoutConfig(e, tx, merchant.id, networkId);
+  if (cfg?.mode === "CUSTODIAL" && cfg.address) {
+    // Custodial: the money goes to the platform's custody wallet, and only a proven withdrawal wallet can ever receive it from there.
+    if (!e.cfg.custodyEnabled || !chain.custody) return null;
+    if (!(await payoutProofHolds(cfg, merchant.id, chain))) {
+      await e.alerts.raise({
+        key: `payout-proof-invalid:${cfg.id}`, severity: "critical",
+        title: "A custodial withdrawal wallet no longer matches the signature stored for it; no payment address was issued",
+        detail: { merchantId: merchant.id, network: networkId, payoutConfigId: cfg.id },
+      });
+      return null;
+    }
+    return { networkId, kind: "DIRECT", destination: getAddress(chain.custody.address), feeBps, treasury, payoutConfigId: cfg.id, custodial: true };
+  }
   if (cfg?.mode === "DIRECT" && cfg.address) {
     if (!(await payoutProofHolds(cfg, merchant.id, chain))) {
       // Fail closed: no address is issued for a payout wallet the wallet did not sign for.
@@ -95,11 +131,11 @@ export async function resolveRoute(
       });
       return null;
     }
-    return { networkId, kind: "DIRECT", destination: getAddress(cfg.address), feeBps, treasury, payoutConfigId: cfg.id };
+    return { networkId, kind: "DIRECT", destination: getAddress(cfg.address), feeBps, treasury, payoutConfigId: cfg.id, custodial: false };
   }
   const vault = vaults.find((v) => v.networkId === networkId && v.tokenSymbol === token && v.status === "ACTIVE");
   if (!vault) return null;
-  return { networkId, kind: "VAULT", destination: getAddress(vault.vaultAddress), feeBps, treasury, payoutConfigId: cfg?.id ?? null };
+  return { networkId, kind: "VAULT", destination: getAddress(vault.vaultAddress), feeBps, treasury, payoutConfigId: cfg?.id ?? null, custodial: false };
 }
 
 /** The route that was committed to an intent on a network, if it has one (legacy intents may not). */

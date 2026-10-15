@@ -23,7 +23,10 @@ export type IdPrefix =
   | "vlt"
   | "ext"
   | "prt"
-  | "pco";
+  | "pco"
+  | "cwd"
+  | "cwk"
+  | "cst";
 
 /** Unguessable public id, e.g. `pi_3f9a...` (128 bits of entropy). */
 export function newId(prefix: IdPrefix): string {

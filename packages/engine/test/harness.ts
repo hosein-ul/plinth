@@ -11,6 +11,7 @@ import {
   MemoryAlertSink,
   MemoryEmailSender,
   createEngine,
+  custodyTick,
   processWebhookJobs,
   relayerTick,
   signup,
@@ -75,7 +76,7 @@ function migratedTemplate(adminUrl: string): Promise<string> {
   return templateName;
 }
 
-export async function startHarness(opts: { confirmations?: number; tokens?: TokenSymbol[] } = {}): Promise<Harness> {
+export async function startHarness(opts: { confirmations?: number; tokens?: TokenSymbol[]; custody?: boolean } = {}): Promise<Harness> {
   const chain = await startDevChain({ confirmations: opts.confirmations ?? 3, tokens: opts.tokens });
   // With TEST_DATABASE_URL set, each harness gets its own throwaway database on that Postgres server.
   const pgAdmin = process.env.TEST_DATABASE_URL;
@@ -124,10 +125,10 @@ export async function startHarness(opts: { confirmations?: number; tokens?: Toke
     alerts,
     email: mail,
     // Tests mint "identity tokens" as JSON; the override returns them as-is (real verification is tested in web3auth.test.ts).
-    config: { verifyIdentityToken: async (t: string) => JSON.parse(t) },
+    config: { verifyIdentityToken: async (t: string) => JSON.parse(t), ...(opts.custody ? { custodyEnabled: true } : {}) },
     now: () => new Date(Date.now() + clock.offsetMs),
     env: { APP_SECRET_KEY: "11".repeat(32), ALLOW_PRIVATE_WEBHOOK_TARGETS: "true", PUBLIC_WEB_URL: "http://localhost:3000" },
-    signers: { getSigner: (n) => (n === chain.network.id ? chain.accounts[1] : undefined) },
+    signers: { getSigner: (n) => (n === chain.network.id ? chain.accounts[1] : undefined), getCustodySigner: (n) => (opts.custody && n === chain.network.id ? chain.accounts[4] : undefined) },
     extraNetworks: [{ network: chain.network, deployment: chain.deployment, client: chain.publicClient }],
   });
 
@@ -143,6 +144,7 @@ export async function startHarness(opts: { confirmations?: number; tokens?: Toke
         await chain.mine(o.mine ?? 1);
         await watcherTick(engine, chain.network.id);
         await relayerTick(engine, chain.network.id);
+        await custodyTick(engine, chain.network.id);
         await processWebhookJobs(engine);
       }
     },

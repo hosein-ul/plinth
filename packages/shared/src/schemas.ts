@@ -113,8 +113,12 @@ export const reauthSchema = z
   .object({ password: z.string().min(1).max(200).optional(), id_token: z.string().min(20).max(8000).optional() })
   .refine((r) => !!r.password || !!r.id_token, "Provide the password, or a fresh sign-in token");
 const signatureSchema = z.string().regex(/^0x[0-9a-fA-F]{130}$/, "Expected a 65-byte hex signature");
-export const payoutChallengeSchema = z.object({ network: networkIdSchema, address: addressSchema, purpose: z.enum(["PAYOUT_WALLET", "VAULT_OWNER"]) });
-export const payoutWalletSchema = z.object({ network: networkIdSchema, address: addressSchema, nonce: z.string().min(16).max(64), signature: signatureSchema, reauth: reauthSchema });
+export const payoutChallengeSchema = z.object({ network: networkIdSchema, address: addressSchema, purpose: z.enum(["PAYOUT_WALLET", "VAULT_OWNER", "CUSTODY_WITHDRAWAL"]) });
+/**
+ * `mode` DIRECT pays each payment straight to `address` (non-custodial). CUSTODIAL pays into the platform's custody wallet
+ * and `address` is the withdrawal wallet the balance can be sent to; the challenge for it has purpose CUSTODY_WITHDRAWAL.
+ */
+export const payoutWalletSchema = z.object({ network: networkIdSchema, mode: z.enum(["DIRECT", "CUSTODIAL"]).default("DIRECT"), address: addressSchema, nonce: z.string().min(16).max(64), signature: signatureSchema, reauth: reauthSchema });
 export const payoutVaultSchema = z.object({ network: networkIdSchema, reauth: reauthSchema });
 export const payoutConfirmSchema = z.object({ token: z.string().min(20).max(200) });
 export const merchantFeeSchema = z.object({ fee_bps: z.number().int().min(0).max(100).nullable() });
@@ -149,3 +153,19 @@ export const walletSubmitSchema = z.object({
   signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/, "Expected a 65-byte hex signature"),
 });
 export const selectAddressNetworkSchema = z.object({ network: networkIdSchema });
+
+export const custodyWithdrawalSchema = z.object({
+  network: networkIdSchema,
+  token: z.enum(TOKEN_SYMBOLS).default("USDC"),
+  /** Decimal amount in the token, or omit to withdraw the whole balance. */
+  amount: usdcAmountSchema.optional(),
+  reauth: reauthSchema,
+});
+
+export const custodyScheduleSchema = z.object({
+  network: networkIdSchema,
+  token: z.enum(TOKEN_SYMBOLS).default("USDC"),
+  schedule: z.enum(["MANUAL", "DAILY", "WEEKLY"]),
+  /** A scheduled payout only runs when the balance is at least this much (decimal string in the token). */
+  min_amount: z.string().regex(/^\d{1,12}(\.\d{1,6})?$/, "Amount must be a decimal string with up to 6 decimals").default("0"),
+});

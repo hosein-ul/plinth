@@ -35,6 +35,10 @@ export async function requestRefund(e: Engine, ctx: AuthContext, input: { paymen
   // Refunds go to the network the funds arrived on.
   const [firstTx] = await e.db.select().from(schema.transactions).where(and(eq(schema.transactions.paymentIntentId, intent.id), eq(schema.transactions.status, "FINAL"), eq(schema.transactions.isOfficialAsset, true))).orderBy(desc(schema.transactions.finalizedAt));
   if (!firstTx) throw new EngineError("NOTHING_TO_REFUND", "No finalized payment to refund", 422);
+  // A custodial payment sits in the platform's custody wallet, not in an account the merchant controls, so the merchant cannot send the refund
+  // from where the money is. Refunding custodial payments is not supported yet.
+  const route = await committedRoute(e.db, intent.id, firstTx.networkId);
+  if (route?.custodial) throw new EngineError("REFUND_UNSUPPORTED_CUSTODIAL", "This payment was settled to your custody balance. Refunds of custodial payments are not supported yet; contact support.", 422);
   const id = newId("ref");
   await e.db.transaction(async (tx) => {
     await tx.insert(schema.refunds).values({ id, merchantId: ctx.merchantId, paymentIntentId: intent.id, networkId: firstTx.networkId, amount, recipient: norm(getAddress(input.recipient)), reason: input.reason ?? null });

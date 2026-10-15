@@ -1,5 +1,6 @@
 import type { Engine } from "./context";
 import { recheckDeployments } from "./deployment-check";
+import { custodyTick } from "./custody";
 import { forwardTick } from "./forwarding";
 import { expireDueIntents, replanSettlements } from "./recompute";
 import { relayerTick } from "./relayer";
@@ -35,6 +36,7 @@ export async function workerTick(e: Engine): Promise<void> {
         await guarded(e, id, "watcher", () => watcherTick(e, id));
         await guarded(e, id, "relayer", () => relayerTick(e, id));
         await guarded(e, id, "forwarding", () => forwardTick(e, id));
+        await guarded(e, id, "custody", () => custodyTick(e, id));
       }),
   );
   await guarded(e, "-", "deployment-check", () => recheckDeployments(e));

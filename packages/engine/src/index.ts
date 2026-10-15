@@ -26,3 +26,4 @@ export * from "./email";
 export * from "./email-templates";
 export * from "./email-verification";
 export * from "./payout-config";
+export * from "./custody";

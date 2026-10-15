@@ -81,14 +81,14 @@ export async function createPaymentIntent(e: Engine, ctx: AuthContext, input: Cr
     for (const r of routes.filter((x) => candidates.some((c) => c.network.id === x.networkId))) {
       await tx.insert(schema.paymentIntentRoutes).values({
         id: newId("prt"), paymentIntentId: id, networkId: r.networkId, destinationKind: r.kind, destinationAddress: norm(r.destination),
-        feeBps: r.feeBps, treasuryAddress: norm(r.treasury), payoutConfigId: r.payoutConfigId,
+        feeBps: r.feeBps, treasuryAddress: norm(r.treasury), payoutConfigId: r.payoutConfigId, custodial: r.custodial,
       });
     }
     for (const a of addresses) {
       await tx.insert(schema.invoiceAddresses).values({
         id: newId("inv").replace("inv_", "ia_"), paymentIntentId: id, merchantId: ctx.merchantId, networkId: a.chain.network.id, address: norm(a.address),
         vaultAddress: a.route.kind === "VAULT" ? norm(a.route.destination) : null, destinationKind: a.route.kind, destinationAddress: norm(a.route.destination),
-        feeBps: a.route.feeBps, treasuryAddress: norm(a.route.treasury), tokenSymbol: symbol,
+        feeBps: a.route.feeBps, treasuryAddress: norm(a.route.treasury), custodial: a.route.custodial, tokenSymbol: symbol,
         merchantId32, invoiceId32, factoryAddress: norm(tokenRuntime(a.chain, symbol).contracts.invoiceFactory), implementationAddress: norm(tokenRuntime(a.chain, symbol).contracts.invoiceImplementation),
         contractVersion: tokenRuntime(a.chain, symbol).contracts.version, createdBlock: a.createdBlock,
       });
@@ -163,8 +163,8 @@ export async function paymentDetail(e: Engine, ctx: AuthContext, id: string) {
     attempts: attempts.map((a) => ({ id: a.id, method: a.method, network: a.networkId, status: a.status, payer: a.payer, tx_hash: a.txHash, error: a.error, created_at: a.createdAt.toISOString() })),
     refunds: refunds.map((r) => ({ id: r.id, status: r.status, amount: formatUsdc(r.amount), recipient: getAddress(r.recipient), tx_hash: r.txHash })),
     /** The payout route committed per network when the payment was created (merchant-only view). */
-    payout_routes: routes.map((r) => ({ network: r.networkId, mode: r.destinationKind, destination: getAddress(r.destinationAddress), fee_bps: r.feeBps, treasury: getAddress(r.treasuryAddress) })),
-    invoice_addresses: addrs.map((a) => ({ network: a.networkId, address: getAddress(a.address), vault: a.vaultAddress ? getAddress(a.vaultAddress) : null, destination: getAddress(a.destinationAddress), destination_kind: a.destinationKind, fee_bps: a.feeBps, deployed: !!a.deployedAt, deploy_tx_hash: a.deployTxHash, factory: getAddress(a.factoryAddress), contract_version: a.contractVersion })),
+    payout_routes: routes.map((r) => ({ network: r.networkId, mode: r.custodial ? "CUSTODIAL" : r.destinationKind, custodial: r.custodial, destination: getAddress(r.destinationAddress), fee_bps: r.feeBps, treasury: getAddress(r.treasuryAddress) })),
+    invoice_addresses: addrs.map((a) => ({ network: a.networkId, address: getAddress(a.address), vault: a.vaultAddress ? getAddress(a.vaultAddress) : null, destination: getAddress(a.destinationAddress), destination_kind: a.destinationKind, custodial: a.custodial, fee_bps: a.feeBps, deployed: !!a.deployedAt, deploy_tx_hash: a.deployTxHash, factory: getAddress(a.factoryAddress), contract_version: a.contractVersion })),
   };
 }
 

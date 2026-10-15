@@ -47,6 +47,14 @@ export interface ChainRuntime {
   client: PublicClient;
   /** Absent when no relayer key is configured: the chain is then observe-only. */
   signer?: LocalAccount;
+  /**
+   * The custody wallet: a key SEPARATE from the relayer's, holding merchants' balances for the custodial payout mode.
+   * Present only when custody is switched on for this network; `custodyReasons` says why it is not otherwise.
+   */
+  custody?: LocalAccount;
+  custodyReasons: string[];
+  /** Tokens whose withdrawals are paused because the custody wallet holds less than merchants are owed. Maintained by custodyTick. */
+  custodyHalted?: Record<string, string>;
   wallet?: WalletClient;
   policy: RelayerPolicy;
   /** Effective state: the static gate AND the latest on-chain deployment check. Non-operational chains accept no new invoices. */
@@ -79,6 +87,10 @@ export interface EngineConfig {
   requireVaultOwnerProof: boolean;
   /** Time a newly confirmed payout wallet waits before new invoices use it (0 in development). */
   payoutCooldownSeconds: number;
+  /** The custodial payout mode exists at all (default off). */
+  custodyEnabled: boolean;
+  /** Custody may be used on a mainnet (default off; needs the owner's explicit approval). */
+  allowCustodyMainnet: boolean;
   /** Web3Auth client id the identity tokens must be issued for. */
   web3authClientId?: string;
   /** Replaces identity-token verification (tests only). */

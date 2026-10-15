@@ -40,16 +40,30 @@ async function ledger(
 /** The ledger account that records the net amount reaching the merchant, by where it went. */
 const settledAccount = (kind: DestinationKind) => (kind === "DIRECT" ? "SETTLED_TO_WALLET" : "SETTLED_TO_VAULT");
 
-async function destinationKindOf(tx: Executor, row: TxRow): Promise<DestinationKind> {
+async function destinationKindOf(tx: Executor, row: TxRow): Promise<{ kind: DestinationKind; custodial: boolean }> {
   if (row.invoiceAddressId) {
     const [a] = await tx.select().from(schema.invoiceAddresses).where(eq(schema.invoiceAddresses.id, row.invoiceAddressId));
-    if (a) return a.destinationKind as DestinationKind;
+    if (a) return { kind: a.destinationKind as DestinationKind, custodial: a.custodial };
   }
   if (row.paymentIntentId) {
     const r = await committedRoute(tx, row.paymentIntentId, row.networkId);
-    if (r) return r.destinationKind as DestinationKind;
+    if (r) return { kind: r.destinationKind as DestinationKind, custodial: r.custodial };
   }
-  return "VAULT";
+  return { kind: "VAULT", custodial: false };
+}
+
+/**
+ * Record the net amount that reached the merchant. On a custodial route it lands in the platform's custody wallet, so it is also
+ * credited to the merchant's CUSTODY_BALANCE (what they may withdraw). A reorg reverses both entries by the same reference.
+ */
+async function creditSettled(tx: Executor, row: TxRow, net: bigint, ref: { type: string; id: string }) {
+  const dest = await destinationKindOf(tx, row);
+  if (dest.custodial) {
+    await ledger(tx, row, "SETTLED_TO_CUSTODY", "CREDIT", net, ref);
+    await ledger(tx, row, "CUSTODY_BALANCE", "CREDIT", net, ref);
+  } else {
+    await ledger(tx, row, settledAccount(dest.kind), "CREDIT", net, ref);
+  }
 }
 
 /**
@@ -256,11 +270,11 @@ async function onFinal(e: Engine, tx: Executor, row: TxRow) {
   } else if (row.kind === "WALLET_PAYMENT") {
     const fee = row.feeAmount ?? 0n;
     await ledger(tx, row, "FINALIZED", "CREDIT", row.amount, ref);
-    await ledger(tx, row, settledAccount(await destinationKindOf(tx, row)), "CREDIT", row.amount - fee, ref);
+    await creditSettled(tx, row, row.amount - fee, ref);
     await ledger(tx, row, "PLATFORM_FEE", "CREDIT", fee, ref);
   } else if (row.kind === "SWEEP") {
     const fee = row.feeAmount ?? 0n;
-    await ledger(tx, row, settledAccount(await destinationKindOf(tx, row)), "CREDIT", row.amount - fee, ref);
+    await creditSettled(tx, row, row.amount - fee, ref);
     await ledger(tx, row, "PLATFORM_FEE", "CREDIT", fee, ref);
     const [stl] = await tx
       .select()

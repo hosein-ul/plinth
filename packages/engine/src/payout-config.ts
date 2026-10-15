@@ -9,14 +9,15 @@ import { chainOf, EngineError, norm, type ChainRuntime, type Engine } from "./co
 import { sha256Hex } from "./crypto";
 import { requireVerifiedEmail, verifyReauth, userOf, type Reauth } from "./email-verification";
 import { payoutChangedNotice, payoutConfirmMessage, type PayoutChangeDetails } from "./email-templates";
-import { activePayoutConfig, feeBpsFor } from "./payout-route";
+import { activePayoutConfig, feeBpsFor, PROOF_STATEMENT } from "./payout-route";
 import { emitEvent } from "./webhooks";
 
 const CHALLENGE_TTL_MS = 10 * 60_000;
 const MAX_CHALLENGES_PER_HOUR = 20;
 
 type Config = typeof schema.merchantPayoutConfigs.$inferSelect;
-export type ProofPurpose = "PAYOUT_WALLET" | "VAULT_OWNER";
+export type ProofPurpose = "PAYOUT_WALLET" | "VAULT_OWNER" | "CUSTODY_WITHDRAWAL";
+export type PayoutMode = "VAULT" | "DIRECT" | "CUSTODIAL";
 
 // ------------------------------------------------------------------ proof of wallet control (EIP-4361)
 
@@ -41,7 +42,8 @@ export async function createPayoutChallenge(e: Engine, ctx: AuthContext, input: 
   const nonce = randomBytes(16).toString("hex");
   const issuedAt = e.now();
   const expiresAt = new Date(issuedAt.getTime() + CHALLENGE_TTL_MS);
-  const what = input.purpose === "PAYOUT_WALLET" ? "receive stablecoin payouts directly" : "own your Plinth vault";
+  if (input.purpose === "CUSTODY_WITHDRAWAL" && !(e.cfg.custodyEnabled && chain.custody)) throw new EngineError("CUSTODY_UNAVAILABLE", "Custodial payouts are not available on this network.", 409);
+  const what = input.purpose === "PAYOUT_WALLET" ? PROOF_STATEMENT.DIRECT : input.purpose === "CUSTODY_WITHDRAWAL" ? PROOF_STATEMENT.CUSTODIAL : "own your Plinth vault";
   const message = createSiweMessage({
     address,
     chainId: chain.network.chainId,
@@ -62,7 +64,8 @@ function assertUsableWalletAddress(chain: ChainRuntime, address: Address) {
   const d = chain.deployment;
   // Never a payout wallet: the treasury, any payment token, and every contract of every token's set.
   const sets = [...chain.tokens.values()].flatMap((t) => [t.config.address, t.contracts.vaultFactory, t.contracts.invoiceFactory, t.contracts.invoiceImplementation, t.contracts.paymentRouter]);
-  const refused = [zeroAddress, d.treasury, ...sets];
+  // The custody wallet and the relayer are platform keys: a merchant can never name one as a destination or withdrawal wallet.
+  const refused = [zeroAddress, d.treasury, ...(chain.custody ? [chain.custody.address] : []), ...(chain.signer ? [chain.signer.address] : []), ...sets];
   if (refused.some((x) => isAddressEqual(x, address))) throw new EngineError("INVALID_ADDRESS", "That address cannot be used as a payout wallet.", 400);
 }
 
@@ -126,7 +129,7 @@ async function emitPayoutEvent(e: Engine, ctx: { merchantId: string }, chain: Ch
 }
 
 /** Tell every owner/admin who has a verified address. Best effort: a mail problem must never undo or block the change. */
-async function notify(e: Engine, merchantId: string, make: (to: string) => ReturnType<typeof payoutChangedNotice>) {
+export async function notify(e: Engine, merchantId: string, make: (to: string) => import("./email").EmailMessage) {
   const users = await e.db.select().from(schema.merchantUsers).where(and(eq(schema.merchantUsers.merchantId, merchantId), inArray(schema.merchantUsers.role, ["OWNER", "ADMIN"])));
   for (const u of users) {
     if (!u.emailVerifiedAt || u.email.endsWith("@sso.plinth.invalid")) continue;
@@ -136,11 +139,13 @@ async function notify(e: Engine, merchantId: string, make: (to: string) => Retur
 
 const cooldownHours = (e: Engine) => Math.round((e.cfg.payoutCooldownSeconds / 3600) * 10) / 10;
 
-export async function requestPayoutWallet(e: Engine, ctx: AuthContext, input: { network: string; address: string; nonce: string; signature: string; reauth?: Reauth }) {
+export async function requestPayoutWallet(e: Engine, ctx: AuthContext, input: { network: string; mode?: "DIRECT" | "CUSTODIAL"; address: string; nonce: string; signature: string; reauth?: Reauth }) {
   requirePermission(ctx, "wallets");
   const user = await requireVerifiedEmail(e, ctx); // a second factor by email must exist
   await verifyReauth(e, ctx, input.reauth);
   const chain = chainOf(e, input.network);
+  const mode = input.mode ?? "DIRECT";
+  if (mode === "CUSTODIAL" && !(e.cfg.custodyEnabled && chain.custody)) throw new EngineError("CUSTODY_UNAVAILABLE", "Custodial payouts are not available on this network.", 409);
   if (!isAddress(input.address)) throw new EngineError("INVALID_ADDRESS", "That is not a valid wallet address.", 400);
   const address = getAddress(input.address);
   assertUsableWalletAddress(chain, address);
@@ -148,9 +153,9 @@ export async function requestPayoutWallet(e: Engine, ctx: AuthContext, input: { 
   await assertNotBlacklisted(chain, address);
 
   const active = await activePayoutConfig(e, e.db, ctx.merchantId, input.network);
-  if (active?.mode === "DIRECT" && active.address && isAddressEqual(active.address as Address, address)) throw new EngineError("ALREADY_ACTIVE", "New payments on this network already go to that wallet.", 409);
+  if (active?.mode === mode && active.address && isAddressEqual(active.address as Address, address)) throw new EngineError("ALREADY_ACTIVE", mode === "CUSTODIAL" ? "Custodial payouts on this network already use that withdrawal wallet." : "New payments on this network already go to that wallet.", 409);
 
-  const ch = await checkProof(e, ctx, { network: input.network, address, purpose: "PAYOUT_WALLET", nonce: input.nonce, signature: input.signature });
+  const ch = await checkProof(e, ctx, { network: input.network, address, purpose: mode === "CUSTODIAL" ? "CUSTODY_WITHDRAWAL" : "PAYOUT_WALLET", nonce: input.nonce, signature: input.signature });
   const id = newId("pco");
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(e.now().getTime() + e.cfg.emailLinkTtlSeconds * 1000);
@@ -161,14 +166,14 @@ export async function requestPayoutWallet(e: Engine, ctx: AuthContext, input: { 
     // A newer request replaces any earlier one that was still waiting for its email link.
     await tx.update(schema.merchantPayoutConfigs).set({ status: "SUPERSEDED", confirmationTokenHash: null }).where(and(eq(schema.merchantPayoutConfigs.merchantId, ctx.merchantId), eq(schema.merchantPayoutConfigs.networkId, input.network), eq(schema.merchantPayoutConfigs.status, "PENDING_CONFIRMATION")));
     await tx.insert(schema.merchantPayoutConfigs).values({
-      id, merchantId: ctx.merchantId, networkId: input.network, mode: "DIRECT", address: norm(address), status: "PENDING_CONFIRMATION",
+      id, merchantId: ctx.merchantId, networkId: input.network, mode, address: norm(address), status: "PENDING_CONFIRMATION",
       proofMessage: ch.message, proofSignature: input.signature, proofSignedAt: e.now(), requestedByUserId: user.id,
       confirmationTokenHash: sha256Hex(token), confirmationExpiresAt: expiresAt,
     });
-    await audit(tx, { merchantId: ctx.merchantId, actor: ctx.actor, action: "payout.requested", targetType: "merchant_payout_config", targetId: id, data: { network: input.network, mode: "DIRECT", address } });
+    await audit(tx, { merchantId: ctx.merchantId, actor: ctx.actor, action: "payout.requested", targetType: "merchant_payout_config", targetId: id, data: { network: input.network, mode, address } });
   });
 
-  const details: PayoutChangeDetails = { network: chain.network.name, mode: "DIRECT", address, cooldownHours: cooldownHours(e) };
+  const details: PayoutChangeDetails = { network: chain.network.name, mode, address, cooldownHours: cooldownHours(e) };
   const link = `${e.cfg.publicWebUrl.replace(/\/$/, "")}/confirm-payout?token=${token}`;
   try {
     await e.email.send(payoutConfirmMessage(user.email, link, details, Math.round(e.cfg.emailLinkTtlSeconds / 3600), `payout:${id}`));
@@ -176,7 +181,7 @@ export async function requestPayoutWallet(e: Engine, ctx: AuthContext, input: { 
     await e.db.update(schema.merchantPayoutConfigs).set({ status: "CANCELLED", confirmationTokenHash: null }).where(eq(schema.merchantPayoutConfigs.id, id));
     throw err;
   }
-  await emitPayoutEvent(e, ctx, chain, "payout.requested", { id, network: input.network, mode: "DIRECT", address }, id);
+  await emitPayoutEvent(e, ctx, chain, "payout.requested", { id, network: input.network, mode, address }, id);
   return viewNow(e, (await e.db.select().from(schema.merchantPayoutConfigs).where(eq(schema.merchantPayoutConfigs.id, id)))[0]!);
 }
 
@@ -197,7 +202,7 @@ export async function confirmPayoutLink(e: Engine, token: string) {
     await audit(tx, { merchantId: row.merchantId, actor: { type: "USER", id: row.requestedByUserId ?? undefined }, action: "payout.confirmed", targetType: "merchant_payout_config", targetId: row.id, data: { network: row.networkId, mode: row.mode, address: row.address, active_from: activeFrom.toISOString(), via: "email_link" } });
     return claimed[0]!;
   });
-  const details: PayoutChangeDetails = { network: chain.network.name, mode: "DIRECT", address: done.address, cooldownHours: cooldownHours(e) };
+  const details: PayoutChangeDetails = { network: chain.network.name, mode: done.mode as PayoutMode, address: done.address, cooldownHours: cooldownHours(e) };
   await notify(e, row.merchantId, (to) => payoutChangedNotice(to, { ...details, event: "confirmed" }));
   await emitPayoutEvent(e, { merchantId: row.merchantId }, chain, "payout.confirmed", { id: row.id, network: row.networkId, mode: row.mode, address: row.address, active_from: activeFrom.toISOString() }, row.id);
   return viewNow(e, done);
@@ -212,7 +217,7 @@ export async function switchToVault(e: Engine, ctx: AuthContext, input: { networ
   if (!vault) throw new EngineError("VAULT_REQUIRED", "There is no active vault on this network to pay into. Create one first.", 409);
   const active = await activePayoutConfig(e, e.db, ctx.merchantId, input.network);
   if (!active || active.mode === "VAULT") {
-    const mine = await e.db.select().from(schema.merchantPayoutConfigs).where(and(eq(schema.merchantPayoutConfigs.merchantId, ctx.merchantId), eq(schema.merchantPayoutConfigs.networkId, input.network), eq(schema.merchantPayoutConfigs.mode, "DIRECT")));
+    const mine = await e.db.select().from(schema.merchantPayoutConfigs).where(and(eq(schema.merchantPayoutConfigs.merchantId, ctx.merchantId), eq(schema.merchantPayoutConfigs.networkId, input.network), inArray(schema.merchantPayoutConfigs.mode, ["DIRECT", "CUSTODIAL"])));
     const inFlight = mine.some((r) => r.status === "PENDING_CONFIRMATION" || (r.status === "CONFIRMED" && !!r.activeFrom && r.activeFrom.getTime() > e.now().getTime()));
     if (!inFlight) throw new EngineError("ALREADY_ACTIVE", "New payments on this network already go to your vault.", 409);
   }
@@ -245,7 +250,7 @@ export async function cancelPendingPayout(e: Engine, ctx: AuthContext, input: { 
     await audit(tx, { merchantId: ctx.merchantId, actor: ctx.actor, action: "payout.cancelled", targetType: "merchant_payout_config", targetId: row.id, data: { network: row.networkId } });
     return r;
   });
-  const details: PayoutChangeDetails = { network: chain.network.name, mode: row.mode as "VAULT" | "DIRECT", address: row.address, cooldownHours: 0 };
+  const details: PayoutChangeDetails = { network: chain.network.name, mode: row.mode as PayoutMode, address: row.address, cooldownHours: 0 };
   await notify(e, ctx.merchantId, (to) => payoutChangedNotice(to, { ...details, event: "cancelled" }));
   await emitPayoutEvent(e, ctx, chain, "payout.cancelled", { id: row.id, network: row.networkId }, row.id);
   return viewNow(e, done!);
@@ -276,7 +281,7 @@ function payoutView(e: Engine, row: Config, activeId: string | null = null) {
     id: row.id,
     object: "payout_config",
     network: row.networkId,
-    mode: row.mode as "VAULT" | "DIRECT",
+    mode: row.mode as PayoutMode,
     address: row.address ? getAddress(row.address) : null,
     status: statusOf(e, row, activeId),
     requested_at: row.createdAt.toISOString(),
@@ -300,15 +305,19 @@ export async function listPayoutMethods(e: Engine, ctx: AuthContext) {
     const mine = rows.filter((r) => r.networkId === id);
     const waiting = mine.find((r) => statusOf(e, r, active?.id ?? null) === "PENDING_CONFIRMATION") ?? mine.find((r) => statusOf(e, r, active?.id ?? null) === "COOLING_DOWN");
     const direct = active?.mode === "DIRECT" && active.address;
+    const custodial = active?.mode === "CUSTODIAL" && active.address ? active : null;
     const fee = feeBpsFor(e, merchant?.feeBps, chain);
     out.push({
       network: id,
       name: chain.network.name,
       environment: chain.network.environment,
       operational: chain.operational,
-      mode: (direct ? "DIRECT" : "VAULT") as "VAULT" | "DIRECT",
-      destination: direct ? getAddress(active.address!) : vault ? getAddress(vault.vaultAddress) : null,
-      status: direct ? "ACTIVE" : vault?.status === "ACTIVE" ? "ACTIVE" : vault ? "SETTING_UP" : "NOT_SET_UP",
+      mode: (custodial ? "CUSTODIAL" : direct ? "DIRECT" : "VAULT") as PayoutMode,
+      // Custodial: payments go to the platform custody wallet, and `withdrawal_wallet` is where the balance can be sent.
+      destination: custodial && chain.custody ? getAddress(chain.custody.address) : direct ? getAddress(active.address!) : vault ? getAddress(vault.vaultAddress) : null,
+      withdrawal_wallet: custodial ? getAddress(custodial.address!) : null,
+      custody_available: !!(e.cfg.custodyEnabled && chain.custody),
+      status: direct || custodial ? "ACTIVE" : vault?.status === "ACTIVE" ? "ACTIVE" : vault ? "SETTING_UP" : "NOT_SET_UP",
       fee: { bps: fee, percent: formatFeePercent(fee), treasury: getAddress(chain.deployment.treasury) },
       vault: vault ? { status: vault.status, address: getAddress(vault.vaultAddress), owner: getAddress(vault.ownerAddress) } : null,
       pending: waiting ? payoutView(e, waiting, active?.id ?? null) : null,
